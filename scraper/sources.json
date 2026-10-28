@@ -1,0 +1,19 @@
+{
+  "_comment": "One entry per sport. URLs are DePauw's Sidearm 'opponent history' pages vs. Wabash. Add a sport by adding an entry; the opponent id (215) is the same across sports on depauwtigers.com.",
+  "school": "DePauw",
+  "opponent": "Wabash",
+  "opponent_match": "wabash",
+  "base_url": "https://depauwtigers.com",
+  "sports": [
+    {
+      "key": "football",
+      "name": "Football",
+      "path": "/sports/football/opponent-history/wabash/215"
+    },
+    {
+      "key": "mens-lacrosse",
+      "name": "Men's Lacrosse",
+      "path": "/sports/mens-lacrosse/opponent-history/wabash/215"
+    }
+  ]
+}

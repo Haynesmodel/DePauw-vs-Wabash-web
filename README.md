@@ -88,4 +88,4 @@ Add an entry to `scraper/sources.json`. DePauw's opponent id for Wabash is `215`
 - The code (the scraper, renderer, tests and workflows) is under the MIT License; see [LICENSE](LICENSE).
 - The bundled Barlow Condensed font in `static/fonts/` stays under the SIL Open Font License, with its license file (`static/fonts/OFL.txt`) alongside it.
 - The site's written text and images are © Jackson Mote and aren't covered by the MIT License.
-- Game results are facts drawn from depauwtigers.com. They belong to no one, and the site claims no ownership of them. Don't use the school names or marks to suggest any affiliation.
+- Game results are facts drawn from depauwtigers.com. They belong to no one, and the site claims no ownership of them. The DePauw University and Wabash College names belong to their respective schools; this project is not affiliated with or endorsed by either.

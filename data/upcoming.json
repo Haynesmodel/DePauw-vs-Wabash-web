@@ -1,0 +1,58 @@
+{
+  "schema_version": 1,
+  "sports": {
+    "football": {
+      "schedule_url": "https://depauwtigers.com/sports/football/schedule",
+      "games": [
+        {
+          "date": "2026-11-14",
+          "time": "1:07 PM",
+          "time_note": null,
+          "location": "neutral",
+          "site": "Scheumann Stadium, Muncie, Ind.",
+          "status": "scheduled",
+          "doubleheader": false
+        }
+      ]
+    },
+    "mens-basketball": {
+      "schedule_url": "https://depauwtigers.com/sports/mens-basketball/schedule",
+      "games": [
+        {
+          "date": "2027-01-06",
+          "time": "7:00 PM",
+          "time_note": null,
+          "location": "home",
+          "site": "Neal Fieldhouse, Greencastle, Ind.",
+          "status": "scheduled",
+          "doubleheader": false
+        },
+        {
+          "date": "2027-01-27",
+          "time": "7:00 PM",
+          "time_note": null,
+          "location": "away",
+          "site": "Crawfordsville, Ind.",
+          "status": "scheduled",
+          "doubleheader": false
+        }
+      ]
+    },
+    "baseball": {
+      "schedule_url": "https://depauwtigers.com/sports/baseball/schedule",
+      "games": []
+    },
+    "mens-soccer": {
+      "schedule_url": "https://depauwtigers.com/sports/mens-soccer/schedule",
+      "games": []
+    },
+    "mens-lacrosse": {
+      "schedule_url": "https://depauwtigers.com/sports/mens-lacrosse/schedule",
+      "games": []
+    },
+    "mens-tennis": {
+      "schedule_url": "https://depauwtigers.com/sports/mens-tennis/schedule",
+      "games": []
+    }
+  }
+}

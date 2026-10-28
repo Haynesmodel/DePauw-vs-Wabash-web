@@ -1,5 +1,6 @@
 """Tests for the DePauw vs. Wabash scraper, run against markup captured from depauwtigers.com."""
 
+import datetime as dt
 import json
 import re
 import sys
@@ -355,3 +356,62 @@ def test_reordering_sources_rewrites_the_file(fixture_dir, tmp_path, monkeypatch
     monkeypatch.setattr(scrape, "SOURCES", reordered)
     assert scrape.main(["--fixtures", str(fixture_dir), "--output", str(out)]) == 0
     assert list(json.loads(out.read_text())["sports"])[0] == "mens-tennis"
+
+
+# --------------------------------------------------------------------------- #
+# "Last checked": only a live run that reached at least one sport advances it
+# --------------------------------------------------------------------------- #
+
+@pytest.fixture
+def live(fixture_dir, monkeypatch):
+    """Make live fetches serve the fixture pages, with a switch to break individual sports."""
+    state = {"broken": set()}
+
+    def fake_fetch(url):
+        key = re.search(r"/sports/([^/]+)/", url).group(1)
+        if url.endswith("/schedule"):
+            raise OSError("schedule pages are not part of these tests")
+        if key in state["broken"]:
+            raise OSError("network down")
+        return (fixture_dir / f"{key}.html").read_text(encoding="utf-8")
+
+    monkeypatch.setattr(scrape, "fetch", fake_fetch)
+    monkeypatch.setattr(scrape, "REQUEST_GAP_SECONDS", 0)
+    return state
+
+
+def run_live(tmp_path, *extra):
+    return scrape.main(["--output", str(tmp_path / "series.json"),
+                        "--upcoming-output", str(tmp_path / "upcoming.json"),
+                        "--checked-file", str(tmp_path / "checked"), *extra])
+
+
+def test_good_live_run_records_the_check_time_without_touching_the_data_file(tmp_path, live):
+    assert run_live(tmp_path) == 0
+    stamp = (tmp_path / "checked").read_text().strip()
+    assert dt.datetime.fromisoformat(stamp).tzinfo is not None
+    data_before = (tmp_path / "series.json").read_text()
+    assert run_live(tmp_path) == 0                      # nothing changed in the games
+    assert (tmp_path / "series.json").read_text() == data_before
+    assert "checked" not in data_before
+
+
+def test_partial_failure_still_counts_as_a_check_but_exits_red(tmp_path, live):
+    live["broken"] = {"football"}
+    assert run_live(tmp_path) == 1
+    assert (tmp_path / "checked").exists()
+
+
+def test_every_sport_failing_does_not_advance_the_check_time(tmp_path, live):
+    assert run_live(tmp_path) == 0
+    (tmp_path / "checked").write_text("2026-01-01T00:00:00+00:00\n")
+    live["broken"] = {"football", "mens-basketball", "baseball", "mens-soccer", "mens-lacrosse", "mens-tennis"}
+    assert run_live(tmp_path) == 1
+    assert (tmp_path / "checked").read_text() == "2026-01-01T00:00:00+00:00\n"
+
+
+def test_fixture_and_dry_runs_are_not_checks(tmp_path, fixture_dir, live):
+    assert scrape.main(["--fixtures", str(fixture_dir), "--output", str(tmp_path / "series.json"),
+                        "--checked-file", str(tmp_path / "checked")]) == 0
+    assert run_live(tmp_path, "--dry-run") == 0
+    assert not (tmp_path / "checked").exists()

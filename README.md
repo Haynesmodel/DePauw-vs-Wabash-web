@@ -2,7 +2,7 @@
 
 All-time head-to-head records between DePauw University and Wabash College, shown for every men's sport the two schools share. Currently football and men's lacrosse.
 
-**Live site: https://jacksonmote.github.io/DePauw-vs-Wabash-web/**
+**Live site: https://depauwvswabash.com/**
 
 Unofficial fan site, not affiliated with DePauw University or Wabash College. Only men's sports are compared because Wabash is an all-male college.
 

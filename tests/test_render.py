@@ -153,7 +153,7 @@ def test_no_inline_script_or_style_and_security_meta(tmp_path):
         assert "default-src &#x27;none&#x27;" in p and "base-uri &#x27;none&#x27;" in p
         assert 'name="referrer" content="strict-origin-when-cross-origin"' in p
     assert 'href="styles.css"' in page and 'href="favicon.svg"' in page
-    assert 'rel="canonical" href="https://jacksonmote.github.io/DePauw-vs-Wabash-web/"' in page
+    assert 'rel="canonical" href="https://depauwvswabash.com/"' in page
     # relative URLs only for assets on the main page
     assert not re.search(r'(?:src|href)="/(?!/)', page)
 
@@ -161,7 +161,7 @@ def test_no_inline_script_or_style_and_security_meta(tmp_path):
 def test_404_uses_root_relative_assets_under_the_subpath(tmp_path):
     out, _ = build(tmp_path, {"football": football()})
     p = (out / "404.html").read_text(encoding="utf-8")
-    assert 'href="/DePauw-vs-Wabash-web/styles.css"' in p
+    assert 'href="/styles.css"' in p
     assert 'content="noindex"' in p
 
 
@@ -169,7 +169,7 @@ def test_extra_files_and_footer(tmp_path):
     out, page = build(tmp_path, {"football": football()})
     for name in ("styles.css", "favicon.svg", "robots.txt", "sitemap.xml", ".nojekyll", "404.html"):
         assert (out / name).exists()
-    assert "Sitemap: https://jacksonmote.github.io/DePauw-vs-Wabash-web/sitemap.xml" in (
+    assert "Sitemap: https://depauwvswabash.com/sitemap.xml" in (
         out / "robots.txt").read_text()
     t = text_of(page)
     assert "Last updated October 27, 2026, 11:48 PM EDT" in t

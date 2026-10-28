@@ -317,6 +317,66 @@ def tiles(depauw: int, wabash: int, ties: int, css_class: str = "") -> str:
     return f'<div class="{classes}">' + "".join(parts) + "</div>"
 
 
+UNITS = {"points": ("point", "points"), "runs": ("run", "runs"), "goals": ("goal", "goals"),
+         "individual matches": ("match", "matches")}
+
+
+def unit(n: int, label: str) -> str:
+    one, many = UNITS.get(label, (label, label))
+    return f"{n:,} {one if n == 1 else many}"
+
+
+def year_span(first: str, last: str) -> str:
+    return first if first == last else f"{first}–{last}"
+
+
+def game_line(g: dict) -> str:
+    return f"{score_text(g)} · {fmt_date(g['date'])}"
+
+
+def fun_facts(key: str, s: dict) -> list:
+    """[(label, text)] worked out from the game list. A fact that makes no sense for the sport is left out."""
+    games, label = s["games"], s.get("total_label") or "points"
+    out = []
+    for who, result in (("DePauw", "W"), ("Wabash", "L")):
+        g = facts.biggest_win(games, result)
+        if g:
+            out.append((f"Biggest {who} win", f"{game_line(g)} · by {unit(facts.margin(g), label)}"))
+    for who, result in (("DePauw", "W"), ("Wabash", "L")):
+        run = facts.longest_streak(games, result)
+        if run:
+            out.append((f"Longest {who} win streak",
+                        f"{run['games']} straight · {year_span(run['first'], run['last'])}"))
+    close = facts.one_score_games(key, games)
+    if close:
+        limit = facts.ONE_SCORE[key]
+        by = f"by {unit(limit, label)}" + (" or fewer" if limit > 1 else "")
+        out.append(("One-score games", f"{len(close):,} decided {by} · most recent: {game_line(close[-1])}"))
+    if label != "individual matches":  # nine matches are always played, so the total never varies
+        top = facts.highest_scoring(games)
+        out.append(("Highest-scoring game", f"{game_line(top)} · {unit(top['depauw'] + top['wabash'], label)} combined"))
+    for title, found in (("Overtime games", facts.overtime_games(games)),
+                         ("Extra-inning games", facts.extra_inning_games(games))):
+        if found:
+            last = found[-1]
+            out.append((title, f"{len(found):,} · most recent: {game_line(last)} ({fmt_note(last.get('note'))})"))
+    return out
+
+
+def fun_facts_html(items: list) -> str:
+    if not items:
+        return ""
+    lis = "\n".join(f'<li><span class="fun-label">{esc(k)}:</span> {esc(v)}</li>' for k, v in items)
+    return f'<div class="fun-facts">\n<h3>Fun facts</h3>\n<ul>\n{lis}\n</ul>\n</div>'
+
+
+def series_html(rows: list) -> str:
+    if not rows:
+        return ""
+    lis = "\n".join(f'<li><strong>{esc(season)}:</strong> {esc(text)}</li>' for season, text in rows)
+    return f'<h3 class="series-h">Season by season</h3>\n<ul class="series">\n{lis}\n</ul>\n'
+
+
 def games_table(key: str, games: list) -> str:
     rows = []
     # games arrive oldest first (doubleheaders in playing order), so reverse for newest first
@@ -335,6 +395,7 @@ def games_table(key: str, games: list) -> str:
         )
     return (
         f'<details class="games">\n<summary>All {plural(len(games), "game")}</summary>\n'
+        f'{series_html(facts.season_series(games))}'
         '<p class="hint">Newest first. Home and away are from DePauw’s point of view.</p>\n'
         '<table>\n'
         f'<caption class="sr-only">Every {esc(key.replace("-", " "))} game, newest first</caption>\n'
@@ -411,6 +472,7 @@ def card(key: str, s: dict, ahead: list, pending: list, schedule_url: str | None
         f'{tiles(rec["depauw_wins"], rec["wabash_wins"], rec["ties"])}\n'
         f'<dl class="facts">\n{dl}\n</dl>\n{source}\n'
         f'{bell_block(games, ahead, today) if key == "football" else ""}\n'
+        f'{fun_facts_html(fun_facts(key, s))}\n'
         f'{games_table(key, games)}\n</article>'
     )
 

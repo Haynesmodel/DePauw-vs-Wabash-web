@@ -105,3 +105,111 @@ def test_the_hand_written_history_has_no_changing_numbers_and_stays_short():
     sentences = [s for s in re.split(r"(?<=\.) ", render.BELL_HISTORY) if s]
     assert 3 <= len(sentences) <= 5
     assert "tie" in render.BELL_HISTORY and "stolen" in render.BELL_HISTORY
+
+
+# ---- fun facts ------------------------------------------------------------- #
+
+def gm(date, result, d, w, note=None, season=None):
+    return {"date": date, "season": season or date[:4], "location": "home", "site": None,
+            "result": result, "depauw": d, "wabash": w, "note": note, "boxscore": None}
+
+
+def test_biggest_win_uses_the_widest_margin_and_the_latest_game_on_a_tie():
+    games = [gm("2000-11-01", "W", 30, 0), gm("2010-11-01", "W", 40, 10), gm("2005-11-01", "L", 3, 20),
+             gm("2012-11-01", "T", 7, 7)]
+    assert facts.biggest_win(games, "W")["date"] == "2010-11-01"          # 30-0 and 40-10 both by 30
+    assert facts.biggest_win(games, "L")["date"] == "2005-11-01"
+    assert facts.biggest_win([gm("2000-11-01", "T", 7, 7)], "W") is None   # a tie is nobody's win
+
+
+def test_longest_streak_is_broken_by_ties_and_prefers_the_recent_one_when_equal():
+    games = [gm(f"{y}-11-01", r, 10, 5 if r == "W" else 20)
+             for y, r in [(2000, "W"), (2001, "W"), (2002, "T"), (2003, "W"), (2004, "W"), (2005, "L")]]
+    assert facts.longest_streak(games, "W") == {"games": 2, "first": "2003", "last": "2004"}
+    assert facts.longest_streak(games, "L") is None                         # a single loss is not a streak
+    assert facts.longest_streak([], "W") is None
+
+
+def test_one_score_margins_per_sport_and_ties_do_not_count():
+    games = [gm("2000-11-01", "W", 24, 16), gm("2001-11-01", "L", 17, 26), gm("2002-11-01", "W", 20, 13),
+             gm("2003-11-01", "T", 7, 7)]
+    assert [x["date"] for x in facts.one_score_games("football", games)] == ["2000-11-01", "2002-11-01"]
+    assert facts.one_score_games("mens-lacrosse", games) == []
+    assert [x["date"] for x in facts.one_score_games("mens-basketball", [gm("2000-01-01", "W", 70, 67),
+                                                                           gm("2001-01-01", "W", 70, 66)])] == ["2000-01-01"]
+    assert facts.one_score_games("curling", games) == []                    # unknown sport: no guess
+
+
+def test_highest_scoring_and_overtime_and_extra_innings():
+    games = [gm("2000-02-01", "W", 80, 70), gm("2001-02-01", "L", 75, 75 + 5, note="(1ot)"),
+             gm("2002-02-01", "W", 85, 65), gm("2003-02-01", "W", 60, 59, note="2OT"),
+             gm("2004-02-01", "W", 70, 60, note="3 OT")]
+    assert facts.highest_scoring(games)["date"] == "2001-02-01"             # 155 combined
+    assert [x["date"] for x in facts.overtime_games(games)] == ["2001-02-01", "2003-02-01", "2004-02-01"]
+    ball = [gm("2000-04-01", "W", 5, 4, note="(7 inn.)"), gm("2001-04-01", "W", 5, 4, note="(10 inn.)"),
+            gm("2002-04-01", "W", 5, 4, note="(9 inn.)"), gm("2003-04-01", "W", 5, 4)]
+    assert [x["date"] for x in facts.extra_inning_games(ball)] == ["2001-04-01"]   # 7 inn. is a short game
+    assert facts.overtime_games(ball) == []
+
+
+def test_season_by_season_only_for_sports_that_meet_more_than_once_a_year():
+    two_a_year = [gm("2024-01-06", "W", 70, 60, season="2023-24"), gm("2024-02-03", "W", 71, 60, season="2023-24"),
+                  gm("2025-01-04", "W", 70, 60, season="2024-25"), gm("2025-02-01", "L", 60, 70, season="2024-25"),
+                  gm("2026-01-03", "L", 60, 70, season="2025-26"), gm("2026-02-07", "L", 60, 70, season="2025-26"),
+                  gm("2027-01-03", "T", 60, 60, season="2026-27"), gm("2027-02-07", "W", 61, 60, season="2026-27")]
+    assert facts.season_series(two_a_year) == [("2026-27", "DePauw 1-0-1"), ("2025-26", "Wabash 2-0"),
+                                              ("2024-25", "Split 1-1"), ("2023-24", "DePauw 2-0")]
+    assert facts.season_series(real_football()) == []                       # two doubles in 129 seasons
+
+
+# ---- on the page ----------------------------------------------------------- #
+
+def fun_text(tmp_path, key, sport):
+    from test_render import text_of
+    html = render_page(tmp_path, {key: sport})
+    start = html.index('<div class="fun-facts">')
+    return text_of(html[start:html.index("</div>", start)]).replace(" ,", ",")
+
+
+def render_page(tmp_path, sports):
+    from test_render import build
+    return build(tmp_path, sports)[1]
+
+
+def sport_of(key, name, games, label=None):
+    from test_render import sport
+    return sport(key, name, games, label)
+
+
+def test_a_card_lists_its_fun_facts_from_its_own_games(tmp_path):
+    games = [gm("2000-02-01", "W", 80, 70), gm("2001-02-01", "L", 75, 80, note="(1ot)"),
+             gm("2002-02-01", "W", 85, 65), gm("2003-02-01", "W", 60, 59, note="2OT")]
+    text = fun_text(tmp_path, "mens-basketball", sport_of("mens-basketball", "Men's Basketball", games))
+    assert "Biggest DePauw win: DePauw 85, Wabash 65 · Feb 1, 2002 · by 20 points" in text
+    assert "Biggest Wabash win: Wabash 80, DePauw 75 · Feb 1, 2001 · by 5 points" in text
+    assert "Longest DePauw win streak: 2 straight · 2002–2003" in text
+    assert "One-score games: 1 decided by 3 points or fewer · most recent: DePauw 60, Wabash 59 · Feb 1, 2003" in text
+    assert "Highest-scoring game: Wabash 80, DePauw 75 · Feb 1, 2001 · 155 points combined" in text
+    assert "Overtime games: 2 · most recent: DePauw 60, Wabash 59 · Feb 1, 2003 (2 OT)" in text
+
+
+def test_facts_that_make_no_sense_are_left_out(tmp_path):
+    swept = [gm("2020-04-01", "W", 12, 3), gm("2021-04-01", "W", 9, 8), gm("2022-04-01", "W", 14, 5)]
+    text = fun_text(tmp_path, "mens-lacrosse", sport_of("mens-lacrosse", "Men's Lacrosse", swept, "goals"))
+    assert "Biggest DePauw win: DePauw 14, Wabash 5 · Apr 1, 2022 · by 9 goals" in text   # 12-3 ties it; latest wins
+    assert "Biggest Wabash win" not in text and "Longest Wabash win streak" not in text
+    assert "Overtime" not in text and "Extra-inning" not in text
+    assert "One-score games: 1 decided by 1 goal · most recent: DePauw 9, Wabash 8" in text
+    tennis = [gm("2021-04-01", "W", 9, 0), gm("2022-04-01", "W", 5, 4)]
+    text = fun_text(tmp_path, "mens-tennis", sport_of("mens-tennis", "Men's Tennis", tennis, "individual matches"))
+    assert "Highest-scoring" not in text and "by 9 matches" in text and "1 decided by 1 match" in text
+
+
+def test_season_list_sits_inside_the_games_details_only_when_it_applies(tmp_path):
+    games = [gm("2024-01-06", "W", 70, 60, season="2023-24"), gm("2024-02-03", "W", 71, 60, season="2023-24"),
+             gm("2025-01-04", "W", 70, 60, season="2024-25"), gm("2025-02-01", "L", 60, 70, season="2024-25")]
+    html = render_page(tmp_path, {"mens-basketball": sport_of("mens-basketball", "Men's Basketball", games)})
+    details = html[html.index('<details class="games">'):html.index("</details>")]
+    assert "<strong>2024-25:</strong> Split 1-1" in details and "<strong>2023-24:</strong> DePauw 2-0" in details
+    assert details.index("Season by season") < details.index("<table>")
+    assert "Season by season" not in render_page(tmp_path, {"football": football()})

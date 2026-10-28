@@ -177,3 +177,11 @@ main { padding-block: 1.5rem 2.5rem; display: grid; gap: 1.5rem; }
 .tiles-small .tile { padding: 0.375rem 0.5rem; }
 .tiles-small .tile-num { font-size: 1.5rem; }
 .bell-history { margin: 0.75rem 0 0; color: var(--color-text-muted); font-size: 0.9375rem; }
+
+/* Fun facts and the season-by-season list */
+.fun-facts { margin-top: 1.25rem; }
+.fun-facts h3, .series-h { font-size: 1.0625rem; margin: 0 0 0.5rem; }
+.fun-facts ul { margin: 0; padding-left: 1.25rem; display: grid; gap: 0.375rem; }
+.fun-label { font-weight: 600; margin-right: 0.25rem; }
+.series { list-style: none; margin: 0 0 1rem; padding: 0; columns: 12rem; column-gap: 1.5rem; font-size: 0.9375rem; }
+.series li { break-inside: avoid; padding: 0.125rem 0; }

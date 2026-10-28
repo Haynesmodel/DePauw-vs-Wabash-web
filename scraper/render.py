@@ -26,10 +26,13 @@ import sys
 from pathlib import Path
 from urllib.parse import urlparse
 
+import meetings
+
 ROOT = Path(__file__).resolve().parent.parent
 DATA = ROOT / "data" / "series.json"
 STATIC = ROOT / "static"
 OUT = ROOT / "site"
+UPCOMING = ROOT / "data" / "upcoming.json"
 CHECKED_AT = ROOT / ".checked-at"  # written by scrape.py after a live run; never committed
 
 SITE_URL = "https://depauwvswabash.com/"
@@ -158,6 +161,29 @@ def where_text(g: dict) -> str:
     label = {"home": "Home", "away": "Away", "neutral": "Neutral"}.get(g["location"], "Site unknown")
     site = g.get("site") or {"home": HOME_SITE, "away": AWAY_SITE}.get(g["location"])
     return f"{label} · {site}" if site else label
+
+
+WEEKDAYS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"]
+
+
+def fmt_when(g: dict, today: dt.date) -> str:
+    """'Sat, Nov 14 · 1:07 PM'. The year appears only when the game is not in this year."""
+    d = dt.date.fromisoformat(g["date"])
+    year = f", {d.year}" if d.year != today.year else ""
+    day = f"{WEEKDAYS[d.weekday()]}, {MONTHS[d.month - 1][:3]} {d.day}{year}"
+    if g.get("status") == "postponed":
+        return f"{day} · Postponed"
+    return f"{day} · {g.get('time') or g.get('time_note') or 'Time TBA'}"
+
+
+def meeting_site(g: dict) -> str:
+    site = g.get("site") or {"home": HOME_SITE, "away": AWAY_SITE}.get(g.get("location"))
+    return site or ("Neutral site" if g.get("location") == "neutral" else "Site TBA")
+
+
+def meeting_html(g: dict, today: dt.date) -> str:
+    return (f'<time datetime="{esc(g["date"])}">{esc(fmt_when(g, today))}</time>'
+            f' · {esc(meeting_site(g))}')
 
 
 def fmt_note(note) -> str:
@@ -307,7 +333,7 @@ def games_table(key: str, games: list) -> str:
     )
 
 
-def card(key: str, s: dict) -> str:
+def card(key: str, s: dict, ahead: list, pending: list, schedule_url: str | None, today: dt.date) -> str:
     games = sorted(s["games"], key=lambda g: g["date"])
     rec = s["record"]
     code = s.get("current_streak")
@@ -326,9 +352,19 @@ def card(key: str, s: dict) -> str:
          f'<time datetime="{esc(last["date"])}">{esc(fmt_date(last["date"]))}</time>'
          f' · {esc(score_text(last))}'),
     ]
+    if ahead:
+        facts.append(("Next meeting", meeting_html(ahead[0], today)))
+    if pending:
+        day = fmt_when(pending[0], today).split(" · ")[0]
+        facts.append(("Result pending", esc(day) + " · not on the history page yet"))
     dl = "\n".join(f'<div><dt>{esc(k)}</dt><dd>{v}</dd></div>' for k, v in facts)
-    source = (f'<p class="source"><a href="{esc(src)}">Source: depauwtigers.com {esc(s["name"])} history</a></p>'
-              if src else "")
+    sched = safe_url(schedule_url)
+    links = []
+    if src:
+        links.append(f'<a href="{esc(src)}">Source: depauwtigers.com {esc(s["name"])} history</a>')
+    if sched:
+        links.append(f'<a href="{esc(sched)}">Schedule</a>')
+    source = f'<p class="source">{" · ".join(links)}</p>' if links else ""
     return (
         f'<article class="sport" id="{esc(key)}" aria-labelledby="{esc(key)}-h">\n'
         f'<h2 id="{esc(key)}-h">{esc(s["name"])}</h2>\n'
@@ -347,7 +383,25 @@ def updated_line(updated: str, checked: str | None, now: dt.datetime) -> str:
     return f'<p>{" · ".join(parts)} (Eastern time).</p>'
 
 
-def render_index(data: dict, checked: str | None = None, now: dt.datetime | None = None) -> str:
+def next_meeting_section(per_sport: dict, pending: dict, sports: dict, today: dt.date) -> str:
+    """The soonest meeting across all sports, near the top. Empty string (no box at all) when there is none."""
+    best = meetings.next_overall(per_sport)
+    lines = []
+    if best:
+        key, g = best
+        lines.append(f'<p class="next-line"><strong>{esc(sports[key]["name"])}</strong>, '
+                     f'{meeting_html(g, today)}</p>')
+    for key, games in pending.items():
+        if games:
+            lines.append(f'<p class="next-pending">{esc(sports[key]["name"])}: result pending</p>')
+    if not lines:
+        return ""
+    return "\n".join(['<section class="next-meeting" id="next-meeting" aria-labelledby="next-meeting-h">',
+                      '<h2 id="next-meeting-h">Next meeting</h2>', *lines, '</section>'])
+
+
+def render_index(data: dict, checked: str | None = None, now: dt.datetime | None = None,
+                 upcoming: dict | None = None) -> str:
     t = data["totals"]
     sports = data["sports"]
     n_sports = len(sports)
@@ -357,6 +411,12 @@ def render_index(data: dict, checked: str | None = None, now: dt.datetime | None
                    f"in {plural(n_sports, 'sport')}.")
     updated = data["updated_at"]
     now = now or dt.datetime.now(dt.timezone.utc)
+    today = to_eastern(now)[0].date()
+    upcoming = upcoming or {}
+    ahead, pending = {}, {}
+    for key, s in sports.items():
+        ahead[key], pending[key] = meetings.split_games(
+            upcoming.get(key, {}).get("games", []), s["games"], today)
 
     sources = "\n".join(
         f'<li><a href="{esc(u)}">{esc(s["name"])}</a></li>'
@@ -372,13 +432,15 @@ def render_index(data: dict, checked: str | None = None, now: dt.datetime | None
         '</div>',
         '</header>',
         '<main class="wrap">',
+        next_meeting_section(ahead, pending, sports, today),
         '<section class="overall" aria-labelledby="overall-h">',
         '<h2 id="overall-h">All sports combined</h2>',
         tiles(t["depauw_wins"], t["wabash_wins"], t["ties"], "tiles-big"),
         f'<p class="overall-meta">{esc(plural(t["games_played"], "game"))} across {esc(plural(n_sports, "sport"))}</p>',
         f'<p class="not-included"><strong>Not included:</strong> {esc(NOT_INCLUDED)}</p>',
         '</section>',
-        *(card(k, s) for k, s in sports.items()),
+        *(card(k, s, ahead[k], pending[k], upcoming.get(k, {}).get("schedule_url"), today)
+          for k, s in sports.items()),
         '</main>',
         '<footer class="site-footer">',
         '<div class="wrap">',
@@ -424,10 +486,11 @@ def render_sitemap(data: dict) -> str:
 
 
 def build(data_path: Path, out: Path, *, checked_at: str | None = None,
-          now: dt.datetime | None = None) -> None:
+          now: dt.datetime | None = None, upcoming_path: Path | None = None) -> None:
     data = load(data_path)
+    upcoming = meetings.load_upcoming(upcoming_path)
     pages = {
-        "index.html": render_index(data, checked_at, now),
+        "index.html": render_index(data, checked_at, now, upcoming),
         "404.html": render_404(),
         "sitemap.xml": render_sitemap(data),
         "robots.txt": f"User-agent: *\nAllow: /\n\nSitemap: {SITE_URL}sitemap.xml\n",
@@ -446,11 +509,14 @@ def main(argv=None) -> int:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--data", type=Path, default=DATA)
     ap.add_argument("--out", type=Path, default=OUT)
+    ap.add_argument("--upcoming", type=Path, default=UPCOMING,
+                    help="upcoming meetings from the schedule pages (optional)")
     ap.add_argument("--checked-file", type=Path, default=CHECKED_AT,
                     help="file holding the time of the last successful scrape (optional)")
     args = ap.parse_args(argv)
     try:
-        build(args.data, args.out, checked_at=read_checked(args.checked_file))
+        build(args.data, args.out, checked_at=read_checked(args.checked_file),
+              upcoming_path=args.upcoming)
     except (DataError, KeyError, TypeError, ValueError, AttributeError) as exc:
         print(f"render failed: {exc!r}", file=sys.stderr)
         return 1

@@ -1,40 +1,47 @@
 {
-  "_comment": "One entry per sport, in the order the page shows them. URLs are DePauw's Sidearm 'opponent history' pages vs. Wabash; the opponent id (215) is the same across sports on depauwtigers.com. Head-to-head sports only: multi-team events (cross country, track and field, swimming and diving, golf) are deliberately left out. Optional 'total_label' overrides the page's own label for the points/goals/runs total.",
+  "_comment": "One entry per sport, in the order the page shows them. URLs are DePauw's Sidearm 'opponent history' pages vs. Wabash; the opponent id (215) is the same across sports on depauwtigers.com. Head-to-head sports only: multi-team events (cross country, track and field, swimming and diving, golf) are deliberately left out. Optional 'total_label' overrides the page's own label for the points/goals/runs total. 'schedule_path' is the yearless Sidearm schedule page, which always serves the current season; it is read for upcoming meetings only and can never block the records.",
   "school": "DePauw",
   "opponent": "Wabash",
   "opponent_match": "wabash",
+  "opponent_id": 215,
   "base_url": "https://depauwtigers.com",
   "sports": [
     {
       "key": "football",
       "name": "Football",
-      "path": "/sports/football/opponent-history/wabash/215"
+      "path": "/sports/football/opponent-history/wabash/215",
+      "schedule_path": "/sports/football/schedule"
     },
     {
       "key": "mens-basketball",
       "name": "Men's Basketball",
-      "path": "/sports/mens-basketball/opponent-history/wabash/215"
+      "path": "/sports/mens-basketball/opponent-history/wabash/215",
+      "schedule_path": "/sports/mens-basketball/schedule"
     },
     {
       "key": "baseball",
       "name": "Baseball",
-      "path": "/sports/baseball/opponent-history/wabash/215"
+      "path": "/sports/baseball/opponent-history/wabash/215",
+      "schedule_path": "/sports/baseball/schedule"
     },
     {
       "key": "mens-soccer",
       "name": "Men's Soccer",
-      "path": "/sports/mens-soccer/opponent-history/wabash/215"
+      "path": "/sports/mens-soccer/opponent-history/wabash/215",
+      "schedule_path": "/sports/mens-soccer/schedule"
     },
     {
       "key": "mens-lacrosse",
       "name": "Men's Lacrosse",
-      "path": "/sports/mens-lacrosse/opponent-history/wabash/215"
+      "path": "/sports/mens-lacrosse/opponent-history/wabash/215",
+      "schedule_path": "/sports/mens-lacrosse/schedule"
     },
     {
       "key": "mens-tennis",
       "name": "Men's Tennis",
       "path": "/sports/mens-tennis/opponent-history/wabash/215",
-      "total_label": "individual matches"
+      "total_label": "individual matches",
+      "schedule_path": "/sports/mens-tennis/schedule"
     }
   ]
 }

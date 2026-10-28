@@ -369,6 +369,8 @@ def live(fixture_dir, monkeypatch):
 
     def fake_fetch(url):
         key = re.search(r"/sports/([^/]+)/", url).group(1)
+        if url.endswith("/schedule"):
+            raise OSError("schedule pages are not part of these tests")
         if key in state["broken"]:
             raise OSError("network down")
         return (fixture_dir / f"{key}.html").read_text(encoding="utf-8")
@@ -380,6 +382,7 @@ def live(fixture_dir, monkeypatch):
 
 def run_live(tmp_path, *extra):
     return scrape.main(["--output", str(tmp_path / "series.json"),
+                        "--upcoming-output", str(tmp_path / "upcoming.json"),
                         "--checked-file", str(tmp_path / "checked"), *extra])
 
 

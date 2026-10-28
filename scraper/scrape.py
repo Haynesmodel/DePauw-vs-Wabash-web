@@ -17,6 +17,10 @@ Safety rules, so a bad night never wipes good data:
   * The "last checked" time (.checked-at, uncommitted) is written only after a live run in which
     at least one sport loaded and validated. A run where every sport failed leaves it alone.
 
+Upcoming meetings (data/upcoming.json) come from each sport's schedule page and are separate from
+the records: a schedule that fails to load or parse only logs a warning, keeps that sport's last
+good entry, and never changes the exit code or the validation of the history.
+
 Usage:
   python scraper/scrape.py                      # fetch live pages, update data/series.json
   python scraper/scrape.py --fixtures DIR       # parse saved HTML (DIR/<sport-key>.html) instead
@@ -38,9 +42,12 @@ from typing import Optional
 
 from bs4 import BeautifulSoup
 
+import upcoming
+
 ROOT = Path(__file__).resolve().parent.parent
 SOURCES = Path(__file__).resolve().parent / "sources.json"
 OUTPUT = ROOT / "data" / "series.json"
+UPCOMING = ROOT / "data" / "upcoming.json"
 # Time of the last scrape that actually reached at least one sport. Never committed (it is
 # gitignored and lives outside data/), so series.json still changes only when games change.
 CHECKED_AT = ROOT / ".checked-at"
@@ -299,6 +306,35 @@ def fetch(url: str) -> str:
     return resp.text
 
 
+def scrape_schedules(cfg: dict, previous: dict, fixtures: Optional[Path]) -> dict:
+    """Upcoming Wabash games per sport. Never raises: a schedule problem is a warning, and the
+    sport keeps whatever it had before."""
+    sports = dict(previous)
+    first = True
+    for sport in cfg["sports"]:
+        key, path = sport["key"], sport.get("schedule_path")
+        if not path:
+            continue
+        url = cfg["base_url"].rstrip("/") + path
+        try:
+            if fixtures:
+                page = fixtures / f"{key}-schedule.html"
+                if not page.exists():
+                    continue
+                html = page.read_text(encoding="utf-8")
+            else:
+                if not first:
+                    time.sleep(REQUEST_GAP_SECONDS)
+                first = False
+                html = fetch(url)
+            games = upcoming.parse_schedule(html, opponent_id=cfg["opponent_id"])
+            sports[key] = {"schedule_url": url, "games": games}
+            print(f"OK   {sport['name']:<16} schedule: {len(games)} game(s) not yet played")
+        except Exception as exc:  # a schedule problem must never block the records
+            print(f"WARN {sport['name']:<16} schedule not updated: {exc}", file=sys.stderr)
+    return {k: sports[k] for k in (s["key"] for s in cfg["sports"]) if k in sports}
+
+
 def sport_payload(sr: SportResult) -> dict:
     games = chronological(sr.games)
     t = tally(games)
@@ -341,6 +377,7 @@ def main(argv=None) -> int:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--fixtures", type=Path, help="read <dir>/<sport-key>.html instead of fetching")
     ap.add_argument("--output", type=Path, default=OUTPUT)
+    ap.add_argument("--upcoming-output", type=Path, default=UPCOMING)
     ap.add_argument("--checked-file", type=Path, default=CHECKED_AT,
                     help="where to record the time of a successful live check")
     ap.add_argument("--dry-run", action="store_true")
@@ -401,6 +438,14 @@ def main(argv=None) -> int:
         args.output.parent.mkdir(parents=True, exist_ok=True)
         args.output.write_text(json.dumps(out, indent=2) + "\n")
         print(f"Wrote {args.output}")
+
+    old_upcoming = json.loads(args.upcoming_output.read_text()) if args.upcoming_output.exists() else {}
+    new_upcoming = scrape_schedules(cfg, old_upcoming.get("sports", {}), args.fixtures)
+    if new_upcoming != old_upcoming.get("sports", {}) and not args.dry_run:
+        args.upcoming_output.parent.mkdir(parents=True, exist_ok=True)
+        args.upcoming_output.write_text(
+            json.dumps({"schema_version": 1, "sports": new_upcoming}, indent=2) + "\n")
+        print(f"Wrote {args.upcoming_output}")
 
     # A fixture run or a dry run is not a check of the live site, and a run where every sport failed
     # proves nothing about the data, so only a real run with at least one good sport advances the time.

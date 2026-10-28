@@ -19,7 +19,7 @@ def game(date, result, d, w, location="home", site="Greencastle, Ind.", note=Non
             "result": result, "depauw": d, "wabash": w, "note": note, "boxscore": box}
 
 
-def sport(key, name, games):
+def sport(key, name, games, total_label=None):
     r = {"W": 0, "L": 0, "T": 0}
     for g in games:
         r[g["result"]] += 1
@@ -28,7 +28,8 @@ def sport(key, name, games):
             "games_played": len(games), "first_game": games[0]["date"], "last_game": games[-1]["date"],
             "current_streak": None,
             "points": {"depauw": sum(g["depauw"] for g in games), "wabash": sum(g["wabash"] for g in games)},
-            "games": games, "skipped_rows": []}
+            "games": games, "skipped_rows": [],
+            **({"total_label": total_label} if total_label else {})}
 
 
 def series(sports):
@@ -84,7 +85,7 @@ def test_totals_and_counts_come_from_the_data(tmp_path):
     # football 3-1-1, lacrosse 2-0 => 5 DePauw wins, 1 Wabash, 1 tie, 7 games, 2 sports
     assert "DePauw 5 wins Wabash 1 win Ties 1 tie" in t
     assert "7 games across 2 sports" in t
-    assert "DePauw 5 wins, Wabash 1, 1 tie, over 7 games in 2 sports" in page
+    assert "DePauw 5 wins, Wabash 1, 1 tie, across 7 games in 2 sports" in page
 
 
 def test_card_facts(tmp_path):
@@ -252,3 +253,68 @@ def test_real_data_file_renders(tmp_path):
     real = Path(__file__).resolve().parent.parent / "data" / "series.json"
     render.build(real, tmp_path / "site")
     assert "<article" in (tmp_path / "site" / "index.html").read_text(encoding="utf-8")
+
+
+# ---- more sports -------------------------------------------------------- #
+
+def test_total_label_comes_from_each_sport(tmp_path):
+    base = sport("baseball", "Baseball", [game("2025-04-01", "W", 7, 2)], total_label="runs")
+    tennis = sport("mens-tennis", "Men's Tennis", [game("2025-04-02", "W", 5, 4)], total_label="individual matches")
+    _, page = build(tmp_path, {"baseball": base, "mens-tennis": tennis, "football": football()})
+    t = text_of(page)
+    assert "Total runs DePauw 7, Wabash 2" in t
+    assert "Total individual matches DePauw 5, Wabash 4" in t
+    assert "Total points DePauw 123, Wabash 81" in t  # football has no label in the sample: falls back to points
+    assert t.count("Total runs") == 1
+
+
+def test_missing_site_is_filled_from_home_or_away_but_not_neutral(tmp_path):
+    s = sport("baseball", "Baseball", [
+        game("2020-04-01", "W", 5, 1, "home", None),
+        game("2020-04-02", "L", 1, 5, "away", None),
+        game("2020-04-03", "W", 3, 2, "neutral", None),
+        game("2020-04-04", "W", 4, 2, "home", "Westfield, IN"),
+    ])
+    _, page = build(tmp_path, {"baseball": s})
+    t = text_of(page)
+    assert "Home · Greencastle, Ind." in t and "Away · Crawfordsville, Ind." in t
+    assert "Home · Westfield, IN" in t  # a site the source gives is never replaced
+    neutral_cell = re.search(r'<td data-label="Site">(Neutral[^<]*)</td>', page).group(1)
+    assert neutral_cell == "Neutral"
+    # the data file itself is untouched
+    assert s["games"][0]["site"] is None
+
+
+def test_overtime_notes_are_tidied(tmp_path):
+    s = sport("mens-basketball", "Men's Basketball", [
+        game("1990-01-01", "W", 70, 68, note="(1ot)"), game("1991-01-01", "L", 60, 62, note="2OT"),
+        game("1992-01-01", "W", 5, 4, note="(7 inn.)")])
+    _, page = build(tmp_path, {"mens-basketball": s})
+    cells = re.findall(r'<td data-label="Notes">([^<]*)</td>', page)
+    assert sorted(cells) == ["1 OT", "2 OT", "7 inn."]
+
+
+def test_not_included_note_sits_under_the_totals(tmp_path):
+    _, page = build(tmp_path, {"football": football()})
+    t = text_of(page)
+    assert ("Not included: cross country, track and field, swimming and diving, and golf. "
+            "They are multi-team events rather than head-to-head games.") in t
+    assert page.index("overall-meta") < page.index("not-included") < page.index('class="sport"')
+
+
+def test_sport_cards_follow_the_data_order(tmp_path):
+    order = ["mens-lacrosse", "football", "mens-basketball"]
+    sports = {"football": football(), "mens-basketball": basketball(), "mens-lacrosse": lacrosse()}
+    _, page = build(tmp_path, {k: sports[k] for k in order})
+    assert [m for m in re.findall(r'<article class="sport" id="([^"]+)"', page)] == order
+
+
+def test_sitemap_lastmod_follows_updated_at(tmp_path):
+    out, _ = build(tmp_path, {"football": football()})
+    assert "<lastmod>2026-10-27</lastmod>" in (out / "sitemap.xml").read_text()  # 11:48 PM Eastern on Oct 27
+
+
+def test_tiles_always_share_one_row():
+    css = (Path(__file__).resolve().parent.parent / "static" / "styles.css").read_text()
+    tiles = re.search(r"\.tiles \{[^}]*\}", css).group(0)
+    assert "grid-auto-flow: column" in tiles and "auto-fit" not in tiles

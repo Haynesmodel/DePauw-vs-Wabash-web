@@ -17,14 +17,16 @@ Usage:
 from __future__ import annotations
 
 import argparse
+import csv
 import datetime as dt
 import html
 import json
 import re
+import io
 import shutil
 import sys
 from pathlib import Path
-from urllib.parse import urlparse
+from urllib.parse import quote, urlparse
 
 import facts
 import meetings
@@ -38,6 +40,7 @@ CHECKED_AT = ROOT / ".checked-at"  # written by scrape.py after a live run; neve
 
 SITE_URL = "https://depauwvswabash.com/"
 BASE_PATH = urlparse(SITE_URL).path  # "/" on the custom domain
+REPO_URL = "https://github.com/jacksonmote/DePauw-vs-Wabash-web"
 SOURCE_HOST = "depauwtigers.com"
 # Where DePauw's games vs. Wabash are played when the source gives no site (neutral sites are never guessed).
 HOME_SITE = "Greencastle, Ind."
@@ -88,6 +91,18 @@ def safe_url(url) -> str | None:
     if parts.scheme != "https" or parts.hostname not in (SOURCE_HOST, "www." + SOURCE_HOST):
         return None
     return url
+
+
+def report_url(sport_name: str | None = None) -> str:
+    """Opens the data-correction issue form, with the sport filled in when the link comes from a card."""
+    query = "template=data-correction.yml"
+    if sport_name:
+        query += f"&title={quote('Data correction: ' + sport_name)}&sport={quote(sport_name)}"
+    return f"{REPO_URL}/issues/new?{query}"
+
+
+def report_link(sport_name: str | None = None) -> str:
+    return f'<a href="{esc(report_url(sport_name))}">Report a data error</a>'
 
 
 def plural(n: int, word: str) -> str:
@@ -471,7 +486,8 @@ def card(key: str, s: dict, ahead: list, pending: list, schedule_url: str | None
         links.append(f'<a href="{esc(src)}">Source: depauwtigers.com {esc(s["name"])} history</a>')
     if sched:
         links.append(f'<a href="{esc(sched)}">Schedule</a>')
-    source = f'<p class="source">{" · ".join(links)}</p>' if links else ""
+    links.append(report_link(s["name"]))
+    source = f'<p class="source">{" · ".join(links)}</p>'
     return (
         f'<article class="sport" id="{esc(key)}" aria-labelledby="{esc(key)}-h">\n'
         f'{heading(2, key, s["name"])}\n'
@@ -554,6 +570,9 @@ def render_index(data: dict, checked: str | None = None, now: dt.datetime | None
         '<footer class="site-footer">',
         '<div class="wrap">',
         updated_line(updated, checked, now),
+        '<p class="downloads">Download the data: <a href="data/series.json">series.json</a> (every game, as JSON)'
+        ' · <a href="games.csv">games.csv</a> (one row per game, for spreadsheets). '
+        f'{report_link()}.</p>',
         '<p>Data from <a href="https://depauwtigers.com/">depauwtigers.com</a>. Source pages:</p>',
         f'<ul class="sources">\n{sources}\n</ul>',
         '<p>Only men’s sports are compared because Wabash is an all-male college.</p>',
@@ -594,6 +613,31 @@ def render_sitemap(data: dict) -> str:
             '</urlset>\n')
 
 
+CSV_COLUMNS = ["sport", "date", "season", "location", "site", "depauw_score", "wabash_score",
+               "result", "note", "boxscore_url"]
+RESULT_WORDS = {"W": "DePauw win", "L": "Wabash win", "T": "Tie"}
+
+
+def csv_text(value) -> str:
+    """Text for a spreadsheet cell. A value that starts with =, +, - or @ would run as a formula in
+    Excel or Sheets, so it gets a leading apostrophe."""
+    text = "" if value is None else str(value)
+    return "'" + text if text[:1] in ("=", "+", "-", "@") else text
+
+
+def render_csv(data: dict) -> str:
+    """One row per game, oldest first within each sport, in the order the sports appear on the page."""
+    buf = io.StringIO()
+    writer = csv.writer(buf, lineterminator="\n")
+    writer.writerow(CSV_COLUMNS)
+    for s in data["sports"].values():
+        for g in sorted(s["games"], key=lambda g: g["date"]):
+            writer.writerow([csv_text(s["name"]), g["date"], csv_text(g.get("season")), g["location"],
+                             csv_text(g.get("site")), g["depauw"], g["wabash"], RESULT_WORDS[g["result"]],
+                             csv_text(fmt_note(g.get("note"))), safe_url(g.get("boxscore")) or ""])
+    return buf.getvalue()
+
+
 def build(data_path: Path, out: Path, *, checked_at: str | None = None,
           now: dt.datetime | None = None, upcoming_path: Path | None = None) -> None:
     data = load(data_path)
@@ -601,6 +645,7 @@ def build(data_path: Path, out: Path, *, checked_at: str | None = None,
     pages = {
         "index.html": render_index(data, checked_at, now, upcoming),
         "404.html": render_404(),
+        "games.csv": render_csv(data),
         "sitemap.xml": render_sitemap(data),
         "robots.txt": f"User-agent: *\nAllow: /\n\nSitemap: {SITE_URL}sitemap.xml\n",
         ".nojekyll": "",
@@ -612,6 +657,8 @@ def build(data_path: Path, out: Path, *, checked_at: str | None = None,
         (out / name).write_text(text, encoding="utf-8", newline="\n")
     for asset in ("styles.css", "favicon.svg"):
         shutil.copyfile(STATIC / asset, out / asset)
+    (out / "data").mkdir()
+    shutil.copyfile(data_path, out / "data" / "series.json")  # the data file as-is
 
 
 def main(argv=None) -> int:

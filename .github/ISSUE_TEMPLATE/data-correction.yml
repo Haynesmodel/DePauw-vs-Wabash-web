@@ -1,0 +1,41 @@
+name: Report a data error
+description: A game, score or record on the site looks wrong.
+title: "Data correction: "
+labels: ["data-correction"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for helping keep the records right. **This issue will be public**, so please don't include personal details (no phone numbers, email addresses or home addresses). A link to the correct result is all that's needed.
+  - type: input
+    id: sport
+    attributes:
+      label: Sport
+      description: For example Football or Men's Basketball.
+      placeholder: Football
+    validations:
+      required: true
+  - type: input
+    id: game_date
+    attributes:
+      label: Game date
+      description: The date of the game that looks wrong, if you know it.
+      placeholder: "2025-11-15"
+    validations:
+      required: false
+  - type: textarea
+    id: what_is_wrong
+    attributes:
+      label: What's wrong?
+      description: Tell us what the site shows and what you think it should show.
+      placeholder: The site shows DePauw 41, Wabash 20, but the final score was ...
+    validations:
+      required: true
+  - type: input
+    id: source_link
+    attributes:
+      label: Link to a source showing the correct result
+      description: A box score, recap or official results page.
+      placeholder: https://
+    validations:
+      required: true

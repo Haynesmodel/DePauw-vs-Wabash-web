@@ -346,6 +346,11 @@ def test_sitemap_lastmod_follows_updated_at(tmp_path):
     assert "<lastmod>2026-10-27</lastmod>" in (out / "sitemap.xml").read_text()  # 11:48 PM Eastern on Oct 27
 
 
+def test_sitemap_lastmod_moves_to_the_last_check_when_there_is_one(tmp_path):
+    out, _ = build(tmp_path, {"football": football()}, checked_at="2026-10-29T10:19:44+00:00")
+    assert "<lastmod>2026-10-29</lastmod>" in (out / "sitemap.xml").read_text()
+
+
 def test_tiles_always_share_one_row():
     css = (Path(__file__).resolve().parent.parent / "static" / "styles.css").read_text()
     tiles = re.search(r"\.tiles \{[^}]*\}", css).group(0)

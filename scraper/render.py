@@ -1,9 +1,10 @@
 """
 Static site generator for the DePauw vs. Wabash page.
 
-Reads data/series.json and writes a finished site to site/ (index.html, 404.html,
-styles.css, favicon.svg, robots.txt, sitemap.xml, .nojekyll). Standard library only,
-no client-side JavaScript.
+Reads data/series.json (and, if present, data/upcoming.json and the uncommitted .checked-at)
+and writes a finished site to site/: index.html, 404.html, styles.css, the icons and og-image.png
+(drawn by images.py), site.webmanifest, games.csv, data/series.json, robots.txt, sitemap.xml,
+.nojekyll. No client-side JavaScript; Pillow is needed only for the images.
 
 Every figure on the page comes from the data file. Anything missing or inconsistent
 raises DataError and the script exits non-zero, so a bad data file can never produce
@@ -655,8 +656,11 @@ def render_404() -> str:
     ])
 
 
-def render_sitemap(data: dict) -> str:
-    lastmod = to_eastern(dt.datetime.fromisoformat(data["updated_at"]))[0].date().isoformat()
+def render_sitemap(data: dict, checked: str | None = None) -> str:
+    """lastmod is the Eastern date of the newest time the page states: when the data last changed or,
+    when there is one, when they were last checked."""
+    newest = max(dt.datetime.fromisoformat(s) for s in (data["updated_at"], checked) if s)
+    lastmod = to_eastern(newest)[0].date().isoformat()
     return ('<?xml version="1.0" encoding="UTF-8"?>\n'
             '<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n'
             f'  <url><loc>{esc(SITE_URL)}</loc><lastmod>{lastmod}</lastmod></url>\n'
@@ -697,7 +701,7 @@ def build(data_path: Path, out: Path, *, checked_at: str | None = None,
         "404.html": render_404(),
         "games.csv": render_csv(data),
         "site.webmanifest": render_manifest(),
-        "sitemap.xml": render_sitemap(data),
+        "sitemap.xml": render_sitemap(data, checked_at),
         "robots.txt": f"User-agent: *\nAllow: /\n\nSitemap: {SITE_URL}sitemap.xml\n",
         ".nojekyll": "",
     }

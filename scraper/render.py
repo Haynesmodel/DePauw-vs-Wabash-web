@@ -26,6 +26,7 @@ import sys
 from pathlib import Path
 from urllib.parse import urlparse
 
+import facts
 import meetings
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -47,6 +48,16 @@ SUBTITLE = "All-time head-to-head records in men’s sports."
 NOT_INCLUDED = ("cross country, track and field, swimming and diving, and golf. "
                 "They are multi-team events rather than head-to-head games.")
 DISCLAIMER = "Unofficial fan site, not affiliated with DePauw University or Wabash College."
+
+BELL_URL = "https://en.wikipedia.org/wiki/Monon_Bell"
+# Written in our own words. It holds no record, streak or other figure that changes: those come from the data.
+BELL_HISTORY = (
+    "The Monon Bell is a 300-pound locomotive bell that once rode on a Monon Railroad engine. "
+    f"Starting with the {facts.BELL_START} season it became the traveling trophy for the DePauw–Wabash "
+    "football game, an idea credited to a DePauw alumnus. The winner takes the Bell home until the next "
+    "meeting, and if the game ends in a tie, the team that already has it keeps it. Students from both "
+    "schools have also stolen and hidden the Bell many times over the years, which is now part of the lore."
+)
 
 CSP = ("default-src 'none'; style-src 'self'; img-src 'self'; "
        "base-uri 'none'; form-action 'none'; object-src 'none'")
@@ -333,6 +344,35 @@ def games_table(key: str, games: list) -> str:
     )
 
 
+def bell_block(games: list, ahead: list, today: dt.date) -> str:
+    """The Monon Bell section of the football card: standings, holder, last and next game, short history."""
+    b = facts.bell(games)
+    if b is None:
+        return ""
+    rows = []
+    if b["holder"]:
+        held = f'{plural(b["held_games"], "game")}, counting any ties'
+        rows.append(f'<p class="bell-holder"><strong>{esc(b["holder"])} has held the Bell since {b["since"]}</strong>'
+                    f' <span class="bell-note">({esc(held)})</span></p>')
+    last = b["last"]
+    facts_rows = [
+        (f"Bell record since {facts.BELL_START}", tiles(b["depauw"], b["wabash"], b["ties"], "tiles-small")),
+        ("Last Bell game", f'<time datetime="{esc(last["date"])}">{esc(fmt_date(last["date"]))}</time>'
+                           f' · {esc(score_text(last))} · {esc(where_text(last))}'),
+    ]
+    if ahead:
+        facts_rows.append(("Next Bell game", meeting_html(ahead[0], today)))
+    dl = "\n".join(f'<div><dt>{esc(k)}</dt><dd>{v}</dd></div>' for k, v in facts_rows)
+    return "\n".join([
+        '<section class="bell" id="monon-bell" aria-labelledby="monon-bell-h">',
+        '<h3 id="monon-bell-h">The Monon Bell</h3>',
+        *rows,
+        f'<dl class="facts bell-facts">\n{dl}\n</dl>',
+        f'<p class="bell-history">{esc(BELL_HISTORY)} <a href="{esc(BELL_URL)}">Read more on Wikipedia</a></p>',
+        '</section>',
+    ])
+
+
 def card(key: str, s: dict, ahead: list, pending: list, schedule_url: str | None, today: dt.date) -> str:
     games = sorted(s["games"], key=lambda g: g["date"])
     rec = s["record"]
@@ -370,6 +410,7 @@ def card(key: str, s: dict, ahead: list, pending: list, schedule_url: str | None
         f'<h2 id="{esc(key)}-h">{esc(s["name"])}</h2>\n'
         f'{tiles(rec["depauw_wins"], rec["wabash_wins"], rec["ties"])}\n'
         f'<dl class="facts">\n{dl}\n</dl>\n{source}\n'
+        f'{bell_block(games, ahead, today) if key == "football" else ""}\n'
         f'{games_table(key, games)}\n</article>'
     )
 

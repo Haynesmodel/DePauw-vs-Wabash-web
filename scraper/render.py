@@ -406,6 +406,10 @@ def game_line(g: dict) -> str:
     return f"{score_text(g)} · {fmt_date(g['date'])}"
 
 
+def times_text(n: int) -> str:
+    return "twice" if n == 2 else f"{n} times"
+
+
 def fun_facts(key: str, s: dict) -> list:
     """[(label, text)] worked out from the game list. A fact that makes no sense for the sport is left out."""
     games, label = s["games"], s.get("total_label") or "points"
@@ -413,20 +417,27 @@ def fun_facts(key: str, s: dict) -> list:
     for who, result in (("DePauw", "W"), ("Wabash", "L")):
         g = facts.biggest_win(games, result)
         if g:
-            out.append((f"Biggest {who} win", f"{game_line(g)} · by {unit(facts.margin(g), label)}"))
+            n = len(facts.biggest_wins(games, result))
+            tie = f" · happened {times_text(n)}, most recent shown" if n > 1 else ""
+            out.append((f"Biggest {who} win", f"{game_line(g)} · by {unit(facts.margin(g), label)}{tie}"))
     for who, result in (("DePauw", "W"), ("Wabash", "L")):
         run = facts.longest_streak(games, result)
         if run:
-            out.append((f"Longest {who} win streak",
-                        f"{run['games']} straight · {year_span(run['first'], run['last'])}"))
+            span = year_span(run["first"], run["last"])
+            text = (f"{run['games']} straight ({times_text(run['times'])}, most recently {span})"
+                    if run["times"] > 1 else f"{run['games']} straight · {span}")
+            out.append((f"Longest {who} win streak", text))
     close = facts.one_score_games(key, games)
     if close:
         limit = facts.ONE_SCORE[key]
         by = f"by {unit(limit, label)}" + (" or fewer" if limit > 1 else "")
         out.append(("One-score games", f"{len(close):,} decided {by} · most recent: {game_line(close[-1])}"))
     if label != "individual matches":  # nine matches are always played, so the total never varies
-        top = facts.highest_scoring(games)
-        out.append(("Highest-scoring game", f"{game_line(top)} · {unit(top['depauw'] + top['wabash'], label)} combined"))
+        tops = facts.highest_scoring_games(games)
+        top = tops[-1]
+        tie = f" · happened {times_text(len(tops))}, most recent shown" if len(tops) > 1 else ""
+        out.append(("Highest-scoring game",
+                    f"{game_line(top)} · {unit(top['depauw'] + top['wabash'], label)} combined{tie}"))
     for title, found in (("Overtime games", facts.overtime_games(games)),
                          ("Extra-inning games", facts.extra_inning_games(games))):
         if found:
@@ -477,30 +488,29 @@ def games_table(key: str, games: list) -> str:
     )
 
 
-def bell_block(games: list, ahead: list, today: dt.date) -> str:
-    """The Monon Bell section of the football card: standings, holder, last and next game, short history."""
+def bell_held_text(b: dict) -> str:
+    wins, ties = b["held_wins"], b["held_ties"]
+    if not ties:
+        return f"{wins} straight wins" if wins > 1 else "1 win"
+    return f'{plural(b["held_games"], "game")}: {plural(wins, "win")} and {plural(ties, "tie")}'
+
+
+def bell_block(games: list) -> str:
+    """The Monon Bell section of the football card: holder, Bell-era record and short history. The last and
+    next games are the football card's own "Most recent" and "Next meeting" stats."""
     b = facts.bell(games)
     if b is None:
         return ""
     rows = []
     if b["holder"]:
-        held = f'{plural(b["held_games"], "game")}, counting any ties'
         rows.append(f'<p class="bell-holder"><strong>{esc(b["holder"])} has held the Bell since {b["since"]}</strong>'
-                    f' <span class="bell-note">({esc(held)})</span></p>')
-    last = b["last"]
-    facts_rows = [
-        (f"Bell record since {facts.BELL_START}", tiles(b["depauw"], b["wabash"], b["ties"], "tiles-small")),
-        ("Last Bell game", f'<time datetime="{esc(last["date"])}">{esc(fmt_date(last["date"]))}</time>'
-                           f' · {esc(score_text(last))} · {esc(where_text(last))}'),
-    ]
-    if ahead:
-        facts_rows.append(("Next Bell game", meeting_html(ahead[0], today)))
-    dl = "\n".join(f'<div><dt>{esc(k)}</dt><dd>{v}</dd></div>' for k, v in facts_rows)
+                    f' <span class="bell-note">({esc(bell_held_text(b))})</span></p>')
+    record = tiles(b["depauw"], b["wabash"], b["ties"], "tiles-small")
     return "\n".join([
         '<section class="bell" id="monon-bell" aria-labelledby="monon-bell-h">',
         heading(3, "monon-bell", "The Monon Bell"),
         *rows,
-        f'<dl class="facts bell-facts">\n{dl}\n</dl>',
+        f'<dl class="facts bell-facts">\n<div><dt>Bell record since {facts.BELL_START}</dt><dd>{record}</dd></div>\n</dl>',
         f'<p class="bell-history">{esc(BELL_HISTORY)} <a href="{esc(BELL_URL)}">Read more on Wikipedia</a></p>',
         '</section>',
     ])
@@ -544,7 +554,7 @@ def card(key: str, s: dict, ahead: list, pending: list, schedule_url: str | None
         f'{heading(2, key, s["name"])}\n'
         f'{tiles(rec["depauw_wins"], rec["wabash_wins"], rec["ties"])}\n'
         f'<dl class="facts">\n{dl}\n</dl>\n{source}\n'
-        f'{bell_block(games, ahead, today) if key == "football" else ""}\n'
+        f'{bell_block(games) if key == "football" else ""}\n'
         f'{fun_facts_html(fun_facts(key, s))}\n'
         f'{games_table(key, games)}\n</article>'
     )

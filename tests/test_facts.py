@@ -33,7 +33,6 @@ def test_bell_record_matches_wikipedia_through_the_2025_season():
     b = facts.bell(real_football())
     assert (b["wabash"], b["depauw"], b["ties"]) == (44, 43, 6)
     assert b["games"] == 93
-    assert b["last"]["date"] == "2025-11-15"
 
 
 def test_games_before_1932_are_not_bell_games():
@@ -45,11 +44,13 @@ def test_games_before_1932_are_not_bell_games():
 def test_depauw_has_held_the_bell_since_2022():
     b = facts.bell(real_football())
     assert (b["holder"], b["since"], b["held_games"]) == ("DePauw", 2022, 4)
+    assert (b["held_wins"], b["held_ties"]) == (4, 0)
 
 
 def test_a_tie_leaves_the_bell_where_it_was_and_counts_toward_the_hold():
     b = facts.bell([g(2018, "L"), g(2019, "W"), g(2020, "T"), g(2021, "T"), g(2022, "W")])
     assert (b["holder"], b["since"], b["held_games"]) == ("DePauw", 2019, 4)
+    assert (b["held_wins"], b["held_ties"]) == (2, 2)
 
 
 def test_ties_before_the_first_win_do_not_start_the_hold():
@@ -68,6 +69,18 @@ def test_no_decided_game_means_no_holder():
     assert facts.bell([g(1920, "W")]) is None
 
 
+def test_held_text_gives_only_the_win_count_when_the_run_has_no_ties():
+    assert render.bell_held_text(facts.bell(real_football())) == "4 straight wins"
+    assert render.bell_held_text(facts.bell([g(2018, "L"), g(2019, "W")])) == "1 win"
+
+
+def test_held_text_says_so_when_a_tie_kept_the_bell_with_the_holder():
+    b = facts.bell([g(2018, "L"), g(2019, "W"), g(2020, "W"), g(2021, "W"), g(2022, "W"), g(2023, "T")])
+    assert render.bell_held_text(b) == "5 games: 4 wins and 1 tie"
+    mid = facts.bell([g(2018, "L"), g(2019, "W"), g(2020, "T"), g(2021, "T"), g(2022, "W")])
+    assert render.bell_held_text(mid) == "4 games: 2 wins and 2 ties"
+
+
 # ---- the block on the page ------------------------------------------------- #
 
 def block(html):
@@ -82,21 +95,22 @@ def test_bell_block_sits_in_the_football_card_above_the_game_list(tmp_path):
     assert "mens-lacrosse" not in block(html) and html.count('id="monon-bell"') == 1
 
 
-def test_bell_block_shows_record_holder_last_game_and_the_wikipedia_link(tmp_path):
+def test_bell_block_shows_record_holder_and_the_wikipedia_link(tmp_path):
     # made-up football(): 1999 tie, 2001 L, then three DePauw wins (2002 to 2004)
     text = re.sub(r"\s+", " ", re.sub(r"<[^>]+>", " ", block(page(tmp_path, {}))))
-    assert "DePauw has held the Bell since 2002" in text and "3 games, counting any ties" in text
+    assert "DePauw has held the Bell since 2002 (3 straight wins)" in text
     assert "Bell record since 1932" in text
-    assert "Last Bell game Nov 13, 2004" in text and "DePauw 28, Wabash 3" in text
-    assert "Next Bell game" not in text
+    assert "Last Bell game" not in text and "Next Bell game" not in text
     html = block(page(tmp_path, {}))
     assert '<a href="https://en.wikipedia.org/wiki/Monon_Bell">Read more on Wikipedia</a>' in html
 
 
-def test_next_bell_game_comes_from_the_football_schedule(tmp_path):
-    html = block(page(tmp_path, {"football": entry(sched("2026-11-14"))}))
-    text = re.sub(r"\s+", " ", re.sub(r"<[^>]+>", " ", html))
-    assert "Next Bell game Sat, Nov 14 · 1:07 PM · Scheumann Stadium, Muncie, Ind." in text
+def test_bell_games_appear_only_in_the_football_cards_own_stats(tmp_path):
+    html = page(tmp_path, {"football": entry(sched("2026-11-14"))})
+    text = re.sub(r"\s+", " ", re.sub(r"<[^>]+>", " ", block(html)))
+    assert "Nov 14" not in text and "Nov 13, 2004" not in text
+    card = html[html.index('id="football"'):html.index("</article>", html.index('id="football"'))]
+    assert "Most recent" in card and "Next meeting" in card
 
 
 def test_the_hand_written_history_has_no_changing_numbers_and_stays_short():
@@ -125,9 +139,38 @@ def test_biggest_win_uses_the_widest_margin_and_the_latest_game_on_a_tie():
 def test_longest_streak_is_broken_by_ties_and_prefers_the_recent_one_when_equal():
     games = [gm(f"{y}-11-01", r, 10, 5 if r == "W" else 20)
              for y, r in [(2000, "W"), (2001, "W"), (2002, "T"), (2003, "W"), (2004, "W"), (2005, "L")]]
-    assert facts.longest_streak(games, "W") == {"games": 2, "first": "2003", "last": "2004"}
+    assert facts.longest_streak(games, "W") == {"games": 2, "first": "2003", "last": "2004", "times": 2}
     assert facts.longest_streak(games, "L") is None                         # a single loss is not a streak
     assert facts.longest_streak([], "W") is None
+
+
+def streak_games(spans, result="L"):
+    """A game per year inside each (first, last) span, with a DePauw win between them to end the streak."""
+    out = []
+    for first, last in spans:
+        out += [gm(f"{y}-11-01", result, 10, 20) if result == "L" else gm(f"{y}-11-01", result, 20, 10)
+                for y in range(first, last + 1)]
+        out.append(gm(f"{last + 1}-11-01", "W" if result == "L" else "L", 20 if result == "L" else 10,
+                      10 if result == "L" else 20))
+    return out
+
+
+def test_a_tied_record_streak_is_counted_and_dated_by_the_latest_one():
+    games = streak_games([(1921, 1927), (1950, 1952), (2009, 2015)])
+    assert facts.longest_streak(games, "L") == {"games": 7, "first": "2009", "last": "2015", "times": 2}
+    three = streak_games([(1921, 1927), (1960, 1966), (2009, 2015)])
+    assert facts.longest_streak(three, "L")["times"] == 3
+    assert facts.longest_streak(streak_games([(1921, 1927), (2009, 2012)]), "L")["times"] == 1
+
+
+def test_streak_line_for_a_tie_for_the_record(tmp_path):
+    games = streak_games([(1921, 1927), (2009, 2015)])
+    text = fun_text(tmp_path, "football", sport_of("football", "Football", games))
+    assert "Longest Wabash win streak: 7 straight (twice, most recently 2009–2015)" in text
+    three = fun_text(tmp_path, "football", sport_of("football", "Football", streak_games([(1921, 1927), (1960, 1966), (2009, 2015)])))
+    assert "Longest Wabash win streak: 7 straight (3 times, most recently 2009–2015)" in three
+    one = fun_text(tmp_path, "football", sport_of("football", "Football", streak_games([(1921, 1927), (2009, 2012)])))
+    assert "Longest Wabash win streak: 7 straight · 1921–1927" in one
 
 
 def test_one_score_margins_per_sport_and_ties_do_not_count():
@@ -196,7 +239,7 @@ def test_a_card_lists_its_fun_facts_from_its_own_games(tmp_path):
 def test_facts_that_make_no_sense_are_left_out(tmp_path):
     swept = [gm("2020-04-01", "W", 12, 3), gm("2021-04-01", "W", 9, 8), gm("2022-04-01", "W", 14, 5)]
     text = fun_text(tmp_path, "mens-lacrosse", sport_of("mens-lacrosse", "Men's Lacrosse", swept, "goals"))
-    assert "Biggest DePauw win: DePauw 14, Wabash 5 · Apr 1, 2022 · by 9 goals" in text   # 12-3 ties it; latest wins
+    assert "Biggest DePauw win: DePauw 14, Wabash 5 · Apr 1, 2022 · by 9 goals · happened twice, most recent shown" in text
     assert "Biggest Wabash win" not in text and "Longest Wabash win streak" not in text
     assert "Overtime" not in text and "Extra-inning" not in text
     assert "One-score games: 1 decided by 1 goal · most recent: DePauw 9, Wabash 8" in text

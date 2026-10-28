@@ -16,7 +16,7 @@ def bell(games: list) -> dict | None:
 
     The holder is whoever won the most recent Bell game that was not a tie: a tie leaves the Bell where
     it is. "since" is the year of the holder's first win in the unbroken run of wins and ties that
-    ends today, and "held_games" counts the games in that run (the wins and the ties in between).
+    ends today, and "held_games" counts the games in that run, split into "held_wins" and "held_ties".
     Returns None when there are no Bell games, or when none was ever decided.
     """
     played = sorted((g for g in games if int(g["date"][:4]) >= BELL_START), key=lambda g: g["date"])
@@ -27,8 +27,7 @@ def bell(games: list) -> dict | None:
         "wabash": sum(1 for g in played if g["result"] == "L"),
         "ties": sum(1 for g in played if g["result"] == "T"),
         "games": len(played),
-        "last": played[-1],
-        "holder": None, "since": None, "held_games": 0,
+        "holder": None, "since": None, "held_games": 0, "held_wins": 0, "held_ties": 0,
     }
     decided = [g for g in played if g["result"] != "T"]
     if not decided:
@@ -45,6 +44,8 @@ def bell(games: list) -> dict | None:
     out["holder"] = "DePauw" if holder_result == "W" else "Wabash"
     out["since"] = int(played[run_start]["date"][:4])
     out["held_games"] = len(played) - run_start
+    out["held_ties"] = sum(1 for g in played[run_start:] if g["result"] == "T")
+    out["held_wins"] = out["held_games"] - out["held_ties"]
     return out
 
 
@@ -77,29 +78,39 @@ def margin(g: dict) -> int:
     return abs(g["depauw"] - g["wabash"])
 
 
-def biggest_win(games: list, result: str) -> dict | None:
-    """DePauw's ("W") or Wabash's ("L") widest win. When several share the margin, the most recent."""
+def biggest_wins(games: list, result: str) -> list:
+    """Every game of DePauw's ("W") or Wabash's ("L") widest margin, oldest first."""
     wins = [g for g in chronological(games) if g["result"] == result]
     if not wins:
-        return None
+        return []
     best = max(margin(g) for g in wins)
-    return [g for g in wins if margin(g) == best][-1]
+    return [g for g in wins if margin(g) == best]
+
+
+def biggest_win(games: list, result: str) -> dict | None:
+    """The widest win for one side. When several share the margin, the most recent."""
+    found = biggest_wins(games, result)
+    return found[-1] if found else None
 
 
 def longest_streak(games: list, result: str) -> dict | None:
-    """Longest run of straight wins for one side (a tie ends a streak). When two runs are equally long,
-    the more recent one. Returns None for a run shorter than two, which isn't worth a line."""
-    best, run = None, []
+    """Longest run of straight wins for one side (a tie ends a streak). "times" is how many separate runs
+    reached that length; the years are those of the most recent one. Returns None for a run shorter than
+    two, which isn't worth a line."""
+    best, times, run = None, 0, []
     for g in chronological(games) + [None]:
         if g is not None and g["result"] == result:
             run.append(g)
             continue
-        if run and len(run) >= 2 and (best is None or len(run) >= len(best)):
-            best = run
+        if len(run) >= 2:
+            if best is None or len(run) > len(best):
+                best, times = run, 1
+            elif len(run) == len(best):
+                best, times = run, times + 1
         run = []
     if best is None:
         return None
-    return {"games": len(best), "first": best[0]["date"][:4], "last": best[-1]["date"][:4]}
+    return {"games": len(best), "first": best[0]["date"][:4], "last": best[-1]["date"][:4], "times": times}
 
 
 def one_score_games(key: str, games: list) -> list:
@@ -110,12 +121,18 @@ def one_score_games(key: str, games: list) -> list:
     return [g for g in chronological(games) if g["result"] != "T" and margin(g) <= limit]
 
 
+def highest_scoring_games(games: list) -> list:
+    """Every game with the most combined points/goals/runs, oldest first."""
+    if not games:
+        return []
+    best = max(g["depauw"] + g["wabash"] for g in games)
+    return [g for g in chronological(games) if g["depauw"] + g["wabash"] == best]
+
+
 def highest_scoring(games: list) -> dict | None:
     """Most combined points/goals/runs in one game; the most recent when tied."""
-    if not games:
-        return None
-    best = max(g["depauw"] + g["wabash"] for g in games)
-    return [g for g in chronological(games) if g["depauw"] + g["wabash"] == best][-1]
+    found = highest_scoring_games(games)
+    return found[-1] if found else None
 
 
 def overtime_games(games: list) -> list:

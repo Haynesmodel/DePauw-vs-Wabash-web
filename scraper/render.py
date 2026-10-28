@@ -305,6 +305,12 @@ def head(title: str, description: str, *, prefix: str, canonical: str | None, no
     return "\n".join(lines)
 
 
+def heading(level: int, anchor: str, text: str) -> str:
+    """A heading whose text is the permalink to its own section, so a visitor can copy a direct link
+    without devtools. The link carries the heading's id, so the section is announced as just 'Football'."""
+    return f'<h{level}><a class="permalink" id="{esc(anchor)}-h" href="#{esc(anchor)}">{esc(text)}</a></h{level}>'
+
+
 def tiles(depauw: int, wabash: int, ties: int, css_class: str = "") -> str:
     def tile(cls, name, n, label):
         return (f'<div class="tile {cls}"><span class="tile-name">{esc(name)}</span>'
@@ -426,7 +432,7 @@ def bell_block(games: list, ahead: list, today: dt.date) -> str:
     dl = "\n".join(f'<div><dt>{esc(k)}</dt><dd>{v}</dd></div>' for k, v in facts_rows)
     return "\n".join([
         '<section class="bell" id="monon-bell" aria-labelledby="monon-bell-h">',
-        '<h3 id="monon-bell-h">The Monon Bell</h3>',
+        heading(3, "monon-bell", "The Monon Bell"),
         *rows,
         f'<dl class="facts bell-facts">\n{dl}\n</dl>',
         f'<p class="bell-history">{esc(BELL_HISTORY)} <a href="{esc(BELL_URL)}">Read more on Wikipedia</a></p>',
@@ -468,7 +474,7 @@ def card(key: str, s: dict, ahead: list, pending: list, schedule_url: str | None
     source = f'<p class="source">{" · ".join(links)}</p>' if links else ""
     return (
         f'<article class="sport" id="{esc(key)}" aria-labelledby="{esc(key)}-h">\n'
-        f'<h2 id="{esc(key)}-h">{esc(s["name"])}</h2>\n'
+        f'{heading(2, key, s["name"])}\n'
         f'{tiles(rec["depauw_wins"], rec["wabash_wins"], rec["ties"])}\n'
         f'<dl class="facts">\n{dl}\n</dl>\n{source}\n'
         f'{bell_block(games, ahead, today) if key == "football" else ""}\n'
@@ -500,7 +506,7 @@ def next_meeting_section(per_sport: dict, pending: dict, sports: dict, today: dt
     if not lines:
         return ""
     return "\n".join(['<section class="next-meeting" id="next-meeting" aria-labelledby="next-meeting-h">',
-                      '<h2 id="next-meeting-h">Next meeting</h2>', *lines, '</section>'])
+                      heading(2, "next-meeting", "Next meeting"), *lines, '</section>'])
 
 
 def render_index(data: dict, checked: str | None = None, now: dt.datetime | None = None,

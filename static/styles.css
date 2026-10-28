@@ -185,3 +185,9 @@ main { padding-block: 1.5rem 2.5rem; display: grid; gap: 1.5rem; }
 .fun-label { font-weight: 600; margin-right: 0.25rem; }
 .series { list-style: none; margin: 0 0 1rem; padding: 0; columns: 12rem; column-gap: 1.5rem; font-size: 0.9375rem; }
 .series li { break-inside: avoid; padding: 0.125rem 0; }
+
+/* Share-friendly links: a '#' beside each heading, and room above a linked section */
+.sport, .next-meeting, .bell, .overall { scroll-margin-top: 1rem; }
+.permalink { color: inherit; text-decoration: none; }
+.permalink:hover { text-decoration: underline; text-underline-offset: 0.2em; }
+.sport:target, .bell:target, .next-meeting:target { outline: 3px solid var(--color-focus); outline-offset: 2px; }

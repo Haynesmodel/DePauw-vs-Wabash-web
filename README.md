@@ -82,3 +82,10 @@ Add an entry to `scraper/sources.json`. DePauw's opponent id for Wabash is `215`
 `data/series.json` holds `updated_at`, overall `totals`, and one entry per sport with its record, total points/goals/runs (`points`, labelled by `total_label`), and every game (`date`, `location`, `site`, `result`, `depauw`, `wabash`, `note`, `boxscore`). Results and locations are from DePauw's point of view. Football's neutral-site games (1916 to 1922, Indianapolis) are why its home and away records don't add up to the total.
 
 `data/upcoming.json` holds, per sport, the schedule URL and the Wabash games not yet played (`date`, `time`, `time_note`, `location`, `site`, `status`, `doubleheader`). It has no timestamp, so it changes only when the schedule does.
+
+## License
+
+- The code (the scraper, renderer, tests and workflows) is under the MIT License; see [LICENSE](LICENSE).
+- The bundled Barlow Condensed font in `static/fonts/` stays under the SIL Open Font License, with its license file (`static/fonts/OFL.txt`) alongside it.
+- The site's written text and images are © Jackson Mote and aren't covered by the MIT License.
+- Game results are facts drawn from depauwtigers.com. They belong to no one, and the site claims no ownership of them. Don't use the school names or marks to suggest any affiliation.

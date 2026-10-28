@@ -363,3 +363,27 @@ def test_full_school_names_are_in_the_tab_title_and_subtitle_but_the_headline_st
     assert 'class="subtitle">DePauw University vs. Wabash College: all-time' in page
     assert "<h1>DePauw vs. Wabash</h1>" in page
     assert json.loads((out / "site.webmanifest").read_text())["name"] == "DePauw vs. Wabash"
+
+
+def test_copyright_line_shows_one_year_in_2026_and_a_range_later():
+    utc = dt.timezone.utc
+    assert render.copyright_line(dt.datetime(2026, 10, 28, 12, tzinfo=utc)) == "© 2026 Jackson Mote"
+    assert render.copyright_line(dt.datetime(2027, 3, 1, 12, tzinfo=utc)) == "© 2026–2027 Jackson Mote"
+    assert render.copyright_line(dt.datetime(2031, 3, 1, 12, tzinfo=utc)) == "© 2026–2031 Jackson Mote"
+    # New Year's Eve in Eastern time is already January 1 in UTC: the Eastern year counts, as elsewhere on the site
+    assert render.copyright_line(dt.datetime(2027, 1, 1, 3, tzinfo=utc)) == "© 2026 Jackson Mote"
+
+
+@pytest.mark.parametrize("now,line", [
+    (dt.datetime(2026, 10, 28, 12, tzinfo=dt.timezone.utc), "© 2026 Jackson Mote"),
+    (dt.datetime(2028, 6, 1, 12, tzinfo=dt.timezone.utc), "© 2026–2028 Jackson Mote"),
+])
+def test_every_page_ends_its_footer_with_exactly_one_copyright_line(tmp_path, now, line):
+    out, _ = build(tmp_path, {"football": football()}, now=now)
+    for name in ("index.html", "404.html"):
+        page = (out / name).read_text(encoding="utf-8")
+        assert page.count("©") == 1 and page.count(line) == 1, name
+        footer = page[page.index("<footer"):page.index("</footer>")]
+        assert re.findall(r"<p[^>]*>.*?</p>", footer, re.S)[-1] == f'<p class="copyright">{line}</p>', name
+        assert footer.index("Unofficial fan site") < footer.index("©"), name
+        assert "Mote Technology" not in page

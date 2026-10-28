@@ -53,6 +53,8 @@ SUBTITLE = "DePauw University vs. Wabash College: all-time head-to-head records 
 NOT_INCLUDED = ("cross country, track and field, swimming and diving, and golf. "
                 "They are multi-team events rather than head-to-head games.")
 DISCLAIMER = "Unofficial fan site, not affiliated with DePauw University or Wabash College."
+COPYRIGHT_HOLDER = "Jackson Mote"
+COPYRIGHT_START = 2026
 
 BELL_URL = "https://en.wikipedia.org/wiki/Monon_Bell"
 # Written in our own words. It holds no record, streak or other figure that changes: those come from the data.
@@ -131,6 +133,13 @@ def to_eastern(utc: dt.datetime) -> tuple[dt.datetime, str]:
     if start <= utc < end:
         return utc + dt.timedelta(hours=-4), "EDT"
     return utc + dt.timedelta(hours=-5), "EST"
+
+
+def copyright_line(now: dt.datetime | None = None) -> str:
+    """'© 2026 Jackson Mote', or '© 2026–2027 Jackson Mote' once the build year (Eastern) is later."""
+    year = to_eastern(now or dt.datetime.now(dt.timezone.utc))[0].year
+    years = str(COPYRIGHT_START) if year <= COPYRIGHT_START else f"{COPYRIGHT_START}–{year}"
+    return f"© {years} {COPYRIGHT_HOLDER}"
 
 
 def fmt_stamp(iso: str, now: dt.datetime) -> str:
@@ -638,6 +647,7 @@ def render_index(data: dict, checked: str | None = None, now: dt.datetime | None
         f'<ul class="sources">\n{sources}\n</ul>',
         '<p>Only men’s sports are compared because Wabash is an all-male college.</p>',
         f'<p>{esc(DISCLAIMER)}</p>',
+        f'<p class="copyright">{esc(copyright_line(now))}</p>',
         '</div>',
         '</footer>',
         '</body>',
@@ -646,7 +656,7 @@ def render_index(data: dict, checked: str | None = None, now: dt.datetime | None
     ])
 
 
-def render_404() -> str:
+def render_404(now: dt.datetime | None = None) -> str:
     # GitHub Pages serves this file for any missing path, including nested ones, so relative
     # URLs would break. It is the one page that uses root-relative URLs, built from BASE_PATH.
     return "\n".join([
@@ -659,7 +669,8 @@ def render_404() -> str:
         '<h2>Page not found</h2>',
         f'<p><a href="{esc(BASE_PATH)}">Back to the head-to-head records</a></p>',
         '</main>',
-        f'<footer class="site-footer"><div class="wrap"><p>{esc(DISCLAIMER)}</p></div></footer>',
+        f'<footer class="site-footer"><div class="wrap"><p>{esc(DISCLAIMER)}</p>'
+        f'<p class="copyright">{esc(copyright_line(now))}</p></div></footer>',
         '</body>',
         '</html>',
         '',
@@ -708,7 +719,7 @@ def build(data_path: Path, out: Path, *, checked_at: str | None = None,
     upcoming = meetings.load_upcoming(upcoming_path)
     pages = {
         "index.html": render_index(data, checked_at, now, upcoming),
-        "404.html": render_404(),
+        "404.html": render_404(now),
         "games.csv": render_csv(data),
         "site.webmanifest": render_manifest(),
         "sitemap.xml": render_sitemap(data, checked_at),

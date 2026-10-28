@@ -29,6 +29,7 @@ from pathlib import Path
 from urllib.parse import quote, urlparse
 
 import facts
+import images
 import meetings
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -62,7 +63,7 @@ BELL_HISTORY = (
     "schools have also stolen and hidden the Bell many times over the years, which is now part of the lore."
 )
 
-CSP = ("default-src 'none'; style-src 'self'; img-src 'self'; "
+CSP = ("default-src 'none'; style-src 'self'; img-src 'self'; manifest-src 'self'; "
        "base-uri 'none'; form-action 'none'; object-src 'none'")
 
 MONTHS = ["January", "February", "March", "April", "May", "June", "July",
@@ -287,7 +288,37 @@ def load(path: Path) -> dict:
 # HTML
 # --------------------------------------------------------------------------- #
 
-def head(title: str, description: str, *, prefix: str, canonical: str | None, noindex: bool = False) -> str:
+# Icon files written to the site root (see build()): link tag attributes and the manifest entries.
+THEME_LIGHT, THEME_DARK = "#111111", "#000000"   # the header band's color in each mode
+BACKGROUND = "#f6f4ee"                           # the page's light-mode background
+
+
+def preview_info(data: dict) -> dict:
+    """What the share card shows, all from the data: the totals and the current Monon Bell holder. The
+    image URL carries a version that changes only when those do, so chat apps refetch a new picture."""
+    t = data["totals"]
+    football = data["sports"].get("football")
+    bell = facts.bell(football["games"]) if football else None
+    holder = bell["holder"] if bell else None
+    alt = (f"DePauw vs. Wabash all-time totals: DePauw {t['depauw_wins']:,} wins, "
+           f"Wabash {t['wabash_wins']:,} wins" + (f", {plural(t['ties'], 'tie')}" if t["ties"] else "") + "."
+           + (f" {holder} holds the Monon Bell." if holder else ""))
+    return {"image": f"{SITE_URL}og-image.png?v={images.og_version(t, holder)}", "alt": alt, "holder": holder}
+
+
+def render_manifest() -> str:
+    icons = [{"src": "icon-192.png", "sizes": "192x192", "type": "image/png"},
+             {"src": "icon-512.png", "sizes": "512x512", "type": "image/png"},
+             {"src": "icon-maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable"}]
+    return json.dumps({"name": "DePauw vs. Wabash", "short_name": "DePauw v Wabash",
+                       "description": SUBTITLE, "start_url": BASE_PATH, "scope": BASE_PATH,
+                       "display": "browser", "theme_color": THEME_LIGHT, "background_color": BACKGROUND,
+                       "icons": icons}, indent=2) + "\n"
+
+
+def head(title: str, description: str, *, prefix: str, canonical: str | None, noindex: bool = False,
+         preview: dict | None = None) -> str:
+    """preview, when given, is {"image": absolute og-image URL with ?v=, "alt": ...} for the share cards."""
     lines = [
         '<!DOCTYPE html>',
         '<html lang="en">',
@@ -299,6 +330,8 @@ def head(title: str, description: str, *, prefix: str, canonical: str | None, no
         f'<title>{esc(title)}</title>',
         f'<meta name="description" content="{esc(description)}">',
         '<meta name="color-scheme" content="light dark">',
+        f'<meta name="theme-color" content="{THEME_LIGHT}" media="(prefers-color-scheme: light)">',
+        f'<meta name="theme-color" content="{THEME_DARK}" media="(prefers-color-scheme: dark)">',
     ]
     if noindex:
         lines.append('<meta name="robots" content="noindex">')
@@ -310,10 +343,27 @@ def head(title: str, description: str, *, prefix: str, canonical: str | None, no
             f'<meta property="og:title" content="{esc(title)}">',
             f'<meta property="og:description" content="{esc(description)}">',
             f'<meta property="og:url" content="{esc(canonical)}">',
-            '<meta name="twitter:card" content="summary">',
         ]
+    if canonical and preview:
+        lines += [
+            f'<meta property="og:image" content="{esc(preview["image"])}">',
+            '<meta property="og:image:type" content="image/png">',
+            f'<meta property="og:image:width" content="{images.OG_SIZE[0]}">',
+            f'<meta property="og:image:height" content="{images.OG_SIZE[1]}">',
+            f'<meta property="og:image:alt" content="{esc(preview["alt"])}">',
+            '<meta name="twitter:card" content="summary_large_image">',
+            f'<meta name="twitter:title" content="{esc(title)}">',
+            f'<meta name="twitter:description" content="{esc(description)}">',
+            f'<meta name="twitter:image" content="{esc(preview["image"])}">',
+            f'<meta name="twitter:image:alt" content="{esc(preview["alt"])}">',
+        ]
+    elif canonical:
+        lines.append('<meta name="twitter:card" content="summary">')
     lines += [
         f'<link rel="icon" href="{esc(prefix)}favicon.svg" type="image/svg+xml">',
+        f'<link rel="icon" href="{esc(prefix)}favicon-32.png" type="image/png" sizes="32x32">',
+        f'<link rel="apple-touch-icon" href="{esc(prefix)}apple-touch-icon.png" sizes="180x180">',
+        f'<link rel="manifest" href="{esc(prefix)}site.webmanifest">',
         f'<link rel="stylesheet" href="{esc(prefix)}styles.css">',
         '</head>',
     ]
@@ -548,7 +598,7 @@ def render_index(data: dict, checked: str | None = None, now: dt.datetime | None
         for s in sports.values() if (u := safe_url(s["source_url"])))
 
     return "\n".join([
-        head(TITLE, description, prefix="", canonical=SITE_URL),
+        head(TITLE, description, prefix="", canonical=SITE_URL, preview=preview_info(data)),
         '<body>',
         '<header class="site-header">',
         '<div class="wrap">',
@@ -646,6 +696,7 @@ def build(data_path: Path, out: Path, *, checked_at: str | None = None,
         "index.html": render_index(data, checked_at, now, upcoming),
         "404.html": render_404(),
         "games.csv": render_csv(data),
+        "site.webmanifest": render_manifest(),
         "sitemap.xml": render_sitemap(data),
         "robots.txt": f"User-agent: *\nAllow: /\n\nSitemap: {SITE_URL}sitemap.xml\n",
         ".nojekyll": "",
@@ -657,6 +708,14 @@ def build(data_path: Path, out: Path, *, checked_at: str | None = None,
         (out / name).write_text(text, encoding="utf-8", newline="\n")
     for asset in ("styles.css", "favicon.svg"):
         shutil.copyfile(STATIC / asset, out / asset)
+    # Images are drawn at build time from the bundled font, so every deploy has a card that matches the data.
+    info = preview_info(data)
+    (out / "og-image.png").write_bytes(images.og_image(data["totals"], info["holder"]))
+    (out / "apple-touch-icon.png").write_bytes(images.icon_png(180))
+    (out / "favicon-32.png").write_bytes(images.icon_png(32))
+    (out / "icon-192.png").write_bytes(images.icon_png(192))
+    (out / "icon-512.png").write_bytes(images.icon_png(512))
+    (out / "icon-maskable-512.png").write_bytes(images.icon_png(512, maskable=True))
     (out / "data").mkdir()
     shutil.copyfile(data_path, out / "data" / "series.json")  # the data file as-is
 

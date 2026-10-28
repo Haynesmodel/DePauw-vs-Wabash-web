@@ -1,0 +1,8 @@
+__pycache__/
+.pytest_cache/
+*.pyc
+.venv/
+node_modules/
+
+# build output, never committed
+site/

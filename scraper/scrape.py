@@ -14,6 +14,8 @@ Safety rules, so a bad night never wipes good data:
   * The file is only rewritten when the game data actually changed, so the
     scheduled job doesn't make empty commits.
   * Exit code is non-zero if any sport failed, so the GitHub Action shows red.
+  * The "last checked" time (.checked-at, uncommitted) is written only after a live run in which
+    at least one sport loaded and validated. A run where every sport failed leaves it alone.
 
 Usage:
   python scraper/scrape.py                      # fetch live pages, update data/series.json
@@ -39,6 +41,9 @@ from bs4 import BeautifulSoup
 ROOT = Path(__file__).resolve().parent.parent
 SOURCES = Path(__file__).resolve().parent / "sources.json"
 OUTPUT = ROOT / "data" / "series.json"
+# Time of the last scrape that actually reached at least one sport. Never committed (it is
+# gitignored and lives outside data/), so series.json still changes only when games change.
+CHECKED_AT = ROOT / ".checked-at"
 
 USER_AGENT = (
     "DePauw-Wabash-Series-Tracker/0.1 "
@@ -283,6 +288,10 @@ def validate(games: list, summary: Summary) -> list:
 # Fetching and output
 # --------------------------------------------------------------------------- #
 
+def now_utc() -> dt.datetime:
+    return dt.datetime.now(dt.timezone.utc).replace(microsecond=0)
+
+
 def fetch(url: str) -> str:
     import requests  # imported here so fixture runs and tests don't need it
     resp = requests.get(url, headers={"User-Agent": USER_AGENT}, timeout=30)
@@ -332,6 +341,8 @@ def main(argv=None) -> int:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--fixtures", type=Path, help="read <dir>/<sport-key>.html instead of fetching")
     ap.add_argument("--output", type=Path, default=OUTPUT)
+    ap.add_argument("--checked-file", type=Path, default=CHECKED_AT,
+                    help="where to record the time of a successful live check")
     ap.add_argument("--dry-run", action="store_true")
     ap.add_argument("--allow-shrink", action="store_true",
                     help="accept a sport whose game count went down")
@@ -386,10 +397,15 @@ def main(argv=None) -> int:
           f"over {tot['games_played']} games. Data {'changed' if changed else 'unchanged'}.")
 
     if changed and not args.dry_run:
-        out["updated_at"] = dt.datetime.now(dt.timezone.utc).replace(microsecond=0).isoformat()
+        out["updated_at"] = now_utc().isoformat()
         args.output.parent.mkdir(parents=True, exist_ok=True)
         args.output.write_text(json.dumps(out, indent=2) + "\n")
         print(f"Wrote {args.output}")
+
+    # A fixture run or a dry run is not a check of the live site, and a run where every sport failed
+    # proves nothing about the data, so only a real run with at least one good sport advances the time.
+    if len(failures) < len(cfg["sports"]) and not args.fixtures and not args.dry_run:
+        args.checked_file.write_text(now_utc().isoformat() + "\n")
 
     return 1 if failures else 0
 

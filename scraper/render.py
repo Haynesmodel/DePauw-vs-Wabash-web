@@ -30,6 +30,7 @@ ROOT = Path(__file__).resolve().parent.parent
 DATA = ROOT / "data" / "series.json"
 STATIC = ROOT / "static"
 OUT = ROOT / "site"
+CHECKED_AT = ROOT / ".checked-at"  # written by scrape.py after a live run; never committed
 
 SITE_URL = "https://depauwvswabash.com/"
 BASE_PATH = urlparse(SITE_URL).path  # "/" on the custom domain
@@ -101,11 +102,26 @@ def to_eastern(utc: dt.datetime) -> tuple[dt.datetime, str]:
     return utc + dt.timedelta(hours=-5), "EST"
 
 
-def fmt_updated(iso: str) -> str:
-    local, abbr = to_eastern(dt.datetime.fromisoformat(iso))
+def fmt_stamp(iso: str, now: dt.datetime) -> str:
+    """Short Eastern-time stamp for the footer: 'Oct 27, 11:48 PM', with the year only when it isn't this year."""
+    local, _ = to_eastern(dt.datetime.fromisoformat(iso))
     hour = local.hour % 12 or 12
-    ampm = "AM" if local.hour < 12 else "PM"
-    return f"{MONTHS[local.month - 1]} {local.day}, {local.year}, {hour}:{local.minute:02d} {ampm} {abbr}"
+    year = f", {local.year}" if local.year != to_eastern(now)[0].year else ""
+    return f"{MONTHS[local.month - 1][:3]} {local.day}{year}, {hour}:{local.minute:02d} {'AM' if local.hour < 12 else 'PM'}"
+
+
+def read_checked(path: Path | None) -> str | None:
+    """The time of the last successful scrape, or None when there is no (valid) record of one.
+    A build without a recorded check (a PR check, or a run where every sport failed) simply
+    leaves 'Last checked' off the page instead of showing the build time."""
+    if path is None:
+        return None
+    try:
+        text = Path(path).read_text(encoding="utf-8").strip()
+        stamp = dt.datetime.fromisoformat(text)
+    except (OSError, ValueError):
+        return None
+    return text if stamp.tzinfo is not None else None
 
 
 def streak_text(code: str) -> str:
@@ -322,7 +338,16 @@ def card(key: str, s: dict) -> str:
     )
 
 
-def render_index(data: dict) -> str:
+def updated_line(updated: str, checked: str | None, now: dt.datetime) -> str:
+    def stamp(iso):
+        return f'<time datetime="{esc(iso)}">{esc(fmt_stamp(iso, now))}</time>'
+    parts = [f"Data last changed {stamp(updated)}"]
+    if checked:
+        parts.append(f"Last checked {stamp(checked)}")
+    return f'<p>{" · ".join(parts)} (Eastern time).</p>'
+
+
+def render_index(data: dict, checked: str | None = None, now: dt.datetime | None = None) -> str:
     t = data["totals"]
     sports = data["sports"]
     n_sports = len(sports)
@@ -331,6 +356,7 @@ def render_index(data: dict) -> str:
     description = (f"{SUBTITLE} {summary}, across {plural(t['games_played'], 'game')} "
                    f"in {plural(n_sports, 'sport')}.")
     updated = data["updated_at"]
+    now = now or dt.datetime.now(dt.timezone.utc)
 
     sources = "\n".join(
         f'<li><a href="{esc(u)}">{esc(s["name"])}</a></li>'
@@ -356,7 +382,7 @@ def render_index(data: dict) -> str:
         '</main>',
         '<footer class="site-footer">',
         '<div class="wrap">',
-        f'<p>Last updated <time datetime="{esc(updated)}">{esc(fmt_updated(updated))}</time> (Eastern time).</p>',
+        updated_line(updated, checked, now),
         '<p>Data from <a href="https://depauwtigers.com/">depauwtigers.com</a>. Source pages:</p>',
         f'<ul class="sources">\n{sources}\n</ul>',
         '<p>Only men’s sports are compared because Wabash is an all-male college.</p>',
@@ -397,10 +423,11 @@ def render_sitemap(data: dict) -> str:
             '</urlset>\n')
 
 
-def build(data_path: Path, out: Path) -> None:
+def build(data_path: Path, out: Path, *, checked_at: str | None = None,
+          now: dt.datetime | None = None) -> None:
     data = load(data_path)
     pages = {
-        "index.html": render_index(data),
+        "index.html": render_index(data, checked_at, now),
         "404.html": render_404(),
         "sitemap.xml": render_sitemap(data),
         "robots.txt": f"User-agent: *\nAllow: /\n\nSitemap: {SITE_URL}sitemap.xml\n",
@@ -419,9 +446,11 @@ def main(argv=None) -> int:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--data", type=Path, default=DATA)
     ap.add_argument("--out", type=Path, default=OUT)
+    ap.add_argument("--checked-file", type=Path, default=CHECKED_AT,
+                    help="file holding the time of the last successful scrape (optional)")
     args = ap.parse_args(argv)
     try:
-        build(args.data, args.out)
+        build(args.data, args.out, checked_at=read_checked(args.checked_file))
     except (DataError, KeyError, TypeError, ValueError, AttributeError) as exc:
         print(f"render failed: {exc!r}", file=sys.stderr)
         return 1

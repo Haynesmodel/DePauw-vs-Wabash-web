@@ -17,22 +17,27 @@ on:
 permissions:
   contents: read
 
-# Scrape and deploy live in one workflow on purpose: a commit pushed with GITHUB_TOKEN
+# Scrape, render and deploy live in one workflow on purpose: a commit pushed with GITHUB_TOKEN
 # does not trigger other workflows, so a separate deploy workflow would never run.
 concurrency:
   group: update-and-deploy
   cancel-in-progress: false
 
 jobs:
-  scrape:
-    # Scheduled and manual runs only; a push to main just redeploys.
-    if: ${{ github.event_name != 'push' && github.ref == 'refs/heads/main' }}
+  build:
+    # Every run (schedule, manual and push) scrapes, so every deploy carries a fresh "Last checked".
+    # The scrape and the render share one job because the check time is an uncommitted file
+    # (.checked-at) that only exists on this runner. A GITHUB_TOKEN push does not start another run.
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 15
     permissions:
       contents: write
+    outputs:
+      problems: ${{ steps.summary.outputs.problems }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: main # the push and schedule triggers are already on main
 
       - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
         with:
@@ -41,11 +46,16 @@ jobs:
 
       - run: pip install -r requirements.txt
 
+      # A failing test or sport must not stop the site from deploying the latest good data, so the
+      # steps below record their outcome and the "report" job turns the run red at the end.
       - name: Run tests
+        id: tests
+        continue-on-error: true
         run: python -m pytest -q tests
 
       - name: Scrape
         id: scrape
+        continue-on-error: true
         env:
           ALLOW_SHRINK: ${{ inputs.allow_shrink }}
         run: |
@@ -54,8 +64,7 @@ jobs:
           python scraper/scrape.py $args
 
       - name: Commit if data changed
-        # Runs even when one sport failed or the tests failed, so other sports' updates still land.
-        if: ${{ always() && steps.scrape.outcome != 'skipped' }}
+        if: ${{ github.ref == 'refs/heads/main' }}
         run: |
           if git diff --quiet -- data/; then
             echo "No data changes."
@@ -67,30 +76,24 @@ jobs:
           git commit -m "Update DePauw vs. Wabash series data"
           git push origin HEAD:main
 
-  build:
-    needs: scrape
-    # Build even when the scrape failed or was skipped, so the site always deploys the latest good data.
-    if: ${{ !cancelled() }}
-    runs-on: ubuntu-latest
-    timeout-minutes: 10
-    permissions:
-      contents: read
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          ref: main # pick up the data commit the scrape job just pushed
-          persist-credentials: false
-
-      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
-        with:
-          python-version: "3.12"
-
       - name: Render site
         run: python scraper/render.py
 
       - uses: actions/upload-pages-artifact@fc324d3547104276b827a68afc52ff2a11cc49c9 # v5.0.0
         with:
           path: site
+
+      - name: Summarize
+        id: summary
+        env:
+          TESTS: ${{ steps.tests.outcome }}
+          SCRAPE: ${{ steps.scrape.outcome }}
+        run: |
+          if [ "$TESTS" != "success" ] || [ "$SCRAPE" != "success" ]; then
+            echo "problems=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "problems=false" >> "$GITHUB_OUTPUT"
+          fi
 
   deploy:
     needs: build
@@ -108,3 +111,14 @@ jobs:
 
       - id: deployment
         uses: actions/deploy-pages@368f82528645a54fb793d4d04e342629a3f51346 # v5.0.1
+
+  report:
+    # The deploy above still ran; this only turns the run red so a failed sport or test gets noticed.
+    needs: [build, deploy]
+    if: ${{ !cancelled() && needs.build.outputs.problems == 'true' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+    steps:
+      - run: |
+          echo "A test or a sport failed in this run. The site was still deployed with the last good data."
+          exit 1

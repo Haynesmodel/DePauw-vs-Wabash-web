@@ -69,9 +69,9 @@ def write(tmp_path, data):
     return p
 
 
-def build(tmp_path, sports):
+def build(tmp_path, sports, **kw):
     out = tmp_path / "site"
-    render.build(write(tmp_path, series(sports)), out)
+    render.build(write(tmp_path, series(sports)), out, **kw)
     return out, (out / "index.html").read_text(encoding="utf-8")
 
 
@@ -173,7 +173,8 @@ def test_extra_files_and_footer(tmp_path):
     assert "Sitemap: https://depauwvswabash.com/sitemap.xml" in (
         out / "robots.txt").read_text()
     t = text_of(page)
-    assert "Last updated October 27, 2026, 11:48 PM EDT" in t
+    assert "Data last changed Oct 27, 11:48 PM (Eastern time)." in t
+    assert "Last checked" not in t  # no recorded check, so no claim about one
     assert "Wabash is an all-male college" in t
     assert "Unofficial fan site, not affiliated with DePauw University or Wabash College." in t
     assert "depauwtigers.com" in t
@@ -191,9 +192,40 @@ def test_eastern_time_boundaries(utc, expected):
     assert render.to_eastern(dt.datetime.fromisoformat(utc))[1] == expected
 
 
+NOW = dt.datetime(2026, 10, 28, 16, 0, tzinfo=dt.timezone.utc)
+
+
 def test_eastern_formatting():
-    assert render.fmt_updated("2026-01-15T17:05:00+00:00") == "January 15, 2026, 12:05 PM EST"
-    assert render.fmt_updated("2026-07-04T04:00:00+00:00") == "July 4, 2026, 12:00 AM EDT"
+    assert render.fmt_stamp("2026-01-15T17:05:00+00:00", NOW) == "Jan 15, 12:05 PM"
+    assert render.fmt_stamp("2026-07-04T04:00:00+00:00", NOW) == "Jul 4, 12:00 AM"
+    assert render.fmt_stamp("2025-12-31T23:30:00+00:00", NOW) == "Dec 31, 2025, 6:30 PM"  # other year shows it
+
+
+def test_last_checked_sits_next_to_last_changed_in_eastern_time(tmp_path):
+    _, page = build(tmp_path, {"football": football()}, checked_at="2026-10-28T10:19:44+00:00", now=NOW)
+    assert "Data last changed Oct 27, 11:48 PM · Last checked Oct 28, 6:19 AM (Eastern time)." in text_of(page)
+    assert '<time datetime="2026-10-28T10:19:44+00:00">Oct 28, 6:19 AM</time>' in page
+
+
+def test_checked_time_is_read_from_the_file_and_ignores_junk(tmp_path):
+    f = tmp_path / ".checked-at"
+    assert render.read_checked(f) is None            # missing: every sport failed, or a PR check
+    f.write_text("not a time\n")
+    assert render.read_checked(f) is None
+    f.write_text("2026-10-28T10:19:44")              # no zone: can't be placed, so not trusted
+    assert render.read_checked(f) is None
+    f.write_text("2026-10-28T10:19:44+00:00\n")
+    assert render.read_checked(f) == "2026-10-28T10:19:44+00:00"
+    assert render.read_checked(None) is None
+
+
+def test_main_picks_up_the_checked_file(tmp_path):
+    f = tmp_path / "checked"
+    f.write_text("2026-10-28T10:19:44+00:00\n")
+    out = tmp_path / "site"
+    assert render.main(["--data", str(write(tmp_path, series({"football": football()}))), "--out", str(out),
+                        "--checked-file", str(f)]) == 0
+    assert "Last checked" in text_of((out / "index.html").read_text())
 
 
 # ---- loud failures ------------------------------------------------------- #

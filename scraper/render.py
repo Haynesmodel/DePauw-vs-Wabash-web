@@ -34,9 +34,14 @@ OUT = ROOT / "site"
 SITE_URL = "https://depauwvswabash.com/"
 BASE_PATH = urlparse(SITE_URL).path  # "/" on the custom domain
 SOURCE_HOST = "depauwtigers.com"
+# Where DePauw's games vs. Wabash are played when the source gives no site (neutral sites are never guessed).
+HOME_SITE = "Greencastle, Ind."
+AWAY_SITE = "Crawfordsville, Ind."
 
 TITLE = "DePauw vs. Wabash: All-Time Head-to-Head Records"
 SUBTITLE = "All-time head-to-head records in men’s sports."
+NOT_INCLUDED = ("cross country, track and field, swimming and diving, and golf. "
+                "They are multi-team events rather than head-to-head games.")
 DISCLAIMER = "Unofficial fan site, not affiliated with DePauw University or Wabash College."
 
 CSP = ("default-src 'none'; style-src 'self'; img-src 'self'; "
@@ -135,7 +140,16 @@ def score_text(g: dict) -> str:
 
 def where_text(g: dict) -> str:
     label = {"home": "Home", "away": "Away", "neutral": "Neutral"}.get(g["location"], "Site unknown")
-    return f"{label} · {g['site']}" if g.get("site") else label
+    site = g.get("site") or {"home": HOME_SITE, "away": AWAY_SITE}.get(g["location"])
+    return f"{label} · {site}" if site else label
+
+
+def fmt_note(note) -> str:
+    """Tidy the source's overtime notes: "(1ot)" -> "1 OT", "2OT" -> "2 OT", "(7 inn.)" -> "7 inn."."""
+    text = str(note or "").strip()
+    if text.startswith("(") and text.endswith(")"):
+        text = text[1:-1].strip()
+    return re.sub(r"(?i)\b(\d+)\s*ot\b", r"\1 OT", text)
 
 
 # --------------------------------------------------------------------------- #
@@ -252,7 +266,8 @@ def tiles(depauw: int, wabash: int, ties: int, css_class: str = "") -> str:
 
 def games_table(key: str, games: list) -> str:
     rows = []
-    for g in sorted(games, key=lambda g: g["date"], reverse=True):
+    # games arrive oldest first (doubleheaders in playing order), so reverse for newest first
+    for g in reversed(sorted(games, key=lambda g: g["date"])):
         winner = {"W": "win-depauw", "L": "win-wabash", "T": "tied"}[g["result"]]
         box = safe_url(g.get("boxscore"))
         box_html = f'<a href="{esc(box)}">Box score</a>' if box else ""
@@ -261,7 +276,7 @@ def games_table(key: str, games: list) -> str:
             f'<th scope="row" data-label="Date"><time datetime="{esc(g["date"])}">{esc(fmt_date(g["date"]))}</time></th>'
             f'<td data-label="Site">{esc(where_text(g))}</td>'
             f'<td data-label="Result" class="{winner}">{esc(score_text(g))}</td>'
-            f'<td data-label="Notes">{esc(g.get("note") or "")}</td>'
+            f'<td data-label="Notes">{esc(fmt_note(g.get("note")))}</td>'
             f'<td data-label="Box score">{box_html}</td>'
             "</tr>"
         )
@@ -289,7 +304,8 @@ def card(key: str, s: dict) -> str:
         ("Current streak", esc(streak_text(code))),
         ("Records since", esc(since)),
         ("Games played", esc(f"{len(games):,}")),
-        ("Total points", f'DePauw {s["points"]["depauw"]:,}, Wabash {s["points"]["wabash"]:,}'),
+        (f"Total {s.get('total_label') or 'points'}",
+         f'DePauw {s["points"]["depauw"]:,}, Wabash {s["points"]["wabash"]:,}'),
         ("Most recent",
          f'<time datetime="{esc(last["date"])}">{esc(fmt_date(last["date"]))}</time>'
          f' · {esc(score_text(last))}'),
@@ -312,7 +328,7 @@ def render_index(data: dict) -> str:
     n_sports = len(sports)
     summary = f"DePauw {t['depauw_wins']:,} wins, Wabash {t['wabash_wins']:,}" + \
               (f", {plural(t['ties'], 'tie')}" if t["ties"] else "")
-    description = (f"{SUBTITLE} {summary}, over {plural(t['games_played'], 'game')} "
+    description = (f"{SUBTITLE} {summary}, across {plural(t['games_played'], 'game')} "
                    f"in {plural(n_sports, 'sport')}.")
     updated = data["updated_at"]
 
@@ -334,6 +350,7 @@ def render_index(data: dict) -> str:
         '<h2 id="overall-h">All sports combined</h2>',
         tiles(t["depauw_wins"], t["wabash_wins"], t["ties"], "tiles-big"),
         f'<p class="overall-meta">{esc(plural(t["games_played"], "game"))} across {esc(plural(n_sports, "sport"))}</p>',
+        f'<p class="not-included"><strong>Not included:</strong> {esc(NOT_INCLUDED)}</p>',
         '</section>',
         *(card(k, s) for k, s in sports.items()),
         '</main>',

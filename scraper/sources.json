@@ -1,5 +1,5 @@
 {
-  "_comment": "One entry per sport. URLs are DePauw's Sidearm 'opponent history' pages vs. Wabash. Add a sport by adding an entry; the opponent id (215) is the same across sports on depauwtigers.com.",
+  "_comment": "One entry per sport, in the order the page shows them. URLs are DePauw's Sidearm 'opponent history' pages vs. Wabash; the opponent id (215) is the same across sports on depauwtigers.com. Head-to-head sports only: multi-team events (cross country, track and field, swimming and diving, golf) are deliberately left out. Optional 'total_label' overrides the page's own label for the points/goals/runs total.",
   "school": "DePauw",
   "opponent": "Wabash",
   "opponent_match": "wabash",
@@ -11,9 +11,30 @@
       "path": "/sports/football/opponent-history/wabash/215"
     },
     {
+      "key": "mens-basketball",
+      "name": "Men's Basketball",
+      "path": "/sports/mens-basketball/opponent-history/wabash/215"
+    },
+    {
+      "key": "baseball",
+      "name": "Baseball",
+      "path": "/sports/baseball/opponent-history/wabash/215"
+    },
+    {
+      "key": "mens-soccer",
+      "name": "Men's Soccer",
+      "path": "/sports/mens-soccer/opponent-history/wabash/215"
+    },
+    {
       "key": "mens-lacrosse",
       "name": "Men's Lacrosse",
       "path": "/sports/mens-lacrosse/opponent-history/wabash/215"
+    },
+    {
+      "key": "mens-tennis",
+      "name": "Men's Tennis",
+      "path": "/sports/mens-tennis/opponent-history/wabash/215",
+      "total_label": "individual matches"
     }
   ]
 }

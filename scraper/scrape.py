@@ -12,7 +12,7 @@ Safety rules, so a bad night never wipes good data:
   * A sport whose game count shrinks compared with the saved file is NOT
     updated unless --allow-shrink is passed.
   * The file is only rewritten when the game data actually changed, so the
-    nightly job doesn't make empty commits.
+    scheduled job doesn't make empty commits.
   * Exit code is non-zero if any sport failed, so the GitHub Action shows red.
 
 Usage:
@@ -29,6 +29,7 @@ import json
 import re
 import sys
 import time
+from collections import Counter
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
 from typing import Optional
@@ -74,6 +75,9 @@ class Summary:
     ties: Optional[int] = None
     home: Optional[tuple] = None
     away: Optional[tuple] = None
+    streak: Optional[str] = None        # e.g. "W4", "L1"
+    total: Optional[int] = None         # DePauw's total points / goals / runs, as the page reports it
+    total_label: Optional[str] = None   # "points", "goals", "runs", ...
 
 
 @dataclass
@@ -81,6 +85,7 @@ class SportResult:
     key: str
     name: str
     source_url: str
+    total_label: str = "points"
     games: list = field(default_factory=list)
     summary: Summary = field(default_factory=Summary)
     skipped_rows: list = field(default_factory=list)
@@ -132,6 +137,12 @@ def parse_summary(soup: BeautifulSoup) -> Summary:
             s.home = _parse_record(number)
         elif label == "away record":
             s.away = _parse_record(number)
+        elif label == "streak":
+            m = re.match(r"^([WLT])(\d+)$", number.replace(" ", ""))
+            s.streak = m.group(0) if m else None
+        elif label.startswith("total ") and number.replace(",", "").isdigit():
+            s.total = int(number.replace(",", ""))
+            s.total_label = label[len("total "):].strip()
     if s.wins is not None and s.ties is None:
         s.ties = 0  # the page omits the Ties box when there have never been any
     return s
@@ -218,6 +229,22 @@ def tally(games: list) -> dict:
             "by_location": {k: tuple(v) for k, v in by_loc.items()}}
 
 
+def chronological(games: list) -> list:
+    """Oldest first. The page lists games newest first, so reversing before the (stable) date sort
+    keeps a doubleheader in playing order: game 1, then game 2."""
+    return sorted(reversed(games), key=lambda g: g.date)
+
+
+def streak_code(games: list) -> str:
+    """Current streak from DePauw's side, e.g. "W4". Expects games oldest first."""
+    r, n = games[-1].result, 0
+    for g in reversed(games):
+        if g.result != r:
+            break
+        n += 1
+    return f"{r}{n}"
+
+
 def validate(games: list, summary: Summary) -> list:
     """Return a list of problems (empty list means the parse agrees with the page)."""
     problems = []
@@ -237,9 +264,18 @@ def validate(games: list, summary: Summary) -> list:
         if page_rec is not None and tuple(page_rec) != tuple(mine):
             problems.append(f"{loc} record: parsed {'-'.join(map(str, mine))}, "
                             f"page says {'-'.join(map(str, page_rec))}")
-    dates = [(g.date, g.depauw, g.wabash) for g in games]
-    if len(set(dates)) != len(dates):
-        problems.append("duplicate game rows (same date and score)")
+    if summary.streak is not None and streak_code(chronological(games)) != summary.streak:
+        problems.append(f"streak: parsed {streak_code(chronological(games))}, page says {summary.streak}")
+    # Doubleheaders put two real games on one date, sometimes with the same score, so a repeated
+    # date and score is not a duplicate by itself. A page that really repeats rows is caught by a
+    # box-score link appearing on two rows, by three or more identical games on one date, and by
+    # the tally check above (repeated rows make the totals disagree with the page's summary).
+    boxes = [g.boxscore for g in games if g.boxscore]
+    if len(set(boxes)) != len(boxes):
+        problems.append("duplicate game rows (the same box score appears on more than one row)")
+    same_day = Counter((g.date, g.depauw, g.wabash) for g in games)
+    if any(n > 2 for n in same_day.values()):
+        problems.append("duplicate game rows (three or more identical games on one date)")
     return problems
 
 
@@ -255,19 +291,12 @@ def fetch(url: str) -> str:
 
 
 def sport_payload(sr: SportResult) -> dict:
-    games = sorted(sr.games, key=lambda g: g.date)
+    games = chronological(sr.games)
     t = tally(games)
     first = games[0] if games else None
     last = games[-1] if games else None
     # Current streak, from DePauw's perspective.
-    streak = None
-    if games:
-        r, n = games[-1].result, 0
-        for g in reversed(games):
-            if g.result != r:
-                break
-            n += 1
-        streak = f"{r}{n}"
+    streak = streak_code(games) if games else None
     return {
         "name": sr.name,
         "source_url": sr.source_url,
@@ -277,6 +306,7 @@ def sport_payload(sr: SportResult) -> dict:
         "last_game": last.date if last else None,
         "current_streak": streak,
         "points": {"depauw": sum(g.depauw for g in games), "wabash": sum(g.wabash for g in games)},
+        "total_label": sr.total_label,
         "games": [asdict(g) for g in games],
         "skipped_rows": sr.skipped_rows,
     }
@@ -294,7 +324,7 @@ def build_output(sports: dict, previous: dict) -> dict:
         "updated_at": previous.get("updated_at"),
         "perspective": "DePauw",
         "totals": totals,
-        "sports": dict(sorted(sports.items())),
+        "sports": sports,  # in sources.json order, which is the order the page shows
     }
 
 
@@ -333,7 +363,9 @@ def main(argv=None) -> int:
             if len(games) < old_count and not args.allow_shrink:
                 raise ParseError(f"game count fell from {old_count} to {len(games)}; "
                                  f"rerun with --allow-shrink if that's expected")
-            sr = SportResult(key=key, name=sport["name"], source_url=url,
+            # sources.json can override the label (tennis: the page's "points" are individual matches).
+            label = sport.get("total_label") or summary.total_label or "points"
+            sr = SportResult(key=key, name=sport["name"], source_url=url, total_label=label,
                              games=games, summary=summary, skipped_rows=skipped)
             new_sports[key] = sport_payload(sr)
             t = new_sports[key]["record"]
@@ -347,8 +379,8 @@ def main(argv=None) -> int:
                 new_sports[key] = prev_sports[key]  # keep last known-good data
 
     out = build_output(new_sports, previous)
-    changed = (json.dumps(out["sports"], sort_keys=True)
-               != json.dumps(prev_sports, sort_keys=True))
+    changed = (json.dumps(out["sports"], sort_keys=True) != json.dumps(prev_sports, sort_keys=True)
+               or list(out["sports"]) != list(prev_sports))  # a reorder in sources.json also counts
     tot = out["totals"]
     print(f"All sports: DePauw {tot['depauw_wins']}-{tot['wabash_wins']}-{tot['ties']} "
           f"over {tot['games_played']} games. Data {'changed' if changed else 'unchanged'}.")

@@ -1,0 +1,110 @@
+name: Update data and deploy site
+
+on:
+  schedule:
+    # Twice a day (UTC): about 6:19 AM and 11:47 PM Eastern, so late games land the same night.
+    - cron: "19 10 * * *"
+    - cron: "47 3 * * *"
+  push:
+    branches: [main]
+  workflow_dispatch:
+    inputs:
+      allow_shrink:
+        description: "Accept a sport whose game count went down"
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+# Scrape and deploy live in one workflow on purpose: a commit pushed with GITHUB_TOKEN
+# does not trigger other workflows, so a separate deploy workflow would never run.
+concurrency:
+  group: update-and-deploy
+  cancel-in-progress: false
+
+jobs:
+  scrape:
+    # Scheduled and manual runs only; a push to main just redeploys.
+    if: ${{ github.event_name != 'push' && github.ref == 'refs/heads/main' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - run: pip install -r requirements.txt
+
+      - name: Run tests
+        run: python -m pytest -q tests
+
+      - name: Scrape
+        id: scrape
+        env:
+          ALLOW_SHRINK: ${{ inputs.allow_shrink }}
+        run: |
+          args=""
+          if [ "$ALLOW_SHRINK" = "true" ]; then args="--allow-shrink"; fi
+          python scraper/scrape.py $args
+
+      - name: Commit if data changed
+        # Runs even when one sport failed or the tests failed, so other sports' updates still land.
+        if: ${{ always() && steps.scrape.outcome != 'skipped' }}
+        run: |
+          if git diff --quiet -- data/; then
+            echo "No data changes."
+            exit 0
+          fi
+          git config user.name  "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add data/
+          git commit -m "Update DePauw vs. Wabash series data"
+          git push origin HEAD:main
+
+  build:
+    needs: scrape
+    # Build even when the scrape failed or was skipped, so the site always deploys the latest good data.
+    if: ${{ !cancelled() }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: main # pick up the data commit the scrape job just pushed
+          persist-credentials: false
+
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
+        with:
+          python-version: "3.12"
+
+      - name: Render site
+        run: python scraper/render.py
+
+      - uses: actions/upload-pages-artifact@fc324d3547104276b827a68afc52ff2a11cc49c9 # v5.0.0
+        with:
+          path: site
+
+  deploy:
+    needs: build
+    if: ${{ !cancelled() && needs.build.result == 'success' && github.ref == 'refs/heads/main' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - uses: actions/configure-pages@45bfe0192ca1faeb007ade9deae92b16b8254a0d # v6.0.0
+
+      - id: deployment
+        uses: actions/deploy-pages@368f82528645a54fb793d4d04e342629a3f51346 # v5.0.1

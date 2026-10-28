@@ -31,8 +31,8 @@ DATA = ROOT / "data" / "series.json"
 STATIC = ROOT / "static"
 OUT = ROOT / "site"
 
-SITE_URL = "https://jacksonmote.github.io/DePauw-vs-Wabash-web/"
-BASE_PATH = urlparse(SITE_URL).path  # "/DePauw-vs-Wabash-web/"
+SITE_URL = "https://depauwvswabash.com/"
+BASE_PATH = urlparse(SITE_URL).path  # "/" on the custom domain
 SOURCE_HOST = "depauwtigers.com"
 
 TITLE = "DePauw vs. Wabash: All-Time Head-to-Head Records"

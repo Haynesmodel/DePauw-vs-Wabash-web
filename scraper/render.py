@@ -48,8 +48,8 @@ SOURCE_HOST = "depauwtigers.com"
 HOME_SITE = "Greencastle, Ind."
 AWAY_SITE = "Crawfordsville, Ind."
 
-TITLE = "DePauw vs. Wabash: All-Time Head-to-Head Records"
-SUBTITLE = "All-time head-to-head records in men’s sports."
+TITLE = "DePauw University vs. Wabash College: All-Time Head-to-Head Records"
+SUBTITLE = "DePauw University vs. Wabash College: all-time head-to-head records in men’s sports."
 NOT_INCLUDED = ("cross country, track and field, swimming and diving, and golf. "
                 "They are multi-team events rather than head-to-head games.")
 DISCLAIMER = "Unofficial fan site, not affiliated with DePauw University or Wabash College."

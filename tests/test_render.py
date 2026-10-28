@@ -355,3 +355,11 @@ def test_tiles_always_share_one_row():
     css = (Path(__file__).resolve().parent.parent / "static" / "styles.css").read_text()
     tiles = re.search(r"\.tiles \{[^}]*\}", css).group(0)
     assert "grid-auto-flow: column" in tiles and "auto-fit" not in tiles
+
+
+def test_full_school_names_are_in_the_tab_title_and_subtitle_but_the_headline_stays_short(tmp_path):
+    out, page = build(tmp_path, {"football": football()})
+    assert "<title>DePauw University vs. Wabash College: All-Time Head-to-Head Records</title>" in page
+    assert 'class="subtitle">DePauw University vs. Wabash College: all-time' in page
+    assert "<h1>DePauw vs. Wabash</h1>" in page
+    assert json.loads((out / "site.webmanifest").read_text())["name"] == "DePauw vs. Wabash"

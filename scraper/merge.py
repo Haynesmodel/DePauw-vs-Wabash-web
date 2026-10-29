@@ -139,8 +139,9 @@ def typo_kind(a: str, b: str) -> str | None:
 # --------------------------------------------------------------------------- #
 
 def load_overrides(path: Path) -> dict:
-    """The per-sport rulings, {sport key: {"same_game": [...], "different_games": [...]}}. A missing file
-    is no rulings. A malformed file raises MergeError, because a typo must not silently turn rulings off."""
+    """The per-sport rulings, {sport key: {"same_game": [...], "different_games": [...]}}. ("keep_previous"
+    rulings, which reject a school's edit to an old game, are read by review.load_keep_previous and take no
+    part in the merge.) A missing file is no rulings. A malformed file raises MergeError, because a typo must not silently turn rulings off."""
     path = Path(path)
     if not path.exists():
         return {}
@@ -153,8 +154,9 @@ def load_overrides(path: Path) -> dict:
         raise MergeError(f'{path.name} needs a "sports" object')
     out = {}
     for key, rules in sports.items():
-        if not isinstance(rules, dict) or set(rules) - {"same_game", "different_games"}:
-            raise MergeError(f'{path.name}: {key} may only have "same_game" and "different_games"')
+        if not isinstance(rules, dict) or set(rules) - {"same_game", "different_games", "keep_previous"}:
+            raise MergeError(f'{path.name}: {key} may only have "same_game", "different_games" and '
+                             f'"keep_previous"')
         out[key] = {kind: [_ruling(path.name, key, kind, r) for r in rules.get(kind, [])]
                     for kind in ("same_game", "different_games")}
     return out

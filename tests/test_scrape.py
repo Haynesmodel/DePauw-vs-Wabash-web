@@ -231,7 +231,12 @@ def test_shrinking_history_is_refused(fixture_dir, tmp_path):
     (fixture_dir / "mens-lacrosse.html").write_text(lax)
     assert scrape.main(["--fixtures", str(fixture_dir), "--output", str(out)]) == 1
     assert json.loads(out.read_text())["sports"]["mens-lacrosse"]["games_played"] == 12
+    # --allow-shrink only lifts the count check: dropping an old game is still a historical change, so it
+    # is held for review (tests/test_review.py) and the record keeps all 12 until it is approved.
     assert scrape.main(["--fixtures", str(fixture_dir), "--output", str(out), "--allow-shrink"]) == 0
+    assert json.loads(out.read_text())["sports"]["mens-lacrosse"]["games_played"] == 12
+    assert scrape.main(["--fixtures", str(fixture_dir), "--output", str(out), "--allow-shrink",
+                        "--apply-reviewed"]) == 0
     assert json.loads(out.read_text())["sports"]["mens-lacrosse"]["games_played"] == 11
 
 

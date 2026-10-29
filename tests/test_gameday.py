@@ -404,7 +404,7 @@ def test_frequent_runs_cannot_pile_up_or_cancel_a_running_scheduled_run():
     assert not re.search(r"^concurrency:", WORKFLOW, re.M)               # no workflow-level group for no-op runs to queue in
     assert "group: update-and-deploy" in job("build") and "group: pages" in job("deploy")
     assert "group:" not in job("gate")
-    assert WORKFLOW.count("cancel-in-progress: false") == 2 and "cancel-in-progress: true" not in WORKFLOW
+    assert WORKFLOW.count("cancel-in-progress: false") == 3 and "cancel-in-progress: true" not in WORKFLOW
 
 
 def test_the_preview_only_now_option_never_reaches_the_workflow():

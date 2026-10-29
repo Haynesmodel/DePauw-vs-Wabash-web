@@ -32,9 +32,12 @@ from urllib.parse import quote, urlparse
 
 import facts
 import gameday
+import howitworks
 import images
 import meetings
+import merge
 import places
+import review
 from timeutil import from_eastern, to_eastern
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -42,9 +45,11 @@ DATA = ROOT / "data" / "series.json"
 STATIC = ROOT / "static"
 OUT = ROOT / "site"
 UPCOMING = ROOT / "data" / "upcoming.json"
+OVERRIDES = ROOT / "data" / "overrides.json"
 CHECKED_AT = ROOT / ".checked-at"  # written by scrape.py after a live run; never committed
 
 SITE_URL = "https://depauwvswabash.com/"
+HOW_PATH = "how-it-works/"      # the plain-language page, relative to the site root
 BASE_PATH = urlparse(SITE_URL).path  # "/" on the custom domain
 REPO_URL = "https://github.com/jacksonmote/DePauw-vs-Wabash-web"
 SOURCE_HOST = "depauwtigers.com"
@@ -58,6 +63,8 @@ TITLE = "DePauw University vs. Wabash College: All-Time Head-to-Head Records"
 SUBTITLE = "DePauw University vs. Wabash College: all-time head-to-head records in men’s sports."
 NOT_INCLUDED = ("cross country, track and field, swimming and diving, and golf. "
                 "They are multi-team events rather than head-to-head games.")
+MEN_ONLY = ("Only men’s head-to-head sports are compared: Wabash is an all-male college, and multi-team "
+            "sports (cross country, track and field, swimming and diving, golf) aren’t head-to-head.")
 DISCLAIMER = "Unofficial fan site, not affiliated with DePauw University or Wabash College."
 COPYRIGHT_HOLDER = "Jackson Mote"
 COPYRIGHT_START = 2026
@@ -817,6 +824,36 @@ def footer_source(key: str, s: dict, up: dict | None) -> str:
             + " · ".join(f'<a href="{esc(u)}">{esc(label)}</a>' for label, u in links) + '</li>')
 
 
+def site_footer(now: dt.datetime, *, prefix: str = "", data: dict | None = None, checked: str | None = None,
+                upcoming: dict | None = None) -> list:
+    """The footer of every page. `prefix` reaches the site root from the page ("" on the home page, "../"
+    one folder down, the root path on 404.html). With `data`, the top of the footer also carries the update
+    and check times, the downloads and the source pages; without it (the 404 page) only the shared lines."""
+    lines = ['<footer class="site-footer">', '<div class="wrap">']
+    if data:
+        upcoming = upcoming or {}
+        sources = "\n".join(footer_source(k, s, upcoming.get(k)) for k, s in data["sports"].items())
+        lines += [
+            updated_line(data["updated_at"], checked, now),
+            f'<p class="downloads">Download the data: <a href="{esc(prefix)}data/series.json">series.json</a> '
+            f'(every game, as JSON) · <a href="{esc(prefix)}games.csv">games.csv</a> (one row per game, for '
+            f'spreadsheets). {report_link()}.</p>',
+            '<p>Data from <a href="https://depauwtigers.com/">depauwtigers.com</a> and '
+            '<a href="https://sports.wabash.edu/">sports.wabash.edu</a>. Source pages:</p>',
+            f'<ul class="sources">\n{sources}\n</ul>',
+        ]
+    lines += [
+        f'<p class="footer-links"><a href="{esc(prefix + HOW_PATH)}">How the numbers work</a> · '
+        f'<a href="{esc(REPO_URL)}">Built in the open: code and data on GitHub</a></p>',
+        f'<p>{esc(MEN_ONLY)}</p>',
+        f'<p>{esc(DISCLAIMER)}</p>',
+        f'<p class="copyright">{esc(copyright_line(now))}</p>',
+        '</div>',
+        '</footer>',
+    ]
+    return lines
+
+
 def render_index(data: dict, checked: str | None = None, now: dt.datetime | None = None,
                  upcoming: dict | None = None) -> str:
     t = data["totals"]
@@ -835,7 +872,6 @@ def render_index(data: dict, checked: str | None = None, now: dt.datetime | None
         ahead[key], pending[key] = meetings.split_games(
             upcoming.get(key, {}).get("games", []), s["games"], today)
 
-    sources = "\n".join(footer_source(k, s, upcoming.get(k)) for k, s in sports.items())
     today_games = gameday.todays_games(now, upcoming, sports)
 
     return "\n".join([
@@ -852,7 +888,7 @@ def render_index(data: dict, checked: str | None = None, now: dt.datetime | None
         game_day_html(today_games, sports),
         next_meeting_section(ahead, pending, sports, today),
         '<section class="overall" aria-labelledby="overall-h">',
-        '<h2 id="overall-h">All sports combined</h2>',
+        '<h2 id="overall-h">All head-to-head sports</h2>',
         tiles(t["depauw_wins"], t["wabash_wins"], t["ties"], "tiles-big"),
         f'<p class="overall-meta">{esc(plural(t["games_played"], "game"))} across {esc(plural(n_sports, "sport"))}</p>',
         f'<p class="series-summary">{esc(series_summary(sports))}</p>' if series_summary(sports) else '',
@@ -860,20 +896,40 @@ def render_index(data: dict, checked: str | None = None, now: dt.datetime | None
         '</section>',
         *(card(k, s, ahead[k], pending[k], upcoming.get(k), today) for k, s in sports.items()),
         '</main>',
-        '<footer class="site-footer">',
+        *site_footer(now, data=data, checked=checked, upcoming=upcoming),
+        '</body>',
+        '</html>',
+        '',
+    ])
+
+
+def render_how(data: dict, rules: dict, kept: int, checked: str | None = None, now: dt.datetime | None = None,
+               upcoming: dict | None = None) -> str:
+    """/how-it-works/: the plain-language page. One folder down, so every URL it uses is relative to ../."""
+    now = now or dt.datetime.now(dt.timezone.utc)
+    upcoming = upcoming or {}
+    sports = data["sports"]
+    sources = "\n".join(footer_source(k, s, upcoming.get(k)) for k, s in sports.items())
+    t = data["totals"]
+    description = (f"Where the DePauw vs. Wabash numbers come from and how the two schools’ records are "
+                   f"combined: {t['games_played']:,} games in {plural(len(sports), 'sport')}, with disputed "
+                   f"games and hand-made rulings shown openly.")
+    today_games = gameday.todays_games(now, upcoming, sports)
+    return "\n".join([
+        head(howitworks.TITLE, description, prefix="../", canonical=SITE_URL + HOW_PATH,
+             preview=preview_info(data, game_day_label(today_games))),
+        '<body>',
+        '<header class="site-header">',
         '<div class="wrap">',
-        updated_line(updated, checked, now),
-        '<p class="downloads">Download the data: <a href="data/series.json">series.json</a> (every game, as JSON)'
-        ' · <a href="games.csv">games.csv</a> (one row per game, for spreadsheets). '
-        f'{report_link()}.</p>',
-        '<p>Data from <a href="https://depauwtigers.com/">depauwtigers.com</a> and '
-        '<a href="https://sports.wabash.edu/">sports.wabash.edu</a>. Source pages:</p>',
-        f'<ul class="sources">\n{sources}\n</ul>',
-        '<p>Only men’s sports are compared because Wabash is an all-male college.</p>',
-        f'<p>{esc(DISCLAIMER)}</p>',
-        f'<p class="copyright">{esc(copyright_line(now))}</p>',
+        '<h1>DePauw vs. Wabash</h1>',
+        f'<p class="subtitle">{esc(SUBTITLE)}</p>',
         '</div>',
-        '</footer>',
+        '</header>',
+        '<main class="wrap">',
+        '<p class="back"><a href="../">← Back to the head-to-head records</a></p>',
+        *howitworks.content(data, rules, kept, sources_html=sources, not_included=NOT_INCLUDED, repo_url=REPO_URL),
+        '</main>',
+        *site_footer(now, prefix="../", data=data, checked=checked, upcoming=upcoming),
         '</body>',
         '</html>',
         '',
@@ -892,9 +948,9 @@ def render_404(now: dt.datetime | None = None) -> str:
         '<main class="wrap">',
         '<h2>Page not found</h2>',
         f'<p><a href="{esc(BASE_PATH)}">Back to the head-to-head records</a></p>',
+        f'<p><a href="{esc(BASE_PATH + HOW_PATH)}">How the numbers work</a></p>',
         '</main>',
-        f'<footer class="site-footer"><div class="wrap"><p>{esc(DISCLAIMER)}</p>'
-        f'<p class="copyright">{esc(copyright_line(now))}</p></div></footer>',
+        *site_footer(now or dt.datetime.now(dt.timezone.utc), prefix=BASE_PATH),
         '</body>',
         '</html>',
         '',
@@ -909,6 +965,7 @@ def render_sitemap(data: dict, checked: str | None = None) -> str:
     return ('<?xml version="1.0" encoding="UTF-8"?>\n'
             '<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n'
             f'  <url><loc>{esc(SITE_URL)}</loc><lastmod>{lastmod}</lastmod></url>\n'
+            f'  <url><loc>{esc(SITE_URL + HOW_PATH)}</loc><lastmod>{lastmod}</lastmod></url>\n'
             '</urlset>\n')
 
 
@@ -945,11 +1002,16 @@ def render_csv(data: dict) -> str:
 
 
 def build(data_path: Path, out: Path, *, checked_at: str | None = None,
-          now: dt.datetime | None = None, upcoming_path: Path | None = None) -> None:
+          now: dt.datetime | None = None, upcoming_path: Path | None = None,
+          overrides_path: Path | None = None) -> None:
     data = load(data_path)
     upcoming = meetings.load_upcoming(upcoming_path)
+    overrides_path = overrides_path or OVERRIDES
+    rules = merge.load_overrides(overrides_path)
+    kept = sum(len(r) for r in review.load_keep_previous(overrides_path).values())
     pages = {
         "index.html": render_index(data, checked_at, now, upcoming),
+        HOW_PATH + "index.html": render_how(data, rules, kept, checked_at, now, upcoming),
         "404.html": render_404(now),
         "games.csv": render_csv(data),
         "site.webmanifest": render_manifest(),
@@ -961,6 +1023,7 @@ def build(data_path: Path, out: Path, *, checked_at: str | None = None,
         shutil.rmtree(out)
     out.mkdir(parents=True)
     for name, text in pages.items():
+        (out / name).parent.mkdir(parents=True, exist_ok=True)
         (out / name).write_text(text, encoding="utf-8", newline="\n")
     for asset in ("styles.css", "favicon.svg"):
         shutil.copyfile(STATIC / asset, out / asset)
@@ -992,6 +1055,8 @@ def main(argv=None) -> int:
     ap.add_argument("--out", type=Path, default=OUT)
     ap.add_argument("--upcoming", type=Path, default=UPCOMING,
                     help="upcoming meetings from the schedule pages (optional)")
+    ap.add_argument("--overrides", type=Path, default=OVERRIDES,
+                    help="the rulings file, for the counts on the how-it-works page")
     ap.add_argument("--checked-file", type=Path, default=CHECKED_AT,
                     help="file holding the time of the last successful scrape (optional)")
     ap.add_argument("--now", help="pretend it is this time, for local previews and tests only (never used by "
@@ -1000,8 +1065,8 @@ def main(argv=None) -> int:
     args = ap.parse_args(argv)
     try:
         build(args.data, args.out, checked_at=read_checked(args.checked_file),
-              upcoming_path=args.upcoming, now=parse_now(args.now))
-    except (DataError, KeyError, TypeError, ValueError, AttributeError) as exc:
+              upcoming_path=args.upcoming, now=parse_now(args.now), overrides_path=args.overrides)
+    except (merge.MergeError, DataError, KeyError, TypeError, ValueError, AttributeError) as exc:
         print(f"render failed: {exc!r}", file=sys.stderr)
         return 1
     print(f"Wrote site to {args.out}")

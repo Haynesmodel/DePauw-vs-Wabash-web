@@ -46,6 +46,7 @@ from typing import Optional
 from bs4 import BeautifulSoup
 
 import merge
+import review
 import upcoming
 from timeutil import to_eastern
 
@@ -468,6 +469,49 @@ def report_merge(name: str, result) -> None:
               f"{', same score' if m['same_score'] else ''}); not merged")
 
 
+def hold_changes(cfg: dict, parsed: dict, prev_raw: dict, new_raw: dict, pending: list, keep_rules: dict,
+                 overrides: dict, apply_reviewed: bool, now: str) -> list:
+    """The review hold (see review.py). For every page that passed its own checks, compare it with that
+    school's saved copy, keep the saved version of each historical change that is not approved, and put the
+    result in `new_raw`. Returns the pending entries after this run: the held changes, plus the old entries
+    of any school and sport that was not read this run (a failed page must not clear what is waiting)."""
+    out, used = [], set()
+    for sport in cfg["sports"]:
+        key = sport["key"]
+        old_by = {s: (prev_raw[s].get(key) or {}).get("games") for s in ("depauw", "wabash")}
+        # Only a school that has a saved copy to compare with can have changes held; the first read is taken.
+        current = review.current_season(*(old_by[s] for s in old_by),
+                                        *(parsed[(s, key)]["games"] for s in old_by if (s, key) in parsed))
+        for school in ("depauw", "wabash"):
+            raw = parsed.get((school, key))
+            if raw is None:
+                continue
+            if old_by[school] is None:
+                new_raw[school][key] = raw
+                continue
+            games, entries, notes, matched = review.settle(
+                school, key, old_by[school], raw["games"], current, raw["source_url"], pending=pending,
+                rules=keep_rules.get(key, []), sport_rules=overrides.get(key), apply_reviewed=apply_reviewed,
+                now=now)
+            used.update(id(r) for r in matched)
+            for n in notes:
+                print(f"INFO {sport['name']} {school_cfg(cfg, school)['name']}: {n}")
+            if entries:
+                print(f"HOLD {sport['name']:<16} {school_cfg(cfg, school)['name']:<7} {len(entries)} change(s) "
+                      f"to old games held for review", file=sys.stderr)
+            w, l, t = tally_dicts(games)
+            new_raw[school][key] = {**raw, "games": games, "games_played": len(games),
+                                    "record": {"depauw_wins": w, "wabash_wins": l, "ties": t}}
+            out.extend(entries)
+    read = {(sc, k) for (sc, k) in parsed}
+    out.extend(e for e in pending if (e["school"], e["sport"]) not in read)
+    for key, rules in keep_rules.items():
+        for r in rules:
+            if id(r) not in used:
+                print(f"INFO keep_previous ruling for {key} ({r['school']}) matched no change this run")
+    return out
+
+
 def _carry(entry: dict, old: dict, history_dates: Optional[list], today: Optional[dt.date], canceled: list,
            name: str) -> None:
     """Keep a game that just finished on the schedule file until the history has it (changes `entry`)."""
@@ -546,6 +590,10 @@ def main(argv=None) -> int:
     ap.add_argument("--wabash-output", type=Path, help="default: wabash.json next to --output")
     ap.add_argument("--overrides", type=Path, help="rulings on same/different games; default: overrides.json "
                                                    "next to --output")
+    ap.add_argument("--pending", type=Path, help="changes to old games waiting for review; default: "
+                                                 "pending-changes.json next to --output")
+    ap.add_argument("--apply-reviewed", action="store_true",
+                    help="accept the changes already waiting in the pending file (and nothing new)")
     ap.add_argument("--upcoming-output", type=Path, default=UPCOMING)
     ap.add_argument("--checked-file", type=Path, default=CHECKED_AT,
                     help="where to record the time of a successful live check")
@@ -557,9 +605,13 @@ def main(argv=None) -> int:
                  "wabash": args.wabash_output or args.output.parent / "wabash.json"}
 
     cfg = json.loads(SOURCES.read_text(encoding="utf-8"))
+    pending_path = args.pending or args.output.parent / "pending-changes.json"
     try:
-        overrides = merge.load_overrides(args.overrides or args.output.parent / "overrides.json")
-    except merge.MergeError as exc:
+        overrides_path = args.overrides or args.output.parent / "overrides.json"
+        overrides = merge.load_overrides(overrides_path)
+        keep_rules = review.load_keep_previous(overrides_path)
+        pending = review.load_pending(pending_path)
+    except (merge.MergeError, ValueError) as exc:
         print(f"FAIL overrides: {exc}", file=sys.stderr)
         return 1
     previous = json.loads(args.output.read_text(encoding="utf-8")) if args.output.exists() else {}
@@ -572,6 +624,7 @@ def main(argv=None) -> int:
     new_raw: dict = {school: dict(prev_raw[school]) for school in raw_paths}   # last good copy until replaced
     failures = []
     loaded = 0
+    parsed: dict = {}                       # (school, sport key) -> a page that passed its own checks
     for sport in cfg["sports"]:
         key = sport["key"]
         for school in ("depauw", "wabash"):
@@ -580,7 +633,7 @@ def main(argv=None) -> int:
                 raw = scrape_one(sc, sport, school, args.fixtures, pacer, prev_raw[school], args.allow_shrink)
                 if raw is None:
                     continue
-                new_raw[school][key] = raw
+                parsed[(school, key)] = raw
                 loaded += 1
                 r = raw["record"]
                 print(f"OK   {sport['name']:<16} {sc['name']:<7} {raw['games_played']:>3} games  "
@@ -589,6 +642,9 @@ def main(argv=None) -> int:
             except Exception as exc:  # keep going; one bad page shouldn't block the rest
                 failures.append((school, key))
                 print(f"FAIL {sport['name']:<16} {sc['name']:<7} {exc}", file=sys.stderr)
+
+    new_pending = hold_changes(cfg, parsed, prev_raw, new_raw, pending, keep_rules, overrides,
+                               args.apply_reviewed, now_utc().isoformat())
 
     new_sports: dict = {}
     for sport in cfg["sports"]:
@@ -615,6 +671,8 @@ def main(argv=None) -> int:
           f"over {tot['games_played']} games. Data {'changed' if changed else 'unchanged'}.")
 
     if not args.dry_run:
+        if review.pending_doc(new_pending) != review.pending_doc(pending) or not pending_path.exists():
+            write_if_changed(pending_path, review.pending_doc(new_pending))
         for school, path in raw_paths.items():
             if new_raw[school] != load_sports(path):
                 write_if_changed(path, {"schema_version": 1, "school": school_cfg(cfg, school)["name"],

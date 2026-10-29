@@ -15,11 +15,11 @@ Cross country, track and field, swimming and diving, and golf are left out becau
 
 **Live site: https://depauwvswabash.com/**
 
-Unofficial fan site, not affiliated with DePauw University or Wabash College. Only men's sports are compared because Wabash is an all-male college.
+Unofficial fan site, not affiliated with DePauw University or Wabash College. Only men's head-to-head sports are compared: Wabash is an all-male college, and multi-team sports (cross country, track and field, swimming and diving, golf) aren't head-to-head.
 
 ## What the site shows
 
-- **All sports combined** and a card per sport: record, current streak, records since, total points/goals/runs, most recent game, and every game (newest first, with box-score links). Tennis counts matches rather than games.
+- **All head-to-head sports** (the combined totals) and a card per sport: record, current streak, records since, total points/goals/runs, most recent game, and every game (newest first, with box-score links). Tennis counts matches rather than games.
 - **Series summary.** One sentence under the all-sports totals says who leads which sports, written from the merged records (for example "Wabash leads football and baseball, including the Monon Bell era; DePauw leads basketball, soccer, lacrosse and tennis."). A sport is led by whoever has more wins; an even sport is listed on its own ("Soccer is even."). Sports keep the order in `sources.json`. The Monon Bell era is named whenever the football card has one, worded to fit whether its leader is also the all-time football leader. It is never hardcoded, so it changes by itself as results come in.
 - **Both schools' records, merged.** Each card says where its record comes from ("Combined from DePauw and Wabash records: 141 games listed by both, 173 by Wabash only, 0 by DePauw only, 2 disputed", or "DePauw and Wabash records agree"). In the game list, a game only one school lists is marked "Wabash record only" or "DePauw record only". When the schools disagree on a score or winner, DePauw's version is the one counted and the game shows both, each labelled with whose record it is and in DePauw-Wabash order ("DePauw's record (DePauw-Wabash): 12-5 · Wabash's record (DePauw-Wabash): 11-5"). Games with no usable date (Wabash's oldest games sit on placeholder dates, and a date in a month the sport is not played in is treated the same way) show their season or year and "date not recorded", are listed first within their season, and never count as the "most recent" game. The 1954 basketball tie is footnoted because both schools list it.
 - **Last checked.** The footer shows when the data last changed and when the scraper last reached the source pages, both in Eastern time, so you can tell the scheduled job is still running.
@@ -30,6 +30,8 @@ Unofficial fan site, not affiliated with DePauw University or Wabash College. On
 - **Direct links.** Each card has an id from its key in `sources.json` (`#football`, `#mens-basketball`, ...), plus `#monon-bell`, `#next-meeting` and `#game-day`, and each heading is itself the link to its section.
 - **Download the data.** `data/series.json` (the merged data file as-is) and `games.csv` (one row per game: sport, date, season, location, site, DePauw score, Wabash score, result, note, box score link, plus which record it comes from, whether its date is recorded, whether the schools disagree on the score or the date, and Wabash's date and both schools' scores, in DePauw-Wabash order, when they differ) are published with the site and linked in the footer.
 - **Report a data error.** Each card and the footer link to a GitHub issue form (`.github/ISSUE_TEMPLATE/data-correction.yml`) asking for the sport, game date, which school's record looks wrong (DePauw's, Wabash's, both, not sure), what is wrong and a link to the correct result. The issues are public, so the form asks for nothing personal.
+- **How the numbers work.** A plain-language page for fans at `/how-it-works/` (`scraper/howitworks.py`, built by `render.py`): where the data comes from, what is counted, how the two schools' records are combined, disputed games, the hand-made rulings, how often the site updates, how to report a mistake, and a link back here. Every number on it (games, disputed games, games with no recorded date, games one school lists, rulings, the match window, the placeholder dates, the game-day interval) is read from the data files or from the constants in `merge.py` and `gameday.py`, never typed in. It has the home page's header, footer, stylesheet, security policy, light and dark mode, canonical URL, preview card and share image, is in `sitemap.xml`, and is linked from every footer and from the 404 page.
+- **Footer.** Every page (home, how-it-works, 404) gets the same footer from one function (`site_footer()` in `render.py`): update and check times, downloads, source pages, "How the numbers work", "Built in the open: code and data on GitHub", the men's head-to-head note, the unofficial-fan-site note and the copyright.
 - **Link previews.** Texting or sharing the link shows a card with the current totals and the Monon Bell holder, plus a "Game day" or "Final" label on game day (see "Preview image" below).
 
 Every number on the page comes from the scraped data or is calculated from it.
@@ -44,7 +46,7 @@ scraper/scrape.py ── parses every game row and checks each page against its 
         │            (Wabash's games are flipped to DePauw's point of view)
         ▼
 data/depauw.json  data/wabash.json ── each school's games as read, committed only when they change
-        │
+        │            (changes to old games wait in data/pending-changes.json until approved)
         ▼
 scraper/merge.py ── matches the two lists game by game
         ▼
@@ -56,7 +58,7 @@ both schools' /sports/<sport>/schedule pages ──► scraper/upcoming.py ─�
         └── series.json and upcoming.json ──► scraper/render.py ── builds the static site in site/ and deploys it to GitHub Pages
 ```
 
-Each school's page for a sport is accepted only when its parsed wins, losses, ties, home/away records and current streak match that page's own summary, the page is for the right opponent, and its game count has not shrunk against that school's saved copy. Doubleheaders count as two games. If any check fails, that school keeps its last good games for that sport, the merge is redone from the two saved copies, and the run turns red; everything that passed still updates. Requests identify the project in the User-Agent and are spaced a few seconds apart.
+Each school's page for a sport is accepted only when its parsed wins, losses, ties, home/away records and current streak match that page's own summary, the page is for the right opponent, and its game count has not shrunk against that school's saved copy. Doubleheaders count as two games. If any check fails, that school keeps its last good games for that sport, the merge is redone from the two saved copies, and the run turns red; everything that passed still updates. A page that passes is then checked for changes to old games, which are held for review (see "Review hold" below). Requests identify the project in the User-Agent and are spaced a few seconds apart.
 
 **How the two lists are merged** (`scraper/merge.py`). Games are matched per sport, in passes, and a row is never used twice:
 
@@ -89,6 +91,8 @@ Several games on one date pair by score first, then by order on the page. A game
 ```
 
 Dates are as each school's page lists them, and scores are always DePauw-Wabash (Wabash's page is already flipped). A `same_game` pair becomes one game even when the dates or scores differ (flagged accordingly); a `different_games` pair is never matched by any pass. Every ruling must still find the rows it names: if a source page changes and a ruling no longer finds both of its rows, the merge for that sport fails (that sport keeps its last good data and the run turns red) instead of the ruling silently stopping. A malformed file stops the run before anything is written.
+
+The same file also holds `keep_previous` rulings, which reject a school's edit to an old game (see "Review hold" below). They take no part in the merge.
 
 ### Why the merge works this way
 
@@ -181,6 +185,43 @@ The build and deploy jobs each have their own concurrency group (`cancel-in-prog
 
 The site is plain HTML and CSS with no JavaScript.
 
+## Review hold: changes to old games
+
+Checking a page against its own summary does not catch a school quietly editing an old result, so old records change only after a person approves.
+
+- **What counts as old.** A game is historical when its season is before the sport's current season, and the current season is the newest season present in either school's saved or newly read games for that sport. (A calendar rule would hold a score fix made the week after a season ends; this does not.) In the off-season the last season played is still current, so its fixes go straight through.
+- **What is held.** Any difference between a school's newly read page and that school's saved copy (`data/depauw.json` or `data/wabash.json`) for historical games: an edited score, result, date, site or note, a newly added old game, or a removed old game. Games are compared whole with styling removed: spacing, capitalization and the state style in a location ("Greencastle, IN" and "Greencastle, Ind." are the same place) are not changes, so a school restyling its pages holds nothing. A different place, score, result, date or note is a change. `--allow-shrink` only lifts the game-count check; a removed old game is still held.
+- **What happens to a held change.** The saved version of that game stays (so the merge, `series.json` and the page keep showing it), current-season changes apply as usual, and the change is recorded in `data/pending-changes.json` (school, sport, kind, old version, new version, source page, first-seen time), committed with the data. It stays there, unchanged, while the school's page keeps the new version.
+- **The issue.** A separate `issues` job (the only one with `issues: write`, in its own concurrency group) keeps one open GitHub issue labeled `data-review` (the label is created if missing) in step with the pending file: it lists every change as was/now with a link to the source page, edits the same issue on later runs (never opens a second, and skips the edit when nothing changed), and is capped per sport at 25 entries with "and N more, see `data/pending-changes.json`" so it always fits GitHub's size limit. A held change to a game that a `same_game` or `different_games` ruling names is marked with a warning, because approving it makes that ruling stale and the sport's merge then fails loudly until the ruling is fixed.
+- **Approve.** Run the "Update data and deploy site" workflow (Actions tab, Run workflow) with **Apply the changes to old games waiting for review** ticked (the `apply_reviewed_changes` input). The run applies only changes that still match a pending entry exactly (a page that changed again is held afresh), clears them from `data/pending-changes.json`, merges and renders, and the issue gets a closing comment and is closed once nothing is left. If a school's page fails to load during that run, its pending entries stay and the issue stays open. Whether the input can be set from the GitHub mobile app is not confirmed (GitHub's announcement says the app can start a manual workflow but does not say it shows inputs); the Actions page in a phone's web browser shows the input form.
+- **Reject.** Add a `keep_previous` ruling to `data/overrides.json`, under `sports` and the sport's key; the issue shows a ready-to-paste one under each change:
+
+```json
+"football": {
+  "keep_previous": [
+    {"school": "wabash",
+     "old": {"date": "1957-11-16", "score": "37-6"},
+     "new": {"date": "1957-11-16", "score": "37-7"},
+     "reason": "box score says 37-6"}
+  ]
+}
+```
+
+  `school` is `depauw` or `wabash`, `old` and `new` are the date and DePauw-Wabash score of the saved and the changed version (`old` is `null` for an added game and `new` is `null` for a removed one). The change is then ignored from then on and no longer raised. A ruling that matches nothing logs a line and never fails a run.
+- **Not affected.** Each page is still validated against its own summary exactly as before, and the first time a sport is read there is nothing to compare with, so it is taken as is.
+
+Tests are in `tests/test_review.py`; the logic is in `scraper/review.py` and `scraper/review_issue.py`.
+
+## Snapshots and archiving
+
+`.github/workflows/snapshot.yml` keeps a copy of the data outside the git history. It creates a GitHub Release tagged `data-YYYY-MM-DD` (a `-2`, `-3` ... is added only if that tag is taken) with `series.json`, `depauw.json`, `wabash.json`, `overrides.json`, `upcoming.json` and a freshly generated `games.csv` attached, and release notes listing the totals and each sport's record at that moment.
+
+- **When.** Twice a year, after the spring seasons (July 1) and after the fall seasons (January 2), at off-peak minutes, and on demand (Actions, "Data snapshot", Run workflow). It skips, and succeeds, when the data has not changed since the newest `data-*` release (a hash of `series.json`, `depauw.json`, `wabash.json` and `overrides.json` is kept in the release notes; `upcoming.json` is attached but does not count, because it changes with every schedule update).
+- **Internet Archive.** In the same run, each of the 12 source history pages (6 DePauw, 6 Wabash) is sent to the Wayback Machine's Save Page Now (`https://web.archive.org/save/<url>`), a few seconds apart. It is best effort: a refusal, timeout or rate limit logs a warning and never fails the run, and the archive links that came back are listed in the release notes.
+- **Permissions.** A read-only job builds the files; only the release job has `contents: write`. Every action is pinned to a full commit SHA. The first snapshot has to be made by hand once after this workflow is merged.
+
+The logic is in `scraper/snapshot.py` and the tests in `tests/test_snapshot.py`.
+
 ## Preview image and icons
 
 `scraper/images.py` draws `og-image.png` (1200x630, the current totals and Monon Bell holder), `apple-touch-icon.png`, `favicon-32.png` and the manifest icons at every build, with Pillow and the bundled Barlow Condensed font (`static/fonts/`, SIL Open Font License, license included), so the result is the same on a laptop and in GitHub Actions. Pillow is pinned to an exact version in `requirements.txt` for that reason. On game day it also carries a small "GAME DAY" or "FINAL" label at the right of the Bell line, while the banner shows. The image URL in the page carries a `?v=` value built from the totals, holder and label, so chat apps fetch the new picture when any of them change. No school logos, wordmarks, seals or mascot art are used.
@@ -194,7 +235,8 @@ pip install -r requirements.txt
 python -m pytest -q tests            # scraper and renderer tests (use saved page markup, no network)
 python scraper/scrape.py --dry-run   # fetch both schools' live pages and report, without writing
 python scraper/scrape.py             # fetch and update data/ (and record the check time)
-python scraper/render.py             # build the site into site/
+python scraper/scrape.py --apply-reviewed   # also accept the old-game changes already waiting in data/pending-changes.json
+python scraper/render.py             # build the site into site/ (including /how-it-works/)
 python scraper/render.py --now 2026-11-14T13:30   # preview game-day mode as if it were this Eastern time
 python scraper/gameday.py gate --schedule "7,37 * * * *" --now 2026-11-14T14:00:00-05:00   # what the game-day gate would decide
 python -m http.server 8000 -d site   # preview at http://localhost:8000
@@ -212,7 +254,9 @@ Add an entry to `scraper/sources.json`. DePauw's opponent id for Wabash is `215`
 
 `data/depauw.json` and `data/wabash.json` hold each school's games for each sport as they were read, both in DePauw's point of view (Wabash's page is flipped: wins and losses, scores, and home and away swap). `series.json` is always the merge of these two files, so a run can re-merge without fetching.
 
-`data/overrides.json` holds the rulings described above, each with a short reason.
+`data/overrides.json` holds the rulings described above (`same_game`, `different_games`, and `keep_previous` for rejected edits to old games), each with a short reason.
+
+`data/pending-changes.json` holds the changes to old games waiting for review (`id`, `school`, `sport`, `kind`: `edited`, `added` or `removed`, `old` and `new` game versions, `source_url`, `first_seen`, and `touches_ruling` when it affects a row a ruling names). It is empty (`"changes": []`) when nothing waits, and is rewritten only when its content changes.
 
 `data/upcoming.json` holds, per sport, the two schedule URLs and the Wabash games not yet played (`date`, `time`, `time_note`, `location`, `site`, `status`, `doubleheader`, `source`), plus a game dated today or yesterday that has just finished and is not in the history yet. It has no timestamp, so it changes only when the schedule does.
 

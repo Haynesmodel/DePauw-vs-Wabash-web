@@ -17,6 +17,10 @@ on:
         description: "Accept a sport whose game count went down"
         type: boolean
         default: false
+      apply_reviewed_changes:
+        description: "Apply the changes to old games waiting for review (see the data-review issue)"
+        type: boolean
+        default: false
 
 permissions:
   contents: read
@@ -92,9 +96,11 @@ jobs:
         continue-on-error: true
         env:
           ALLOW_SHRINK: ${{ inputs.allow_shrink }}
+          APPLY_REVIEWED: ${{ inputs.apply_reviewed_changes }}
         run: |
           args=""
           if [ "$ALLOW_SHRINK" = "true" ]; then args="--allow-shrink"; fi
+          if [ "$APPLY_REVIEWED" = "true" ]; then args="$args --apply-reviewed"; fi
           python scraper/scrape.py $args
 
       - name: Commit if data changed
@@ -149,6 +155,39 @@ jobs:
 
       - id: deployment
         uses: actions/deploy-pages@368f82528645a54fb793d4d04e342629a3f51346 # v5.0.1
+
+  issues:
+    # Keeps the data-review issue in step with data/pending-changes.json (scraper/review_issue.py). It is
+    # its own job so that only it holds issues: write, and it has its own concurrency group so two runs
+    # can never open two issues at once.
+    needs: build
+    if: ${{ !cancelled() && needs.build.result == 'success' && github.ref == 'refs/heads/main' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    concurrency:
+      group: review-issue
+      cancel-in-progress: false
+    permissions:
+      contents: read
+      issues: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: main # after the build job's data commit
+          sparse-checkout: |
+            data
+            scraper
+
+      - name: Sync the data-review issue
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          APPLIED: ${{ inputs.apply_reviewed_changes }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          args=""
+          if [ "$APPLIED" = "true" ]; then args="--applied"; fi
+          python3 scraper/review_issue.py $args --run-url "$RUN_URL"
 
   report:
     # The deploy above still ran; this only turns the run red so a failed sport or test gets noticed.

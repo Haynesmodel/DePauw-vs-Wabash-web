@@ -114,6 +114,20 @@ def _game_date(li, season_year) -> Optional[str]:
         return None
 
 
+# Only a head-to-head game belongs in "Next meeting". A listing whose name says it is a tournament, or that names
+# more than one opponent, is a multi-team event even when Sidearm gives it the other school's id (a Wabash-hosted
+# invitational on DePauw's page carries Wabash's id). Whole words only, so "Opener" is not "Open".
+MULTI_TEAM_RE = re.compile(
+    r"\b(invitationals?|relays?|championships?|classic|open|tri|quad|triangular|quadrangular|tri-meet)\b|"
+    r"[,/&;]|\band\b", re.I)
+
+
+def is_multi_team(name: str) -> bool:
+    """True for an opponent listing like 'Wabash Invitational', 'Wabash/Franklin', 'Wabash, Franklin and Rose-Hulman'
+    or 'NCAC Championships'. A plain school name, with or without '(DH)', is false."""
+    return bool(MULTI_TEAM_RE.search(name or ""))
+
+
 def parse_schedule(html: str, *, opponent_id: int, canceled: Optional[list] = None) -> list:
     """The games against one opponent that have no result and are not canceled. When `canceled` is a list,
     the dates of the canceled games are appended to it (scrape.py needs them to stop carrying a game over)."""
@@ -126,6 +140,8 @@ def parse_schedule(html: str, *, opponent_id: int, canceled: Optional[list] = No
     games = []
     for li in container.select("li.sidearm-schedule-game"):
         if li.get("data-game-opponent-id") != str(opponent_id):
+            continue
+        if is_multi_team(_text(li.select_one(".sidearm-schedule-game-opponent-name"))):
             continue
 
         status = _text(li.select_one(".sidearm-schedule-game-result"))

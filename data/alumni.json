@@ -1623,11 +1623,11 @@
         "rhodes-scholars": {
           "achievement": "Rhodes Scholar",
           "years": [
-            1911
+            1908
           ],
           "source": {
-            "label": "Wabash Rhodes Scholar record",
-            "url": "https://www.wabash.edu/news/story/3014"
+            "label": "Rhodes Trust Scholar API record: Claude Pifer, Pembroke College, 1908",
+            "url": "https://www.rhodeshouse.ox.ac.uk/umbraco/api/ScholarApi/Scholars?lastname=Pifer"
           }
         }
       }
@@ -1701,11 +1701,11 @@
         "rhodes-scholars": {
           "achievement": "Rhodes Scholar",
           "years": [
-            1908
+            1911
           ],
           "source": {
-            "label": "Wabash Rhodes Scholar record",
-            "url": "https://www.wabash.edu/news/story/3014"
+            "label": "Rhodes Trust Scholar API record: James Osborne, Christ Church, 1911",
+            "url": "https://www.rhodeshouse.ox.ac.uk/umbraco/api/ScholarApi/Scholars?lastname=Osborne"
           }
         }
       }
@@ -2020,8 +2020,8 @@
             1997
           ],
           "source": {
-            "label": "Wabash profile and AT&T CEO history",
-            "url": "https://sports.wabash.edu/honors/wabash-college-athletics-hall-of-fame/robert-allen/127"
+            "label": "Wabash obituary: elected AT&T chairman and CEO in 1988; held the post until 1998",
+            "url": "https://www.wabash.edu/news/story/10880"
           },
           "company": "AT&T",
           "rank_year": 1997,

@@ -35,6 +35,16 @@ def test_committed_records_cover_ten_categories_and_derive_counts():
                for c in alumni.visible_categories(data))
 
 
+def test_rhodes_scholar_dates_match_official_records():
+    people = {person["id"]: person for person in alumni.validate_alumni(read_data())["people"]}
+    pifer = people["claude-pifer"]["qualifications"]["rhodes-scholars"]
+    osborne = people["insley-osborne"]["qualifications"]["rhodes-scholars"]
+    assert pifer["years"] == [1908]
+    assert pifer["source"]["url"] == "https://www.rhodeshouse.ox.ac.uk/umbraco/api/ScholarApi/Scholars?lastname=Pifer"
+    assert osborne["years"] == [1911]
+    assert osborne["source"]["url"] == "https://www.rhodeshouse.ox.ac.uk/umbraco/api/ScholarApi/Scholars?lastname=Osborne"
+
+
 def test_membership_can_span_categories_but_cannot_repeat():
     data = read_data()
     multi = next(person for person in data["people"] if person["id"] == "dan-quayle")
@@ -79,6 +89,7 @@ def test_invalid_curated_data_is_rejected(mutation, message):
 
 @pytest.mark.parametrize("mutation, message", [
     (lambda x: x.update(as_of="2025-13-40"), "ISO date"),
+    (lambda x: x.update(as_of="20250630"), "ISO date"),
     (lambda x: x["schools"]["wabash"].update(amount_usd=True), "non-negative integer"),
     (lambda x: x["schools"].pop("depauw"), "exactly depauw and wabash"),
     (lambda x: x["schools"]["depauw"].update(source_url="file:///tmp/a"), r"HTTP\(S\) URL"),
@@ -101,6 +112,34 @@ def test_failed_curated_input_preserves_existing_output(tmp_path):
     with pytest.raises(alumni.AlumniError, match="schema_version 1"):
         render.build(render.DATA, out, alumni_path=invalid)
     assert sentinel.read_text(encoding="utf-8") == "old site"
+
+
+def test_compact_verification_date_is_rejected_before_output_replacement(tmp_path):
+    out = tmp_path / "site"
+    out.mkdir()
+    sentinel = out / "keep.txt"
+    sentinel.write_text("old site", encoding="utf-8")
+    invalid = copy.deepcopy(read_data())
+    invalid["verified_at"] = "20261029"
+    path = tmp_path / "alumni.json"
+    path.write_text(json.dumps(invalid), encoding="utf-8")
+    with pytest.raises(alumni.AlumniError, match=r"ISO date \(YYYY-MM-DD\)"):
+        render.build(render.DATA, out, alumni_path=path)
+    assert sentinel.read_text(encoding="utf-8") == "old site"
+
+
+@pytest.mark.parametrize("years, rank_year, message", [
+    ([1990, 1995, 2000, 2005], 1997, "ranking year must overlap"),
+    ([1995, 1990], 1996, "ordered, non-overlapping ranges"),
+])
+def test_fortune_rank_year_must_fall_in_an_ordered_ceo_interval(years, rank_year, message):
+    data = read_data()
+    rales = next(person for person in data["people"] if person["id"] == "steven-rales")
+    qualification = rales["qualifications"]["fortune-500-ceos"]
+    qualification["years"] = years
+    qualification["rank_year"] = rank_year
+    with pytest.raises(alumni.AlumniError, match=message):
+        alumni.validate_alumni(data)
 
 
 def test_build_emits_navigation_alumni_and_auditable_json(tmp_path):

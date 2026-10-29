@@ -35,8 +35,10 @@ def _url(value, field):
 def _date(value, field):
     _text(value, field)
     try:
-        dt.date.fromisoformat(value)
+        parsed = dt.date.fromisoformat(value)
     except ValueError:
+        _fail(f"{field} must be an ISO date (YYYY-MM-DD)")
+    if parsed.isoformat() != value:
         _fail(f"{field} must be an ISO date (YYYY-MM-DD)")
 
 
@@ -134,6 +136,13 @@ def validate_alumni(data: dict) -> dict:
             if (not isinstance(years, list) or not years or (len(years) > 2 and len(years) % 2 != 0) or any(isinstance(y, bool) or not isinstance(y, int)
                     or not 1700 <= y <= 2100 for y in years)):
                 _fail(f"person {pid}.qualifications.{cid}.years must contain qualifying years")
+            intervals = [(years[0], years[0])] if len(years) == 1 else [
+                (years[i], years[i + 1]) for i in range(0, len(years), 2)
+            ]
+            if any(start > end for start, end in intervals) or any(
+                intervals[i][0] <= intervals[i - 1][1] for i in range(1, len(intervals))
+            ):
+                _fail(f"person {pid}.qualifications.{cid}.years must use ordered, non-overlapping ranges")
             source = qualification.get("source")
             if not isinstance(source, dict):
                 _fail(f"person {pid}.qualifications.{cid}.source must have label and url")
@@ -147,7 +156,7 @@ def validate_alumni(data: dict) -> dict:
                 rank = qualification.get("rank")
                 if isinstance(rank, bool) or not isinstance(rank, int) or not 1 <= rank <= 500:
                     _fail(f"person {pid}.qualifications.{cid}.rank must be between 1 and 500")
-                if rank_year not in years and not (years[0] <= rank_year <= years[-1]):
+                if not any(start <= rank_year <= end for start, end in intervals):
                     _fail(f"person {pid}.qualifications.{cid}.ranking year must overlap the CEO tenure")
                 ranking = qualification.get("ranking_source")
                 if not isinstance(ranking, dict):

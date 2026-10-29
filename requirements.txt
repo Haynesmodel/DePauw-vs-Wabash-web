@@ -1,5 +1,6 @@
 beautifulsoup4>=4.12
 requests>=2.31
 pytest>=8
+pytest-cov>=6
 pyyaml>=6
 Pillow==13.0.0

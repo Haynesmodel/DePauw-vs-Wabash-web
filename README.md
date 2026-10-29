@@ -131,7 +131,7 @@ Three GitHub Actions workflows live in `.github/workflows/`:
 | Workflow | Runs when | What it does |
 |---|---|---|
 | `update-and-deploy.yml` | Twice a day, every 30 minutes (ended at once by the gate unless a game is being played), on every push to `main`, and by hand | Scrapes both schools' pages, applies the review hold, merges, commits `data/` changes, renders the site, deploys it to GitHub Pages and keeps the `data-review` issue in step |
-| `checks.yml` | On every pull request to `main` | Runs the tests, renders the site, validates the generated HTML and renders every Mermaid diagram in this README |
+| `checks.yml` | On every pull request to `main` | Runs the tests with at least 80% coverage of `scraper/`, renders the site, validates the generated HTML and renders every Mermaid diagram in this README |
 | `snapshot.yml` | July 1 and January 2, and by hand | Saves a GitHub Release with copies of the data files (skipped when nothing changed), then, as a last job that can never fail the run, asks the Wayback Machine to save the source pages |
 
 What each run of `update-and-deploy.yml` does:

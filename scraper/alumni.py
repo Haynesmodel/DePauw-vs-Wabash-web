@@ -244,9 +244,9 @@ def render_page(data: dict, endowment: dict, *, head_html: str, copyright_year: 
                         f'<li><strong>{_esc(p["name"])}</strong> · {_esc(p["degree"])} ({p["degree_year"]})'
                         f'<br>{_esc(q["achievement"])} ({years})'
                         f'<br>Sources: {_source(p["school_source"])} · {evidence}</li>')
-                details = f'<details><summary>{label}: {count} verified graduate{"s" if count != 1 else ""}</summary><ul>{"".join(rows)}</ul></details>'
+                details = f'<details><summary>Names and sources</summary><ul>{"".join(rows)}</ul></details>'
             else:
-                details = f'<p class="alumni-zero"><strong>{label}: 0.</strong> No qualifying graduates were found in the reviewed sources.</p>'
+                details = '<p class="alumni-zero">No qualifying graduates found in the reviewed sources.</p>'
             schools_html.append(f'<div class="tile tile-{school} alumni-school"><h3 class="tile-name">{label} <span>({count})</span></h3>{details}</div>')
         cards.append(f'<section class="sport alumni-card" id="{_esc(cid)}"><h2>{_esc(category["name"])}</h2>'
                      f'<p>{_esc(category["definition"])}</p><div class="tiles alumni-schools">{"".join(schools_html)}</div></section>')
@@ -254,21 +254,21 @@ def render_page(data: dict, endowment: dict, *, head_html: str, copyright_year: 
     for key, label in SCHOOLS.items():
         item = endowment["schools"][key]
         endow_cards.append(f'<div class="tile tile-{key} endowment-value"><h3 class="tile-name">{label}</h3>'
-                           f'<p class="tile-num money">${item["amount_usd"]:,}</p><p><a href="{_esc(item["source_url"])}">'
-                           f'{_esc(item["source_label"])} · {_esc(item["source_note"])}</a></p></div>')
+                           f'<p class="tile-num money">${item["amount_usd"]:,}</p>'
+                           f'<p><a href="{_esc(item["source_url"])}">Source</a></p></div>')
     return "\n".join([
         head_html, '<body>',
         '<header class="site-header"><div class="wrap"><h1>DePauw vs. Wabash</h1>',
         '<nav class="site-nav" aria-label="Main navigation"><a href="../">Athletics</a> <a href="./" aria-current="page">Alumni</a></nav>',
         '<p class="subtitle">Verified named graduates and endowment comparison</p></div></header>',
-        '<main class="wrap alumni-main"><nav class="category-nav" aria-label="Alumni categories">' + links + ' · <a href="#endowment">Endowment</a></nav>',
+        '<main class="wrap alumni-main"><nav class="category-nav" aria-label="Alumni categories"><a href="#endowment">Endowment</a> · ' + links + '</nav>',
         f'<p class="alumni-method">Counts show named graduates verified in the reviewed sources. Verified {_esc(data["verified_at"])}.</p>',
         '<details class="alumni-method-details"><summary>Who counts and how sources were reviewed</summary>'
         f'<p>{_esc(data["methodology"])} A person may appear in more than one category; each person counts once per school and category. There is no overall alumni score.</p></details>',
-        *cards,
-        f'<section class="overall endowment" id="endowment"><h2>Endowment</h2><p>{_esc(endowment["explanation"])}</p>'
-        f'<p>Fiscal year { _esc(endowment["fiscal_year"]) } · as of { _esc(endowment["as_of"]) } · {_esc(endowment["basis"])}</p>'
+        f'<section class="overall endowment" id="endowment"><h2>Endowment</h2>'
+        f'<p>Audited {_esc(endowment["fiscal_year"])} figures as of {_esc(endowment["as_of"])}; reported accounting scopes differ.</p>'
         f'<div class="tiles endowment-values">{"".join(endow_cards)}</div><p>Verified { _esc(endowment["verified_at"]) }.</p></section>',
+        *cards,
         '<p class="alumni-download">Download the curated records: <a href="../data/alumni.json">alumni.json</a> · '
         '<a href="../data/endowment.json">endowment.json</a> · <a href="../how-it-works/">How the athletics numbers work</a></p>',
         '</main>', '<footer class="site-footer"><div class="wrap"><p class="footer-links"><a href="../">Athletics</a> · '

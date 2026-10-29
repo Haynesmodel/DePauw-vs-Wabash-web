@@ -164,7 +164,8 @@ def test_build_emits_navigation_alumni_and_auditable_json(tmp_path):
     assert "Luke Messer" in page
     assert "Albert J. Beveridge" in page and "The Life of John Marshall" in page
     assert 'id="endowment"' in page and "$1,041,801,089" in page and "$442,957,416" in page
-    assert "pledges receivable" in page and "pooled endowment net assets" in page
+    assert "reported accounting scopes differ" in page
+    assert page.count(">Source</a>") == 2
     assert "FY2025" in page and "2025-06-30" in page
     assert "<script" not in page
     assert "Fortune 500 2008" in page and "#340" in page

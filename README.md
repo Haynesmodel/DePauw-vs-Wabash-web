@@ -85,7 +85,7 @@ Several games on one date pair by score first, then by order on the page. A game
 }
 ```
 
-Dates are as each school's page lists them, and scores are always DePauw-Wabash (Wabash's page is already flipped). A `same_game` pair becomes one game even when the dates or scores differ (flagged accordingly); a `different_games` pair is never matched by any pass. A ruling that matches no rows is logged as a warning and changes nothing; a malformed file stops the run before anything is written.
+Dates are as each school's page lists them, and scores are always DePauw-Wabash (Wabash's page is already flipped). A `same_game` pair becomes one game even when the dates or scores differ (flagged accordingly); a `different_games` pair is never matched by any pass. Every ruling must still find the rows it names: if a source page changes and a ruling no longer finds both of its rows, the merge for that sport fails (that sport keeps its last good data and the run turns red) instead of the ruling silently stopping. A malformed file stops the run before anything is written.
 
 The schedule pages are separate: the yearless URL (`/sports/<sport>/schedule`) always serves the current season, so nothing needs editing each year. Wabash games are found by the opponent id the site puts on each game (215 on DePauw's site, 4 on Wabash's). A game on both schedules shows as DePauw lists it, and any difference in date, time, site or status is logged as a warning; a game only Wabash lists is shown as Wabash's. If a schedule page fails to load or parse, the scraper logs a warning, keeps that school's last good upcoming games, and the run stays green, because the records never depend on it.
 
@@ -122,7 +122,7 @@ Add an entry to `scraper/sources.json`. DePauw's opponent id for Wabash is `215`
 
 `data/depauw.json` and `data/wabash.json` hold each school's games for each sport as they were read, both in DePauw's point of view (Wabash's page is flipped: wins and losses, scores, and home and away swap). `series.json` is always the merge of these two files, so a run can re-merge without fetching.
 
-`data/overrides.json` holds the rulings described above; it starts empty.
+`data/overrides.json` holds the rulings described above, each with a short reason.
 
 `data/upcoming.json` holds, per sport, the two schedule URLs and the Wabash games not yet played (`date`, `time`, `time_note`, `location`, `site`, `status`, `doubleheader`, `source`). It has no timestamp, so it changes only when the schedule does.
 

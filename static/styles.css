@@ -197,6 +197,17 @@ main { padding-block: 1.5rem 2.5rem; display: grid; gap: 1.5rem; }
 .alumni-zero, .endowment-value p { margin: 0.25rem 0; overflow-wrap: anywhere; }
 .money { overflow-wrap: anywhere; }
 
+/* Sourced admissions and student-outcome comparisons. */
+.academics-main { max-width: 62rem; }
+.academic-card h2 { margin: 0 0 0.75rem; }
+.academic-card > p { margin: 0.75rem 0 0; }
+.academic-group { color: var(--color-text-muted); font-size: 0.875rem; margin: 0 0 0.25rem !important; }
+.academic-values { margin-top: 0.75rem; }
+.academic-school { min-width: 0; }
+.academic-school .tile-name { margin: 0; }
+.academic-school p { margin: 0.25rem 0; overflow-wrap: anywhere; }
+.academic-school .tile-num { font-size: clamp(1.75rem, 6vw, 2.5rem); }
+
 @media (forced-colors: active) {
   .site-nav a[aria-current="page"] { outline: 1px solid currentColor; outline-offset: 3px; }
 }

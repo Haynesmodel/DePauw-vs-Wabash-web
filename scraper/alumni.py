@@ -259,7 +259,7 @@ def render_page(data: dict, endowment: dict, *, head_html: str, copyright_year: 
     return "\n".join([
         head_html, '<body>',
         '<header class="site-header"><div class="wrap"><h1>DePauw vs. Wabash</h1>',
-        '<nav class="site-nav" aria-label="Main navigation"><a href="../">Athletics</a> <a href="./" aria-current="page">Alumni</a></nav>',
+        '<nav class="site-nav" aria-label="Main navigation"><a href="../">Athletics</a> <a href="./" aria-current="page">Alumni</a> <a href="../academics/">Academics</a></nav>',
         '<p class="subtitle">Verified named graduates and endowment comparison</p></div></header>',
         '<main class="wrap alumni-main"><nav class="category-nav" aria-label="Alumni categories"><a href="#endowment">Endowment</a> · ' + links + '</nav>',
         f'<p class="alumni-method">Counts show named graduates verified in the reviewed sources. Verified {_esc(data["verified_at"])}.</p>',
@@ -272,7 +272,7 @@ def render_page(data: dict, endowment: dict, *, head_html: str, copyright_year: 
         '<p class="alumni-download">Download the curated records: <a href="../data/alumni.json">alumni.json</a> · '
         '<a href="../data/endowment.json">endowment.json</a> · <a href="../how-it-works/">How the athletics numbers work</a></p>',
         '</main>', '<footer class="site-footer"><div class="wrap"><p class="footer-links"><a href="../">Athletics</a> · '
-        '<a href="./" aria-current="page">Alumni</a> · <a href="../how-it-works/">How the athletics numbers work</a> · '
+        '<a href="./" aria-current="page">Alumni</a> · <a href="../academics/">Academics</a> · <a href="../how-it-works/">How the athletics numbers work</a> · '
         '<a href="https://github.com/jacksonmote/DePauw-vs-Wabash-web">Code and data on GitHub</a></p>',
         '<p>Alumni and endowment records use manually reviewed sources; athletic data has its own update record and scope.</p>',
         '<p>Unofficial fan site, not affiliated with DePauw University or Wabash College.</p>'

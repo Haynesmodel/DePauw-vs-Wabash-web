@@ -10,7 +10,7 @@ permissions:
 jobs:
   checks:
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -35,3 +35,18 @@ jobs:
 
       - name: Validate generated HTML
         run: npx --yes html-validate@11.17.0 site/index.html site/404.html site/how-it-works/index.html
+
+      # Draws every mermaid block in README.md with the Mermaid CLI, so a diagram with a syntax error fails the
+      # PR instead of showing an error box on GitHub. The CLI exits 0 when a file has no blocks, so the count
+      # is checked first. The sandbox is off because Ubuntu 24.04 runners block Chrome's; the only input is
+      # this repository's own README. Output goes to RUNNER_TEMP, never the repository.
+      - name: Check README diagrams
+        run: |
+          blocks="$(grep -c '^```mermaid' README.md || true)"
+          if [ "$blocks" -eq 0 ]; then
+            echo "README.md has no mermaid blocks; the diagrams are gone or the fence changed."
+            exit 1
+          fi
+          echo "Rendering $blocks diagram(s)."
+          echo '{"args": ["--no-sandbox"]}' > "$RUNNER_TEMP/puppeteer.json"
+          npx --yes -p @mermaid-js/mermaid-cli@11.17.0 mmdc -p "$RUNNER_TEMP/puppeteer.json" -i README.md -o "$RUNNER_TEMP/readme-diagrams.md"

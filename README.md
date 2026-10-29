@@ -38,24 +38,40 @@ Every number on the page comes from the scraped data or is calculated from it.
 
 ## How the data updates
 
-```
-depauwtigers.com/.../opponent-history/wabash/215          sports.wabash.edu/.../opponent-history/depauw-university/4
-        │  (fetched twice a day by GitHub Actions, and every 30 minutes on game day)│
-        ▼                                                          ▼
-scraper/scrape.py ── parses every game row and checks each page against its own summary
-        │            (Wabash's games are flipped to DePauw's point of view)
-        ▼
-data/depauw.json  data/wabash.json ── each school's games as read, committed only when they change
-        │            (changes to old games wait in data/pending-changes.json until approved)
-        ▼
-scraper/merge.py ── matches the two lists game by game
-        ▼
-data/series.json ── the merged record the site reads, committed only when it changes
+**How the data flows.** GitHub Actions fetches both schools' pages twice a day, and every 30 minutes while a game is being played (see "Game-day mode" below). The dotted line is the twice-a-year snapshot.
 
-both schools' /sports/<sport>/schedule pages ──► scraper/upcoming.py ──► data/upcoming.json (a problem here only logs a warning)
-                                                                   (a game that just finished stays until the history lists it)
+```mermaid
+flowchart LR
+  subgraph SRC["Sources (both schools' official sites)"]
+    DH["DePauw history pages<br/>depauwtigers.com"]
+    WH["Wabash history pages<br/>sports.wabash.edu"]
+    DS["DePauw schedule pages"]
+    WS["Wabash schedule pages"]
+  end
 
-        └── series.json and upcoming.json ──► scraper/render.py ── builds the static site in site/ and deploys it to GitHub Pages
+  DH --> P["scrape.py<br/>parse each page, check it<br/>against its own summary"]
+  WH -- "flipped to DePauw's view" --> P
+  P -- "page fails a check" --> K["keep that school's<br/>last good games"]
+  P --> R["review.py<br/>review hold: changes to<br/>past seasons are held"]
+  R -- "held" --> PC[("pending-changes.json")]
+  PC --> RI["review_issue.py<br/>data-review issue"]
+  R --> DJ[("depauw.json")]
+  R --> WJ[("wabash.json")]
+  K --> DJ
+  K --> WJ
+  DJ --> M["merge.py<br/>match games, flag disputes"]
+  WJ --> M
+  OV[("overrides.json<br/>hand rulings")] --> M
+  M --> SJ[("series.json")]
+  DS --> U["upcoming.py<br/>run by scrape.py,<br/>merges both schedules"]
+  WS --> U
+  U --> UJ[("upcoming.json")]
+  SJ --> RN["render.py<br/>with facts, meetings, gameday,<br/>howitworks, images"]
+  UJ --> RN
+  OV --> RN
+  RN --> SITE["site/<br/>home page, how-it-works, 404,<br/>games.csv, og-image, icons"]
+  SITE --> GP["GitHub Pages<br/>depauwvswabash.com"]
+  SJ -.-> SN["snapshot.yml (Jul 1, Jan 2)<br/>data files go to a GitHub<br/>Release, source pages go<br/>to the Wayback Machine"]
 ```
 
 Each school's page for a sport is accepted only when its parsed wins, losses, ties, home/away records and current streak match that page's own summary, the page is for the right opponent, and its game count has not shrunk against that school's saved copy. Doubleheaders count as two games. If any check fails, that school keeps its last good games for that sport, the merge is redone from the two saved copies, and the run turns red; everything that passed still updates. A page that passes is then checked for changes to old games, which are held for review (see "Review hold" below). Requests identify the project in the User-Agent and are spaced a few seconds apart.
@@ -93,6 +109,38 @@ Several games on one date pair by score first, then by order on the page. A game
 Dates are as each school's page lists them, and scores are always DePauw-Wabash (Wabash's page is already flipped). A `same_game` pair becomes one game even when the dates or scores differ (flagged accordingly); a `different_games` pair is never matched by any pass. Every ruling must still find the rows it names: if a source page changes and a ruling no longer finds both of its rows, the merge for that sport fails (that sport keeps its last good data and the run turns red) instead of the ruling silently stopping. A malformed file stops the run before anything is written.
 
 The same file also holds `keep_previous` rulings, which reject a school's edit to an old game (see "Review hold" below). They take no part in the merge.
+
+### Workflows
+
+Three GitHub Actions workflows live in `.github/workflows/`:
+
+| Workflow | Runs when | What it does |
+|---|---|---|
+| `update-and-deploy.yml` | Twice a day, every 30 minutes (ended at once by the gate unless a game is being played), on every push to `main`, and by hand | Scrapes both schools' pages, applies the review hold, merges, commits `data/` changes, renders the site, deploys it to GitHub Pages and keeps the `data-review` issue in step |
+| `checks.yml` | On every pull request to `main` | Runs the tests, renders the site, validates the generated HTML and renders every Mermaid diagram in this README |
+| `snapshot.yml` | July 1 and January 2, and by hand | Saves a GitHub Release with copies of the data files (skipped when nothing changed) and asks the Wayback Machine to save the source pages |
+
+What each run of `update-and-deploy.yml` does:
+
+```mermaid
+flowchart TD
+  T1["Twice daily<br/>(about 6:19 AM and 11:47 PM ET)"] --> G
+  T2["Every 30 minutes"] --> G
+  T3["Push to main"] --> G
+  T4["Manual run<br/>(options: allow shrink,<br/>apply reviewed changes)"] --> G
+  G{"gate job<br/>30-minute run with no<br/>game-day window open?"}
+  G -- "yes" --> X["Stop here:<br/>no scrape, no commit, no deploy"]
+  G -- "no" --> B["build: run tests and scrape<br/>(each can fail without<br/>stopping the other)"]
+  B --> C{"data/ changed?"}
+  C -- "yes" --> CM["github-actions bot<br/>commits data to main"]
+  C -- "no" --> RD
+  CM --> RD["render site/"]
+  RD --> D["deploy to GitHub Pages"]
+  B --> IS["issues: open, update or close<br/>the data-review issue"]
+  B -- "a test or sport failed" --> RP["report: run shows red<br/>(site still deployed<br/>with last good data)"]
+```
+
+The schedule times are written in UTC in the workflow, so they shift by an hour with daylight saving time (the times above are for Eastern daylight time; in winter the daily runs are about 5:19 AM and 10:47 PM). GitHub can also delay or drop scheduled runs.
 
 ### Why the merge works this way
 
@@ -181,6 +229,25 @@ A schedule page can post the final score before the history page lists the game,
 
 The banner phases come from the same files: before the start, after the start until the history has the result, and final. The banner shows for the calendar day only (Eastern); it goes away at the first deploy after midnight, the regular 6:19 AM run at the latest, even if the window stays open until 3 AM so the result is still scraped.
 
+The phases of a game day:
+
+```mermaid
+stateDiagram-v2
+  direction LR
+  [*] --> Normal
+  Normal --> Pregame: first deploy on game day
+  Pregame --> Underway: start time, or noon if TBA
+  Underway --> Final: every result is on a history page
+  Underway --> Late: midnight ET with no result yet
+  Late --> Normal: result arrives or 3 AM ET
+  Final --> Normal: first deploy after midnight ET
+  Pregame: Pregame - banner shows time and site
+  Underway: Underway - banner says underway or just finished, 30-minute runs scrape
+  Final: Final - banner shows the final score, 30-minute runs stop at the gate
+  Late: Late result - no banner, 30-minute runs still scrape
+  Normal: Normal - no banner, 30-minute runs stop at the gate
+```
+
 The build and deploy jobs each have their own concurrency group (`cancel-in-progress: false`), so a run that is already going is never cancelled, and the gate job, which every frequent run starts with, is in neither group. To preview game day locally without waiting, render as if it were another time: `python scraper/render.py --now 2026-11-14T13:30` (Eastern unless the time has an offset). `--now` is for previews and tests only and is never used by the workflow.
 
 The site is plain HTML and CSS with no JavaScript.
@@ -240,6 +307,7 @@ python scraper/render.py             # build the site into site/ (including /how
 python scraper/render.py --now 2026-11-14T13:30   # preview game-day mode as if it were this Eastern time
 python scraper/gameday.py gate --schedule "7,37 * * * *" --now 2026-11-14T14:00:00-05:00   # what the game-day gate would decide
 python -m http.server 8000 -d site   # preview at http://localhost:8000
+npx --yes -p @mermaid-js/mermaid-cli@11.17.0 mmdc -i README.md -o <temp folder>/readme-diagrams.md   # draw the README diagrams (what the PR check does); keep the output outside the repo
 ```
 
 `site/` is build output and is not committed.

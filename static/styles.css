@@ -123,6 +123,8 @@ main { padding-block: 1.5rem 2.5rem; display: grid; gap: 1.5rem; }
 .facts dt { color: var(--color-text-muted); font-size: 0.875rem; }
 .facts dd { margin: 0; font-weight: 600; overflow-wrap: anywhere; }
 .source { margin: 1rem 0 0; font-size: 0.9375rem; }
+.provenance { margin: 1rem 0 0; color: var(--color-text-muted); font-size: 0.9375rem; }
+.date-note, .alt-score, .game-flag { color: var(--color-text-muted); font-size: 0.875rem; font-weight: 400; }
 
 /* Game list */
 .games { margin-top: 1.25rem; border-top: 1px solid var(--color-border); padding-top: 0.75rem; }

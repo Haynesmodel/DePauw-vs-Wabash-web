@@ -55,22 +55,6 @@ def validate(data: dict) -> dict:
             _text(metric.get(school), f"metric {mid}.{school}")
             _text(metric.get(f"{school}_detail"), f"metric {mid}.{school}_detail")
             _source(metric.get(f"{school}_source"), f"metric {mid}.{school}_source")
-    faculty = data.get("faculty")
-    if not isinstance(faculty, dict):
-        raise AcademicsError("academics.faculty must be an object")
-    for school, _ in SCHOOLS:
-        item = faculty.get(school)
-        if not isinstance(item, dict):
-            raise AcademicsError(f"academics.faculty.{school} must be an object")
-        for field in ("value", "population"):
-            _text(item.get(field), f"academics.faculty.{school}.{field}")
-        _source(item.get("source"), f"academics.faculty.{school}.source")
-    _text(faculty.get("note"), "academics.faculty.note")
-    awards = faculty.get("awards")
-    if not isinstance(awards, list) or not awards:
-        raise AcademicsError("academics.faculty.awards must be a non-empty list")
-    for i, award in enumerate(awards):
-        _source(award, f"academics.faculty.awards[{i}]")
     return data
 
 
@@ -94,15 +78,6 @@ def render_page(data: dict, *, head_html: str, copyright_year: int = 2026) -> st
             f'<p class="academic-group">{_esc(metric["group"])}</p><h2>{_esc(metric["name"])}</h2>'
             f'<div class="tiles academic-values">{"".join(school_tiles)}</div>'
             f'<p>{_esc(metric["interpretation"])}</p></section>')
-    faculty = data["faculty"]
-    faculty_tiles = []
-    for school, label in SCHOOLS:
-        item = faculty[school]
-        faculty_tiles.append(
-            f'<div class="tile tile-{school} academic-school"><h3 class="tile-name">{label}</h3>'
-            f'<p class="tile-num">{_esc(item["value"])}</p><p>{_esc(item["population"])}</p>'
-            f'<p><a href="{_esc(item["source"]["url"])}">{_esc(item["source"]["label"])}</a></p></div>')
-    award_links = " · ".join(f'<a href="{_esc(a["url"])}">{_esc(a["label"])}</a>' for a in faculty["awards"])
     return "\n".join([
         head_html, "<body>",
         '<header class="site-header"><div class="wrap"><h1>DePauw vs. Wabash</h1>',
@@ -112,12 +87,9 @@ def render_page(data: dict, *, head_html: str, copyright_year: int = 2026) -> st
         '<main class="wrap academics-main">',
         '<nav class="category-nav" aria-label="Academic categories">'
         + " · ".join(f'<a href="#{_esc(m["id"])}">{_esc(m["name"])}</a>' for m in data["metrics"])
-        + ' · <a href="#faculty">Faculty</a></nav>',
+        + '</nav>',
         f'<p class="alumni-method">{_esc(data["methodology"])} Verified {_esc(data["verified_at"])}.</p>',
         *cards,
-        '<section class="sport academic-card" id="faculty"><h2>Faculty credentials and awards</h2>',
-        f'<div class="tiles academic-values">{"".join(faculty_tiles)}</div>',
-        f'<p>{_esc(faculty["note"])}</p><p>Explore each school’s award programs: {award_links}.</p></section>',
         '<p class="alumni-download">Download the reviewed figures: <a href="../data/academics.json">academics.json</a></p>',
         '</main>',
         '<footer class="site-footer"><div class="wrap"><p class="footer-links"><a href="../">Athletics</a> · '

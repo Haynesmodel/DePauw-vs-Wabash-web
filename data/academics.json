@@ -63,14 +63,5 @@
       "depauw_source": {"label": "DePauw 2025–26 Common Data Set, section B", "url": "https://www.depauw.edu/files/resources/depauw-cds-b-2526.pdf"},
       "wabash_source": {"label": "Wabash 2025–26 Common Data Set", "url": "https://www.wabash.edu/institutional_research/docs/cds-2025-2026.xlsx"}
     }
-  ],
-  "faculty": {
-    "depauw": {"value": "99%", "population": "Tenure-track faculty holding a Ph.D. or highest degree", "source": {"label": "DePauw Quick Facts", "url": "https://www.depauw.edu/about/quick-facts/"}},
-    "wabash": {"value": "99%", "population": "Full-time faculty holding a Ph.D. or equivalent terminal degree", "source": {"label": "Wabash Facts & Figures", "url": "https://www.wabash.edu/aboutwabash/facts"}},
-    "awards": [
-      {"label": "DePauw faculty awards and fellowships", "url": "https://www.depauw.edu/offices/academic-affairs/faculty-development/awards-and-fellowships/"},
-      {"label": "Wabash Excellence in Teaching Award", "url": "https://blog.wabash.edu/teachingandlearning/news/mma-teaching-award/"}
-    ],
-    "note": "Both schools report 99% on faculty credentials, but the populations and wording differ. Faculty award programs also use different categories, so their counts are not ranked here."
-  }
+  ]
 }

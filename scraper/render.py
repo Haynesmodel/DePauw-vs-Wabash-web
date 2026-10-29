@@ -13,6 +13,7 @@ a blank or half-true page.
 Usage:
   python scraper/render.py                      # data/series.json -> site/
   python scraper/render.py --data FILE --out DIR
+  python scraper/render.py --now 2026-11-14T13:30     # preview game-day mode as if it were this Eastern time
 """
 
 from __future__ import annotations
@@ -30,9 +31,11 @@ from pathlib import Path
 from urllib.parse import quote, urlparse
 
 import facts
+import gameday
 import images
 import meetings
 import places
+from timeutil import from_eastern, to_eastern
 
 ROOT = Path(__file__).resolve().parent.parent
 DATA = ROOT / "data" / "series.json"
@@ -153,23 +156,6 @@ def game_words(s: dict) -> tuple:
 
 def count_noun(n: int, words: tuple) -> str:
     return f"{n:,} {words[0] if n == 1 else words[1]}"
-
-
-def _nth_sunday(year: int, month: int, n: int) -> int:
-    first = dt.date(year, month, 1)
-    return 1 + (6 - first.weekday()) % 7 + 7 * (n - 1)
-
-
-def to_eastern(utc: dt.datetime) -> tuple[dt.datetime, str]:
-    """UTC -> US Eastern with the current US DST rule (second Sunday of March to first
-    Sunday of November). Hand-coded because zoneinfo needs the tzdata package on Windows."""
-    utc = utc.astimezone(dt.timezone.utc)
-    y = utc.year
-    start = dt.datetime(y, 3, _nth_sunday(y, 3, 2), 7, tzinfo=dt.timezone.utc)   # 2:00 EST
-    end = dt.datetime(y, 11, _nth_sunday(y, 11, 1), 6, tzinfo=dt.timezone.utc)   # 2:00 EDT
-    if start <= utc < end:
-        return utc + dt.timedelta(hours=-4), "EDT"
-    return utc + dt.timedelta(hours=-5), "EST"
 
 
 def copyright_line(now: dt.datetime | None = None) -> str:
@@ -361,7 +347,7 @@ THEME_LIGHT, THEME_DARK = "#111111", "#000000"   # the header band's color in ea
 BACKGROUND = "#f6f4ee"                           # the page's light-mode background
 
 
-def preview_info(data: dict) -> dict:
+def preview_info(data: dict, label: str | None = None) -> dict:
     """What the share card shows, all from the data: the totals and the current Monon Bell holder. The
     image URL carries a version that changes only when those do, so chat apps refetch a new picture."""
     t = data["totals"]
@@ -370,8 +356,9 @@ def preview_info(data: dict) -> dict:
     holder = bell["holder"] if bell else None
     alt = (f"DePauw vs. Wabash all-time totals: DePauw {t['depauw_wins']:,} wins, "
            f"Wabash {t['wabash_wins']:,} wins" + (f", {plural(t['ties'], 'tie')}" if t["ties"] else "") + "."
-           + (f" {holder} holds the Monon Bell." if holder else ""))
-    return {"image": f"{SITE_URL}og-image.png?v={images.og_version(t, holder)}", "alt": alt, "holder": holder}
+           + (f" {holder} holds the Monon Bell." if holder else "") + (f" {label}." if label else ""))
+    return {"image": f"{SITE_URL}og-image.png?v={images.og_version(t, holder, label)}", "alt": alt,
+            "holder": holder, "label": label}
 
 
 def render_manifest() -> str:
@@ -716,6 +703,59 @@ def next_meeting_section(per_sport: dict, pending: dict, sports: dict, today: dt
                       heading(2, "next-meeting", "Next meeting"), *lines, '</section>'])
 
 
+def game_day_text(e: dict, sports: dict, several: bool) -> str:
+    """One banner line for a sport playing today. `several` is true when the banner covers more than one
+    sport, which is when a final score needs the sport's name to be understood."""
+    name = e["name"]
+    if e["phase"] == gameday.FINAL:
+        scores = " and ".join(score_text(g) for g in e["results"])
+        return f"Final, {name}: {scores}" if several else f"Final: {scores}"
+    if e["phase"] == gameday.UNDERWAY:
+        return (f"{name} vs. Wabash is underway or just finished. "
+                "The result will appear here soon after it's posted.")
+    games = e["games"]
+    sites = " / ".join(dict.fromkeys(meeting_site(g) for g in games))
+    if len(games) == 1:
+        when = games[0].get("time") or "time TBA"
+        what = ""
+    else:
+        when = join_and([g.get("time") or "TBA" for g in games])
+        what = " (doubleheader)" if len(games) == 2 else f" ({len(games)} games)"
+    return f"Game day: {name} vs. Wabash today{what}, {when} · {sites}"
+
+
+def bell_holder_sentence(e: dict, sports: dict) -> str:
+    """After a football final, who holds the Monon Bell now ("" for any other sport)."""
+    if e["key"] != "football":
+        return ""
+    b = facts.bell(sports["football"]["games"])
+    return f"{b['holder']} holds the Monon Bell." if b and b["holder"] else ""
+
+
+def game_day_html(entries: list, sports: dict) -> str:
+    """The game-day banner above everything else; empty (nothing at all) when no game is being played today.
+    A final score links to its sport's card."""
+    if not entries:
+        return ""
+    several = len(entries) > 1
+    lines = []
+    for e in entries:
+        text = esc(game_day_text(e, sports, several))
+        if e["phase"] == gameday.FINAL:
+            bell = bell_holder_sentence(e, sports)
+            text = f'<a href="#{esc(e["key"])}">{text}</a>' + (f" · {esc(bell)}" if bell else "")
+        lines.append(f'<p class="game-day-line">{text}</p>')
+    return "\n".join(['<section class="game-day" id="game-day" aria-label="Game day">', *lines, '</section>'])
+
+
+def game_day_label(entries: list) -> str | None:
+    """The small line on the share image while the banner shows: "Final" once every game today has its
+    result, "Game day" until then, nothing when there is no banner."""
+    if not entries:
+        return None
+    return "Final" if all(e["phase"] == gameday.FINAL for e in entries) else "Game day"
+
+
 def footer_source(key: str, s: dict, up: dict | None) -> str:
     links = page_links(s, up)
     if not s.get("wabash_source_url"):                  # one school's page only: the older, shorter form
@@ -744,9 +784,11 @@ def render_index(data: dict, checked: str | None = None, now: dt.datetime | None
             upcoming.get(key, {}).get("games", []), s["games"], today)
 
     sources = "\n".join(footer_source(k, s, upcoming.get(k)) for k, s in sports.items())
+    today_games = gameday.todays_games(now, upcoming, sports)
 
     return "\n".join([
-        head(TITLE, description, prefix="", canonical=SITE_URL, preview=preview_info(data)),
+        head(TITLE, description, prefix="", canonical=SITE_URL,
+             preview=preview_info(data, game_day_label(today_games))),
         '<body>',
         '<header class="site-header">',
         '<div class="wrap">',
@@ -755,6 +797,7 @@ def render_index(data: dict, checked: str | None = None, now: dt.datetime | None
         '</div>',
         '</header>',
         '<main class="wrap">',
+        game_day_html(today_games, sports),
         next_meeting_section(ahead, pending, sports, today),
         '<section class="overall" aria-labelledby="overall-h">',
         '<h2 id="overall-h">All sports combined</h2>',
@@ -869,8 +912,9 @@ def build(data_path: Path, out: Path, *, checked_at: str | None = None,
     for asset in ("styles.css", "favicon.svg"):
         shutil.copyfile(STATIC / asset, out / asset)
     # Images are drawn at build time from the bundled font, so every deploy has a card that matches the data.
-    info = preview_info(data)
-    (out / "og-image.png").write_bytes(images.og_image(data["totals"], info["holder"]))
+    when = now or dt.datetime.now(dt.timezone.utc)
+    info = preview_info(data, game_day_label(gameday.todays_games(when, upcoming, data["sports"])))
+    (out / "og-image.png").write_bytes(images.og_image(data["totals"], info["holder"], info["label"]))
     (out / "apple-touch-icon.png").write_bytes(images.icon_png(180))
     (out / "favicon-32.png").write_bytes(images.icon_png(32))
     (out / "icon-192.png").write_bytes(images.icon_png(192))
@@ -878,6 +922,15 @@ def build(data_path: Path, out: Path, *, checked_at: str | None = None,
     (out / "icon-maskable-512.png").write_bytes(images.icon_png(512, maskable=True))
     (out / "data").mkdir()
     shutil.copyfile(data_path, out / "data" / "series.json")  # the data file as-is
+
+
+def parse_now(text: str | None) -> dt.datetime | None:
+    """The --now value as an aware UTC time: a time with an offset is taken as given, one without as
+    Eastern. None (the default) means the real clock."""
+    if not text:
+        return None
+    t = dt.datetime.fromisoformat(text)
+    return t.astimezone(dt.timezone.utc) if t.tzinfo else from_eastern(t)
 
 
 def main(argv=None) -> int:
@@ -888,10 +941,13 @@ def main(argv=None) -> int:
                     help="upcoming meetings from the schedule pages (optional)")
     ap.add_argument("--checked-file", type=Path, default=CHECKED_AT,
                     help="file holding the time of the last successful scrape (optional)")
+    ap.add_argument("--now", help="pretend it is this time, for local previews and tests only (never used by "
+                                  "the workflow): an ISO time, with an offset or, without one, Eastern, "
+                                  "e.g. 2026-11-14T09:00")
     args = ap.parse_args(argv)
     try:
         build(args.data, args.out, checked_at=read_checked(args.checked_file),
-              upcoming_path=args.upcoming)
+              upcoming_path=args.upcoming, now=parse_now(args.now))
     except (DataError, KeyError, TypeError, ValueError, AttributeError) as exc:
         print(f"render failed: {exc!r}", file=sys.stderr)
         return 1

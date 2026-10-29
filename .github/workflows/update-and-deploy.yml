@@ -5,6 +5,10 @@ on:
     # Twice a day (UTC): about 6:19 AM and 11:47 PM Eastern, so late games land the same night.
     - cron: "19 10 * * *"
     - cron: "47 3 * * *"
+    # Game-day mode: every 30 minutes, at jittered minutes. The "gate" job below ends these runs at once
+    # unless a DePauw vs. Wabash game is being played (see scraper/gameday.py). The string must match
+    # FREQUENT_CRON in scraper/gameday.py; a test checks that.
+    - cron: "7,37 * * * *"
   push:
     branches: [main]
   workflow_dispatch:
@@ -19,17 +23,47 @@ permissions:
 
 # Scrape, render and deploy live in one workflow on purpose: a commit pushed with GITHUB_TOKEN
 # does not trigger other workflows, so a separate deploy workflow would never run.
-concurrency:
-  group: update-and-deploy
-  cancel-in-progress: false
+#
+# Concurrency is set on the jobs that change things (build, deploy), not on the whole workflow, so a
+# frequent run that the gate ends at once never queues behind or replaces a waiting push or scheduled run.
+# Nothing is ever cancelled once it is running.
 
 jobs:
+  gate:
+    # Decides whether this run does the real work. Only the frequent game-day schedule can say no; every
+    # other trigger (the two daily schedules, a push to main, a manual run) always runs. Reads only the
+    # committed data files with the runner's own Python: no dependencies, no scrape, no commit, no deploy.
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    permissions:
+      contents: read
+    outputs:
+      run: ${{ steps.gate.outputs.run }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: main
+          sparse-checkout: |
+            data
+            scraper
+
+      - name: Is a game being played?
+        id: gate
+        env:
+          SCHEDULE: ${{ github.event.schedule }}
+        run: python3 scraper/gameday.py gate --schedule "$SCHEDULE"
+
   build:
-    # Every run (schedule, manual and push) scrapes, so every deploy carries a fresh "Last checked".
+    # Every run that gets past the gate scrapes, so every deploy carries a fresh "Last checked".
     # The scrape and the render share one job because the check time is an uncommitted file
     # (.checked-at) that only exists on this runner. A GITHUB_TOKEN push does not start another run.
+    needs: gate
+    if: ${{ needs.gate.outputs.run == 'true' }}
     runs-on: ubuntu-latest
     timeout-minutes: 15
+    concurrency:
+      group: update-and-deploy
+      cancel-in-progress: false
     permissions:
       contents: write
     outputs:
@@ -101,6 +135,9 @@ jobs:
     if: ${{ !cancelled() && needs.build.result == 'success' && github.ref == 'refs/heads/main' }}
     runs-on: ubuntu-latest
     timeout-minutes: 10
+    concurrency:
+      group: pages
+      cancel-in-progress: false
     permissions:
       pages: write
       id-token: write

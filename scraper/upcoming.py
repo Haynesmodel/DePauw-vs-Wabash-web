@@ -100,7 +100,23 @@ def _site(li) -> Optional[str]:
     return site.replace("; ", ", ")
 
 
-def parse_schedule(html: str, *, opponent_id: int) -> list:
+def _game_date(li, season_year) -> Optional[str]:
+    """The ISO date of one schedule row, or None when it cannot be read (the caller decides whether to warn)."""
+    spans = [_text(s) for s in li.select(".sidearm-schedule-game-opponent-date > span")]
+    m = DATE_RE.match(spans[0]) if spans else None
+    if not m or m.group(1) not in MONTHS:
+        return None
+    month, day = MONTHS[m.group(1)], int(m.group(2))
+    year = _year_for(month, day, m.group(3), li, season_year)
+    try:
+        return dt.date(year, month, day).isoformat() if year else None
+    except ValueError:
+        return None
+
+
+def parse_schedule(html: str, *, opponent_id: int, canceled: Optional[list] = None) -> list:
+    """The games against one opponent that have no result and are not canceled. When `canceled` is a list,
+    the dates of the canceled games are appended to it (scrape.py needs them to stop carrying a game over)."""
     soup = BeautifulSoup(html, "html.parser")
     container = soup.select_one("ul.sidearm-schedule-games-container")
     if container is None:
@@ -116,6 +132,8 @@ def parse_schedule(html: str, *, opponent_id: int) -> list:
         header = _text(li.select_one(".sidearm-schedule-game-opponent-date"))
         tail = f"{status} {header} {' '.join(li.get('class', []))}"
         if CANCELED_RE.search(tail):
+            if canceled is not None and (when := _game_date(li, season_year)):
+                canceled.append(when)
             continue
         # A finished game has a result in the history page; the schedule only repeats it.
         classes = li.get("class", [])
@@ -236,3 +254,42 @@ def merge_schedules(label: str, depauw: list, wabash: list) -> tuple:
             warnings.append(f"{label} {gw['date']}: only on Wabash's schedule; showing it as Wabash's")
             merged.append({**gw, "source": "wabash"})
     return sorted(merged, key=lambda g: g["date"]), warnings
+
+
+# --------------------------------------------------------------------------- #
+# A game that has just finished
+# --------------------------------------------------------------------------- #
+
+CARRY_DAYS = 1
+
+
+def _clock_key(g: dict):
+    return g.get("time") or ""
+
+
+def carry_over(old: list, new: list, *, history_dates: list, canceled: set, today: dt.date) -> list:
+    """Games from the last run that the schedule pages no longer list but the history does not have yet.
+
+    A school's schedule page can show the final score before its history page does. The scraper drops a
+    finished game, so without this the game would vanish from data/upcoming.json while it is still missing
+    from the records, and the game-day job (which reads that file) would stop checking for the result.
+    A game is carried only when it is dated today or yesterday (Eastern), it is no longer on the schedule
+    (matched by date and start time) and the history has fewer games on that date than have dropped off,
+    so for a doubleheader only the game that dropped off and is still missing is carried. A canceled game (`canceled`: dates the schedule marks canceled) is
+    never carried. After CARRY_DAYS it is dropped even if the result never arrives, so nothing lingers."""
+    out = []
+    for date in sorted({g["date"] for g in old}):
+        age = (today - dt.date.fromisoformat(date)).days
+        if not 0 <= age <= CARRY_DAYS or date in canceled:
+            continue
+        still = [_clock_key(g) for g in new if g["date"] == date]
+        dropped = []
+        for g in [g for g in old if g["date"] == date]:
+            if _clock_key(g) in still:
+                still.remove(_clock_key(g))     # this one is still on the schedule
+            elif g.get("status") != "postponed":
+                dropped.append(g)
+        waiting = len(dropped) - sum(1 for d in history_dates if d == date)   # dropped but not in the history yet
+        if waiting > 0:
+            out.extend(dropped[len(dropped) - waiting:])
+    return out

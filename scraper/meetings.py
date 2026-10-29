@@ -46,7 +46,9 @@ def load_upcoming(path: Path | None) -> dict:
 def split_games(games: list, history: list, today: dt.date) -> tuple[list, list]:
     """Return (ahead, pending) for one sport.
 
-    ahead   - games dated today or later, in date order (postponed ones are kept and marked).
+    ahead   - games dated today or later, in date order (postponed ones are kept and marked), except a
+              game the history already has: one played today is a result, not a meeting still ahead. For a
+              doubleheader with one game in the history, the first listed is the played one.
     pending - games from the last PENDING_DAYS days that are not in the history yet. A date counts as
               reported when the history has at least as many games on it as the schedule lists, so a
               doubleheader is not hidden by its first game.
@@ -55,7 +57,12 @@ def split_games(games: list, history: list, today: dt.date) -> tuple[list, list]
     for h in history:
         on_date[h["date"]] = on_date.get(h["date"], 0) + 1
 
-    ahead = sorted((g for g in games if dt.date.fromisoformat(g["date"]) >= today), key=lambda g: g["date"])
+    ahead, played = [], dict(on_date)
+    for g in sorted((g for g in games if dt.date.fromisoformat(g["date"]) >= today), key=lambda g: g["date"]):
+        if g.get("status") != "postponed" and played.get(g["date"], 0) > 0:
+            played[g["date"]] -= 1       # the history already has this game (it was played today): not "ahead"
+            continue
+        ahead.append(g)
     past = [g for g in games
             if g.get("status") != "postponed"          # a postponed game has no result to wait for
             and today - dt.timedelta(days=PENDING_DAYS) <= dt.date.fromisoformat(g["date"]) < today]

@@ -47,6 +47,7 @@ from bs4 import BeautifulSoup
 
 import merge
 import upcoming
+from timeutil import to_eastern
 
 ROOT = Path(__file__).resolve().parent.parent
 SOURCES = Path(__file__).resolve().parent / "sources.json"
@@ -467,14 +468,31 @@ def report_merge(name: str, result) -> None:
               f"{', same score' if m['same_score'] else ''}); not merged")
 
 
-def scrape_schedules(cfg: dict, previous: dict, fixtures: Optional[Path], pacer: Pacer) -> dict:
+def _carry(entry: dict, old: dict, history_dates: Optional[list], today: Optional[dt.date], canceled: list,
+           name: str) -> None:
+    """Keep a game that just finished on the schedule file until the history has it (changes `entry`)."""
+    if history_dates is None or today is None:
+        return
+    kept = upcoming.carry_over(old.get("games", []), entry["games"], history_dates=history_dates,
+                               canceled=set(canceled), today=today)
+    if kept:
+        entry["games"] = sorted(entry["games"] + kept, key=lambda g: g["date"])
+        print(f"INFO {name}: keeping {len(kept)} finished game(s) on the schedule until the history lists them")
+
+
+def scrape_schedules(cfg: dict, previous: dict, fixtures: Optional[Path], pacer: Pacer,
+                     history: Optional[dict] = None, today: Optional[dt.date] = None) -> dict:
     """Upcoming Wabash games per sport, from both schools' schedule pages. Never raises: a schedule
-    problem is a warning, and a school whose page did not load keeps its games from the last run."""
+    problem is a warning, and a school whose page did not load keeps its games from the last run.
+
+    `history` (sport key -> the merged game dates) and `today` (Eastern) switch on the carry-over of a game
+    that has just finished (see upcoming.carry_over): the game stays in the file until the history has it."""
     sports = dict(previous)
     for sport in cfg["sports"]:
         key = sport["key"]
         old = previous.get(key, {})
         got: dict = {}
+        canceled: list = []
         for school in ("depauw", "wabash"):
             sc = school_cfg(cfg, school)
             path = sport.get(sc["schedule"])
@@ -490,7 +508,7 @@ def scrape_schedules(cfg: dict, previous: dict, fixtures: Optional[Path], pacer:
                 else:
                     pacer.wait()
                     html = fetch(url)
-                games = upcoming.parse_schedule(html, opponent_id=sc["opponent_id"])
+                games = upcoming.parse_schedule(html, opponent_id=sc["opponent_id"], canceled=canceled)
                 if school == "wabash":
                     games = [upcoming.flip_location(g) for g in games]
                 got[school] = (url, games)
@@ -506,12 +524,14 @@ def scrape_schedules(cfg: dict, previous: dict, fixtures: Optional[Path], pacer:
                                             [g for g in kept if g.get("source") in ("both", "wabash")]))
         if not w_url:                                   # Wabash's schedule is not part of this sport yet
             sports[key] = {"schedule_url": d_url, "games": d_games}
+            _carry(sports[key], old, (history or {}).get(key), today, canceled, sport["name"])
             continue
         try:
             games, warnings = upcoming.merge_schedules(sport["name"], d_games, w_games)
             for w in warnings:
                 print(f"WARN {w}", file=sys.stderr)
             sports[key] = {"schedule_url": d_url, "wabash_schedule_url": w_url, "games": games}
+            _carry(sports[key], old, (history or {}).get(key), today, canceled, sport["name"])
         except Exception as exc:
             print(f"WARN {sport['name']:<16} schedules not merged: {exc}", file=sys.stderr)
     return {k: sports[k] for k in (s["key"] for s in cfg["sports"]) if k in sports}
@@ -604,7 +624,9 @@ def main(argv=None) -> int:
             write_if_changed(args.output, out)
 
     old_upcoming = json.loads(args.upcoming_output.read_text(encoding="utf-8")) if args.upcoming_output.exists() else {}
-    new_upcoming = scrape_schedules(cfg, old_upcoming.get("sports", {}), args.fixtures, pacer)
+    history = {k: [g["date"] for g in v["games"] if g.get("date_known", True)] for k, v in out["sports"].items()}
+    new_upcoming = scrape_schedules(cfg, old_upcoming.get("sports", {}), args.fixtures, pacer,
+                                    history=history, today=to_eastern(now_utc())[0].date())
     if new_upcoming != old_upcoming.get("sports", {}) and not args.dry_run:
         write_if_changed(args.upcoming_output, {"schema_version": 1, "sports": new_upcoming})
 

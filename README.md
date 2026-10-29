@@ -23,6 +23,7 @@ Unofficial fan site, not affiliated with DePauw University or Wabash College. On
 - **Both schools' records, merged.** Each card says where its record comes from ("Combined from DePauw and Wabash records: 140 games listed by both, 174 by Wabash only, 1 by DePauw only, 0 disputed", or "DePauw and Wabash records agree"). In the game list, a game only one school lists is marked "Wabash record only" or "DePauw record only". When the schools disagree on a score or winner, DePauw's version is the one counted and the game shows both, each labelled with whose record it is and in DePauw-Wabash order ("DePauw's record (DePauw-Wabash): 12-5 · Wabash's record (DePauw-Wabash): 11-5"). Games with no usable date (Wabash's oldest games sit on placeholder dates, and a date in a month the sport is not played in is treated the same way) show their season or year and "date not recorded", are listed first within their season, and never count as the "most recent" game. The 1954 basketball tie is footnoted because both schools list it.
 - **Last checked.** The footer shows when the data last changed and when the scraper last reached the source pages, both in Eastern time, so you can tell the twice-daily job is still running.
 - **Next meeting.** The soonest upcoming game across all sports sits near the top, and each card shows its sport's next meeting (time or "TBA", postponed games marked, "Result pending" when a played game is not on the history page yet). Both schools' schedule pages are read; a game only Wabash's schedule lists is shown and says so. Several games on one date (a doubleheader) show as one meeting with every start time ("Doubleheader · 12:00 PM and 3:30 PM"; a game without a time says TBA). In the off-season there is simply nothing to show.
+- **Game day.** On a day DePauw plays Wabash in any sport, a banner at the very top says so: "Game day: Football vs. Wabash today, 1:07 PM · Scheumann Stadium, Muncie, Ind." until the start, "... is underway or just finished" after it, and "Final: DePauw 41, Wabash 20" (winner first, linking to the sport's card, with who holds the Monon Bell for football) once the result is in. Two sports on one day share one banner. The link preview card gets a small "Game day" or "Final" label while the banner shows. The banner is plain HTML written at each deploy and is gone at the first deploy after game day.
 - **Monon Bell.** The football card has a Monon Bell block: the record in games from the 1932 season on, who holds the Bell and since when (a tie leaves the Bell where it was, and the run says how many wins and ties it holds), and a short history with a link to [Wikipedia](https://en.wikipedia.org/wiki/Monon_Bell).
 - **Fun facts** on each card, calculated from the games: biggest win and longest win streak for each school (a record several games share reads like "DePauw 9, Wabash 0 · by 9 matches (36 times, most recently Apr 24, 2026)"), one-score games (8 points in football, 3 in basketball, 1 run, goal or match elsewhere), the highest-scoring game, and overtime or extra-inning games. Sports that meet more than once a year (at least one season in five with two or more games) also get a season-by-season list. A fact that makes no sense for a sport is left out; ties never count as wins.
 - **Direct links.** Each card has an id from its key in `sources.json` (`#football`, `#mens-basketball`, ...), plus `#monon-bell` and `#next-meeting`, and each heading is itself the link to its section.
@@ -49,6 +50,7 @@ scraper/merge.py ── matches the two lists game by game
 data/series.json ── the merged record the site reads, committed only when it changes
 
 both schools' /sports/<sport>/schedule pages ──► scraper/upcoming.py ──► data/upcoming.json (a problem here only logs a warning)
+                                                                   (a game that just finished stays until the history lists it)
 
         └── series.json and upcoming.json ──► scraper/render.py ── builds the static site in site/ and deploys it to GitHub Pages
 ```
@@ -162,6 +164,20 @@ The schedule pages are separate: the yearless URL (`/sports/<sport>/schedule`) a
 
 Locations are shown in one style, AP style ("Ind.", "Ohio", "Ill."), wherever the page shows one, because the two schools write states differently (DePauw "Greencastle, Ind.", Wabash "Greencastle, IN"). This is display only (`scraper/places.py`): the data files and `games.csv` keep each source's own spelling, and a location that does not end in a recognised state is left exactly as it was.
 
+**Game-day mode** (`scraper/gameday.py`, `.github/workflows/update-and-deploy.yml`). Besides the two daily runs, the workflow starts every 30 minutes (at :07 and :37). A first, fast `gate` job reads only the committed `data/upcoming.json` and `data/series.json` with the runner's own Python (nothing is installed) and decides whether a game is being played. On almost every run it says no and the run ends there: no scrape, no commit, no deploy, and "Last checked" does not change. Only runs started by the 30-minute schedule can be skipped; the two daily runs, pushes to `main` and manual runs always run in full.
+
+A game's window, per sport and date:
+
+- It opens at the first game's scheduled start, or at noon Eastern when no game that day has a time.
+- It closes when the history pages (either school's) list as many games on that date as the schedule did, or at 3 AM Eastern the next day, whichever comes first. A postponed game opens no window.
+- Inside the window the run scrapes, merges, commits data changes and deploys, exactly like a scheduled run.
+
+A schedule page can post the final score before the history page lists the game, and the scraper normally drops a finished game from `data/upcoming.json`. So that the window does not close early, a game dated today or yesterday that disappears from a schedule stays in the file until the history has it (unless the schedule marks it canceled, and never for more than a day).
+
+The banner phases come from the same files: before the start, after the start until the history has the result, and final. The banner shows for the calendar day only (Eastern); it goes away at the first deploy after midnight, the regular 6:19 AM run at the latest, even if the window stays open until 3 AM so the result is still scraped.
+
+The build and deploy jobs each have their own concurrency group (`cancel-in-progress: false`), so a run that is already going is never cancelled, and a no-op frequent run never queues behind or replaces a waiting push or scheduled run. To preview game day locally without waiting, render as if it were another time: `python scraper/render.py --now 2026-11-14T13:30` (Eastern unless the time has an offset). `--now` is for previews and tests only and is never used by the workflow.
+
 The site is plain HTML and CSS with no JavaScript.
 
 ## Preview image and icons
@@ -178,6 +194,7 @@ python -m pytest -q tests            # scraper and renderer tests (use saved pag
 python scraper/scrape.py --dry-run   # fetch both schools' live pages and report, without writing
 python scraper/scrape.py             # fetch and update data/ (and record the check time)
 python scraper/render.py             # build the site into site/
+python scraper/render.py --now 2026-11-14T13:30   # preview game-day mode as if it were this Eastern time
 python -m http.server 8000 -d site   # preview at http://localhost:8000
 ```
 

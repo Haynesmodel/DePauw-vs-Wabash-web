@@ -888,7 +888,7 @@ def render_index(data: dict, checked: str | None = None, now: dt.datetime | None
         game_day_html(today_games, sports),
         next_meeting_section(ahead, pending, sports, today),
         '<section class="overall" aria-labelledby="overall-h">',
-        '<h2 id="overall-h">All sports combined</h2>',
+        '<h2 id="overall-h">All head-to-head sports</h2>',
         tiles(t["depauw_wins"], t["wabash_wins"], t["ties"], "tiles-big"),
         f'<p class="overall-meta">{esc(plural(t["games_played"], "game"))} across {esc(plural(n_sports, "sport"))}</p>',
         f'<p class="series-summary">{esc(series_summary(sports))}</p>' if series_summary(sports) else '',

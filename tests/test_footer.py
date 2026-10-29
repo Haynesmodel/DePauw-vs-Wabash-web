@@ -58,3 +58,10 @@ def test_the_links_sit_next_to_the_source_links(site, name):
 def test_the_not_included_note_under_the_totals_is_unchanged(site):
     html = (site / "index.html").read_text(encoding="utf-8")
     assert render.NOT_INCLUDED in html and "<strong>Not included:</strong>" in html
+
+
+def test_the_totals_heading_is_renamed_and_keeps_its_anchor(site):
+    html = (site / "index.html").read_text(encoding="utf-8")
+    assert '<h2 id="overall-h">All head-to-head sports</h2>' in html
+    assert 'aria-labelledby="overall-h"' in html                  # the id old links and the section label rely on
+    assert "All sports combined" not in html

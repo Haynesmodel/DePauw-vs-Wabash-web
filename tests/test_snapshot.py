@@ -41,10 +41,10 @@ def data_copy(tmp_path):
 def test_the_notes_list_the_totals_and_every_sports_record():
     t = SERIES["totals"]
     notes = snapshot.release_notes(SERIES, "abc123", DAY)
-    assert f"DePauw {t['depauw_wins']}, Wabash {t['wabash_wins']}, {t['ties']} ties, {t['games_played']} games" in notes
+    assert f"DePauw {t['depauw_wins']}, Wabash {t['wabash_wins']}, {snapshot.ties(t['ties'])}, {t['games_played']} games" in notes
     for s in SERIES["sports"].values():
         r = s["record"]
-        assert f"- {s['name']}: DePauw {r['depauw_wins']}, Wabash {r['wabash_wins']}, {r['ties']} ties" in notes
+        assert f"- {s['name']}: DePauw {r['depauw_wins']}, Wabash {r['wabash_wins']}, {snapshot.ties(r['ties'])} (" in notes
     assert "Tennis: " in notes and "matches)" in notes                       # tennis counts matches
     assert snapshot.recorded_hash(notes) == "abc123"
 
@@ -175,11 +175,11 @@ def slow_opener(clock, seconds, seen):
 def test_the_budget_stops_archiving_and_lists_the_rest_as_not_saved():
     clock, seen = FakeClock(), []
     urls = [f"https://a/{i}" for i in range(12)]
-    links, failed = snapshot.wayback_save(urls, opener=slow_opener(clock, 50, seen), sleep=clock.sleep,
+    links, failed = snapshot.wayback_save(urls, opener=slow_opener(clock, snapshot.SAVE_BUDGET / 4, seen), sleep=clock.sleep,
                                           log=quiet, clock=clock)
     assert links == [] and failed == urls                                    # all 12 recorded, tried or not
     assert 0 < len(seen) < 12                                                 # it stopped early
-    assert clock.now <= snapshot.SAVE_BUDGET + snapshot.SAVE_PAUSE + 50       # and did not run on past the budget
+    assert clock.now <= snapshot.SAVE_BUDGET + snapshot.SAVE_PAUSE + snapshot.SAVE_BUDGET / 4       # and did not run on past the budget
     assert all(t <= snapshot.SAVE_TIMEOUT for t in seen)
 
 
@@ -260,6 +260,80 @@ def test_the_archive_command_exits_zero_whatever_happens(monkeypatch):
     assert snapshot.main(["archive", "--tag", "not-a-tag"]) == 0
 
 
+URLS = snapshot.source_urls(json.loads((ROOT / "scraper" / "sources.json").read_text(encoding="utf-8")))
+
+
+def link(url, stamp="20261029173427"):
+    return f"https://web.archive.org/web/{stamp}/{url}"
+
+
+def notes_with(saved):
+    """Release notes whose archive block already lists a link for each url in `saved`."""
+    missing = [u for u in URLS if u not in saved]
+    sec = snapshot.archive_section([link(u) for u in saved], missing)
+    return snapshot.replace_archive(snapshot.release_notes(SERIES, "abc123", DAY), sec)
+
+
+def test_a_retry_only_tries_pages_without_a_link_and_keeps_the_earlier_links():
+    first = URLS[:9]
+    gh, tried = FakeRelease(notes_with(first)), []
+
+    def saver(urls):
+        tried.append(list(urls))
+        return [link(urls[0], "20261030010101")], urls[1:]
+
+    assert snapshot.archive_release("data-2027-01-02", run=gh, saver=saver, log=quiet) is True
+    assert tried == [URLS[9:]]                                               # the 3 missing pages, nothing else
+    for u in first:
+        assert link(u) in gh.notes                                           # nothing removed
+    assert link(URLS[9], "20261030010101") in gh.notes
+    assert f"Not saved (2): {URLS[10]}, {URLS[11]}" in gh.notes
+    assert snapshot.recorded_hash(gh.notes) == "abc123"
+
+
+def test_a_retry_that_saves_nothing_changes_only_the_not_saved_list():
+    first = URLS[:9]
+    before = notes_with(first)
+    gh = FakeRelease(before)
+    assert snapshot.archive_release("data-2027-01-02", run=gh, saver=lambda urls: ([], list(urls)), log=quiet)
+    assert gh.notes == before                                                # same 9 links, same 3 not saved
+    # and from a worse starting point (a "none could be saved" block) it stays that way
+    none = notes_with([])
+    gh = FakeRelease(none)
+    snapshot.archive_release("data-2027-01-02", run=gh, saver=lambda urls: ([], list(urls)), log=quiet)
+    assert gh.notes == none
+
+
+def test_a_retry_when_every_page_is_already_saved_makes_no_requests_and_no_edit():
+    gh = FakeRelease(notes_with(URLS))
+
+    def saver(urls):
+        raise AssertionError("nothing should be requested")
+
+    assert snapshot.archive_release("data-2027-01-02", run=gh, saver=saver, log=quiet) is True
+    assert gh.edits == [] and "Not saved" not in gh.notes
+
+
+def test_a_retry_keeps_a_link_whose_page_is_no_longer_a_source():
+    old = "https://example.org/removed-sport"
+    notes = snapshot.replace_archive(snapshot.release_notes(SERIES, "abc", DAY),
+                                     snapshot.archive_section([link(old)], URLS))
+    gh = FakeRelease(notes)
+    snapshot.archive_release("data-2027-01-02", run=gh, saver=lambda urls: ([], list(urls)), log=quiet)
+    assert link(old) in gh.notes
+
+
+def test_one_tie_is_not_pluralised():
+    series = json.loads(json.dumps(SERIES))
+    series["totals"]["ties"] = 1
+    first_sport = next(iter(series["sports"].values()))
+    first_sport["record"]["ties"] = 1
+    notes = snapshot.release_notes(series, "abc", DAY)
+    assert "1 tie," in notes and f"{first_sport['name']}: DePauw {first_sport['record']['depauw_wins']}, "         f"Wabash {first_sport['record']['wabash_wins']}, 1 tie (" in notes
+    assert "1 ties" not in notes and "0 ties" in snapshot.release_notes(
+        {**series, "totals": {**series["totals"], "ties": 0}}, "abc", DAY)
+
+
 def test_building_writes_every_file_and_the_notes(tmp_path):
     out = tmp_path / "release"
     tag = snapshot.build(out, run=fake_gh(["data-2027-01-02"]), data_dir=ROOT / "data", today=DAY)
@@ -318,7 +392,7 @@ def test_the_jobs_run_in_the_order_prepare_release_archive():
 
 def test_the_archive_job_can_never_fail_the_run():
     a = job("archive")
-    assert "continue-on-error: true" in a and "timeout-minutes: 15" in a
+    assert "continue-on-error: true" in a and "timeout-minutes: 40" in a
     assert "always()" in a                                                    # runs even when prepare was skipped
     assert "continue-on-error" not in job("release")                          # the release is the part that matters
     assert "timeout-minutes: 10" in job("prepare")
@@ -336,4 +410,4 @@ def test_manual_runs_can_skip_archiving_or_retry_it_for_an_existing_release():
 
 
 def test_the_time_limits_are_named_constants():
-    assert snapshot.SAVE_BUDGET == 600 and snapshot.SAVE_TIMEOUT == 60 and snapshot.SAVE_PAUSE == 6
+    assert snapshot.SAVE_BUDGET == 1800 and snapshot.SAVE_TIMEOUT == 180 and snapshot.SAVE_PAUSE == 6

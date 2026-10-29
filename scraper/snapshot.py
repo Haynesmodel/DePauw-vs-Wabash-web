@@ -44,11 +44,12 @@ DATA_FILES = ("series.json", "depauw.json", "wabash.json", "overrides.json", "up
 HASHED_FILES = ("series.json", "depauw.json", "wabash.json", "overrides.json")
 USER_AGENT = "DePauw-vs-Wabash-fan-site snapshot (https://github.com/jacksonmote/DePauw-vs-Wabash-web)"
 SAVE_URL = "https://web.archive.org/save/"
-SAVE_TIMEOUT = 60             # seconds to wait on one page (Save Page Now can be slow)
+SAVE_TIMEOUT = 180            # seconds to wait on one page (Save Page Now can be slow)
 SAVE_PAUSE = 6                # seconds between requests
-SAVE_BUDGET = 600             # seconds for the whole archive step; pages left over are recorded as not saved
+SAVE_BUDGET = 1800            # seconds for the whole archive step; pages left over are recorded as not saved
 ARCHIVE_START = "<!-- archive:start -->"
 ARCHIVE_END = "<!-- archive:end -->"
+LINK_RE = re.compile(r"https://web\.archive\.org/web/\d+[a-z_]*/(https?://\S+)")
 TAG_RE = re.compile(r"data-\d{4}-\d{2}-\d{2}(-\d+)?")
 
 
@@ -103,15 +104,19 @@ def archive_section(links: list | None, failed: list | None = None, requested: b
     return "\n".join([ARCHIVE_START, *body, ARCHIVE_END])
 
 
+def ties(n: int) -> str:
+    return f"{n} tie" if n == 1 else f"{n} ties"
+
+
 def release_notes(series: dict, data_digest: str, day: dt.date, archive: str | None = None) -> str:
     t = series["totals"]
     lines = [f"Snapshot of the data behind depauwvswabash.com on {day.isoformat()}.", "",
              f"**All head-to-head sports:** DePauw {t['depauw_wins']}, Wabash {t['wabash_wins']}, "
-             f"{t['ties']} ties, {t['games_played']} games.", ""]
+             f"{ties(t['ties'])}, {t['games_played']} games.", ""]
     for s in series["sports"].values():
         r = s["record"]
         unit = (s.get("unit") or ["game", "games"])[1]
-        lines.append(f"- {s['name']}: DePauw {r['depauw_wins']}, Wabash {r['wabash_wins']}, {r['ties']} ties "
+        lines.append(f"- {s['name']}: DePauw {r['depauw_wins']}, Wabash {r['wabash_wins']}, {ties(r['ties'])} "
                      f"({s['games_played']} {unit})")
     lines += ["", "Attached: `series.json` (the merged record), `depauw.json` and `wabash.json` (each school's "
               "games as read), `overrides.json` (the rulings), `upcoming.json` (the schedule at that moment) and "
@@ -134,6 +139,11 @@ def replace_archive(notes: str, section: str) -> str:
     if i < 0:
         return notes.rstrip("\n") + "\n\n" + section + "\n"
     return notes[:i] + section + "\n\n" + notes[i:]
+
+
+def archived_pages(notes: str) -> dict:
+    """{source url: archive link} for every Wayback link already in the release notes."""
+    return {m.group(1): m.group(0) for m in LINK_RE.finditer(notes or "")}
 
 
 def wayback_save(urls: list, opener=urllib.request.urlopen, sleep=time.sleep, log=print,
@@ -172,20 +182,36 @@ def gh(*args: str) -> str:
 
 
 def archive_release(tag: str, run=gh, saver=wayback_save, log=print) -> bool:
-    """Archive the source pages, then edit the notes of release `tag` in place. Never raises; True if the notes
-    were updated. The release files and the rest of the notes are not touched."""
+    """Archive the source pages that have no link in the notes of release `tag` yet, then edit the notes in place:
+    new links are added, existing links are never removed, and "not saved" lists only pages still missing.
+    Never raises; True if the notes are up to date. The release files and the rest of the notes are not touched."""
     try:
         if not TAG_RE.fullmatch(tag or ""):
             raise ValueError(f"{tag!r} is not a data-YYYY-MM-DD release tag")
         notes = json.loads(run("release", "view", tag, "--json", "body"))["body"]
-        cfg = json.loads(SOURCES.read_text(encoding="utf-8"))
-        links, failed = saver(source_urls(cfg))
+        urls = source_urls(json.loads(SOURCES.read_text(encoding="utf-8")))
+        have = archived_pages(notes)                      # a retry only tries pages with no link yet
+        todo = [u for u in urls if u not in have]
+        if todo:
+            new_links, _ = saver(todo)
+            for link in new_links:
+                m = LINK_RE.fullmatch(link)
+                if m:
+                    have.setdefault(m.group(1), link)
+        else:
+            log(f"OK   release {tag} already has a link for every page; nothing to do")
+        ordered = [u for u in urls if u in have] + [u for u in have if u not in urls]   # existing links are never dropped
+        links = [have[u] for u in ordered]
+        failed = [u for u in urls if u not in have]
         updated = replace_archive(notes, archive_section(links, failed))
+        if updated == notes:
+            log(f"OK   release {tag} notes already up to date")
+            return True
         with tempfile.TemporaryDirectory() as d:
             f = Path(d) / "notes.md"
             f.write_text(updated, encoding="utf-8", newline="")
             run("release", "edit", tag, "--notes-file", str(f))
-        log(f"OK   release {tag} notes updated: {len(links)} saved, {len(failed)} not saved")
+        log(f"OK   release {tag} notes updated: {len(links)} saved in all, {len(failed)} not saved")
         return True
     except Exception as exc:  # the archive is a nice extra: whatever goes wrong, the run stays green
         log(f"WARN archiving {tag} did not finish: {exc!r}", file=sys.stderr)

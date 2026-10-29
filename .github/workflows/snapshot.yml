@@ -110,7 +110,7 @@ jobs:
           echo "tag=$tag" >> "$GITHUB_OUTPUT"
 
   archive:
-    # Last, and never fatal: asks the Internet Archive to save the 12 source pages (10 minute budget, 60 second
+    # Last, and never fatal: asks the Internet Archive to save the 12 source pages (30 minute budget, 180 second
     # limit per page, see scraper/snapshot.py), then edits the release notes in place. The script always exits 0
     # and continue-on-error covers the rest (a timeout, a cancelled step), so the run's result is the release's.
     # Runs after a new release, or alone on a manual run with archive_release_tag.
@@ -119,7 +119,7 @@ jobs:
       ${{ always() && github.event.inputs.archive != 'false' &&
       (github.event.inputs.archive_release_tag != '' || needs.release.result == 'success') }}
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 40
     continue-on-error: true
     permissions:
       contents: write

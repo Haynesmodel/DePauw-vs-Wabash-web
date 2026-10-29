@@ -1,0 +1,186 @@
+"""
+Data snapshots kept outside the git history: a GitHub Release tagged data-YYYY-MM-DD, plus a request to the
+Internet Archive to save each source page. Used by .github/workflows/snapshot.yml, which runs twice a year
+(after the spring seasons and after the fall seasons) and on demand.
+
+  python scraper/snapshot.py check              print changed=true/false (also to $GITHUB_OUTPUT): has the
+                                                data changed since the newest data-* release?
+  python scraper/snapshot.py build --out DIR    write the release files and notes into DIR
+
+The change check compares a hash of series.json, depauw.json, wabash.json and overrides.json with the hash
+the last release recorded in its notes. data/upcoming.json is attached to every release but does not count
+as a change, because it changes with every schedule update.
+
+The Wayback Machine part is best effort: a failure logs a warning and never fails the run.
+"""
+
+from __future__ import annotations
+
+import argparse
+import datetime as dt
+import hashlib
+import json
+import os
+import re
+import subprocess
+import sys
+import time
+import urllib.error
+import urllib.request
+from pathlib import Path
+
+ROOT = Path(__file__).resolve().parent.parent
+DATA = ROOT / "data"
+SOURCES = ROOT / "scraper" / "sources.json"
+
+TAG_PREFIX = "data-"
+HASH_MARK = "<!-- data-hash: "
+DATA_FILES = ("series.json", "depauw.json", "wabash.json", "overrides.json", "upcoming.json")
+HASHED_FILES = ("series.json", "depauw.json", "wabash.json", "overrides.json")
+USER_AGENT = "DePauw-vs-Wabash-fan-site snapshot (https://github.com/jacksonmote/DePauw-vs-Wabash-web)"
+SAVE_URL = "https://web.archive.org/save/"
+SAVE_TIMEOUT = 150            # Save Page Now can take a minute or more per page
+SAVE_PAUSE = 6                # seconds between requests
+
+
+def data_hash(data_dir: Path = DATA) -> str:
+    h = hashlib.sha256()
+    for name in HASHED_FILES:
+        p = Path(data_dir) / name
+        h.update(name.encode() + b"\0" + (p.read_bytes() if p.exists() else b"") + b"\0")
+    return h.hexdigest()[:20]
+
+
+def recorded_hash(notes: str) -> str | None:
+    m = re.search(re.escape(HASH_MARK) + r"([0-9a-f]+) -->", notes or "")
+    return m.group(1) if m else None
+
+
+def newest_data_release(releases: list) -> str | None:
+    """The tag of the newest data-* release, from `gh release list` rows."""
+    tags = sorted(r["tagName"] for r in releases if r["tagName"].startswith(TAG_PREFIX))
+    return tags[-1] if tags else None
+
+
+def pick_tag(day: dt.date, existing: set) -> str:
+    """data-YYYY-MM-DD, with -2, -3 ... added only when that tag is already taken (a second run that day)."""
+    base = f"{TAG_PREFIX}{day.isoformat()}"
+    tag, n = base, 1
+    while tag in existing:
+        n += 1
+        tag = f"{base}-{n}"
+    return tag
+
+
+def source_urls(cfg: dict) -> list:
+    """Every history page the site reads: DePauw's six, then Wabash's six."""
+    d, w = cfg["base_url"].rstrip("/"), cfg["wabash"]["base_url"].rstrip("/")
+    return [d + s["path"] for s in cfg["sports"]] + [w + s["wabash_path"] for s in cfg["sports"]]
+
+
+def release_notes(series: dict, links: list, failed: list, data_digest: str, day: dt.date) -> str:
+    t = series["totals"]
+    lines = [f"Snapshot of the data behind depauwvswabash.com on {day.isoformat()}.", "",
+             f"**All head-to-head sports:** DePauw {t['depauw_wins']}, Wabash {t['wabash_wins']}, "
+             f"{t['ties']} ties, {t['games_played']} games.", ""]
+    for s in series["sports"].values():
+        r = s["record"]
+        unit = (s.get("unit") or ["game", "games"])[1]
+        lines.append(f"- {s['name']}: DePauw {r['depauw_wins']}, Wabash {r['wabash_wins']}, {r['ties']} ties "
+                     f"({s['games_played']} {unit})")
+    lines += ["", "Attached: `series.json` (the merged record), `depauw.json` and `wabash.json` (each school's "
+              "games as read), `overrides.json` (the rulings), `upcoming.json` (the schedule at that moment) and "
+              "`games.csv` (one row per game).", ""]
+    if links:
+        lines += ["Internet Archive copies of the source pages, saved when this snapshot was made:", ""]
+        lines += [f"- {link}" for link in links]
+    else:
+        lines.append("The Internet Archive saved none of the source pages this time.")
+    if failed:
+        lines += ["", f"Not saved ({len(failed)}): " + ", ".join(failed)]
+    lines += ["", f"{HASH_MARK}{data_digest} -->"]
+    return "\n".join(lines) + "\n"
+
+
+def wayback_save(urls: list, opener=urllib.request.urlopen, sleep=time.sleep, log=print) -> tuple:
+    """Ask the Internet Archive to save each page. Returns (archive links, urls it did not save). Never raises."""
+    links, failed = [], []
+    for i, url in enumerate(urls):
+        if i:
+            sleep(SAVE_PAUSE)
+        try:
+            req = urllib.request.Request(SAVE_URL + url, headers={"User-Agent": USER_AGENT})
+            with opener(req, timeout=SAVE_TIMEOUT) as resp:
+                link = resp.headers.get("Content-Location") or resp.geturl()
+            if link.startswith("/"):
+                link = "https://web.archive.org" + link
+            if "/web/" not in link:
+                raise ValueError(f"no archive link came back ({link})")
+            links.append(link)
+            log(f"OK   archived {url}")
+        except Exception as exc:  # best effort: 429s, timeouts and refusals are expected now and then
+            failed.append(url)
+            log(f"WARN could not archive {url}: {exc}", file=sys.stderr)
+    return links, failed
+
+
+def gh(*args: str) -> str:
+    return subprocess.run(["gh", *args], capture_output=True, text=True, check=True).stdout
+
+
+def changed_since_last_release(run=gh, data_dir: Path = DATA) -> tuple:
+    """(changed, reason). A first snapshot always counts as a change."""
+    tag = newest_data_release(json.loads(run("release", "list", "--limit", "100", "--json", "tagName")))
+    if tag is None:
+        return True, "no data-* release yet"
+    last = recorded_hash(json.loads(run("release", "view", tag, "--json", "body"))["body"])
+    if last is None:
+        return True, f"{tag} recorded no data hash"
+    now = data_hash(data_dir)
+    return now != last, f"{tag} recorded {last}, the data is {now}"
+
+
+def build(out: Path, run=gh, data_dir: Path = DATA, saver=wayback_save, today: dt.date | None = None) -> str:
+    import render                                    # imported here: the check step needs only the standard library
+
+    out.mkdir(parents=True, exist_ok=True)
+    series = json.loads((data_dir / "series.json").read_text(encoding="utf-8"))
+    for name in DATA_FILES:
+        (out / name).write_bytes((data_dir / name).read_bytes())
+    (out / "games.csv").write_text(render.render_csv(series), encoding="utf-8", newline="")
+    cfg = json.loads(SOURCES.read_text(encoding="utf-8"))
+    links, failed = saver(source_urls(cfg))
+    from timeutil import to_eastern
+    day = today or to_eastern(dt.datetime.now(dt.timezone.utc))[0].date()
+    existing = {r["tagName"] for r in json.loads(run("release", "list", "--limit", "200", "--json", "tagName"))}
+    tag = pick_tag(day, existing)
+    (out / "NOTES.md").write_text(release_notes(series, links, failed, data_hash(data_dir), day), encoding="utf-8")
+    (out / "TAG").write_text(tag + "\n", encoding="utf-8")
+    return tag
+
+
+def _output(name: str, value: str) -> None:
+    path = os.environ.get("GITHUB_OUTPUT")
+    if path:
+        with open(path, "a", encoding="utf-8") as f:
+            f.write(f"{name}={value}\n")
+
+
+def main(argv=None) -> int:
+    ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
+    sub = ap.add_subparsers(dest="command", required=True)
+    sub.add_parser("check")
+    b = sub.add_parser("build")
+    b.add_argument("--out", type=Path, required=True)
+    args = ap.parse_args(argv)
+    if args.command == "check":
+        changed, why = changed_since_last_release()
+        print(f"changed={'true' if changed else 'false'}: {why}")
+        _output("changed", "true" if changed else "false")
+        return 0
+    print(f"Snapshot tag: {build(args.out)}")
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())

@@ -213,3 +213,11 @@ main { padding-block: 1.5rem 2.5rem; display: grid; gap: 1.5rem; }
 .game-day-line + .game-day-line { margin-top: 0.5rem; }
 .game-day a { color: inherit; text-decoration-thickness: 2px; text-underline-offset: 0.2em; }
 .game-day a:focus-visible { outline: 3px solid var(--color-focus); outline-offset: 2px; }
+
+/* The plain-language page (/how-it-works/): a narrow reading column. */
+.prose { max-width: 42rem; }
+.prose h2 { margin-top: 0; }
+.prose h3 { margin: 1.75rem 0 0.5rem; font-size: 1.1875rem; }
+.prose p, .prose li { line-height: 1.6; }
+.prose li { margin-block: 0.5rem; }
+.back { margin: 1rem 0 0; }

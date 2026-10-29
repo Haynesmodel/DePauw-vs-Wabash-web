@@ -1,7 +1,7 @@
 {
   "schema_version": 1,
   "verified_at": "2026-10-29",
-  "methodology": "Admissions and student-success figures come from the schools’ Common Data Sets. Published values are reproduced as reported; cohorts and score-submission rates are shown because test-optional policies affect who submits scores. High-school GPA is not standardized between schools. Faculty degree figures use each school’s own published faculty population and are not a direct comparison.",
+  "methodology": "Admissions and student-success figures come from the schools’ Common Data Sets. Published values are reproduced as reported; cohorts and score-submission rates are shown because test-optional policies affect who submits scores. High-school GPA is not standardized between schools.",
   "metrics": [
     {
       "id": "sat",

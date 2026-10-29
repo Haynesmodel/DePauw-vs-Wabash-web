@@ -400,10 +400,11 @@ def scrape_one(sc: dict, sport: dict, school: str, fixtures: Optional[Path], pac
                        [{**r, "school": sc["name"]} for r in skipped])
 
 
-def merged_payload(sport: dict, raw: dict) -> tuple:
+def merged_payload(sport: dict, raw: dict, rules: Optional[dict] = None) -> tuple:
     """The sport as the site reads it: both schools' games merged. Returns (payload, MergeResult or None)."""
     d, w = raw.get("depauw"), raw.get("wabash")
-    result = merge.merge_sport(d["games"] if d else [], w["games"] if w else [])
+    result = merge.merge_sport(d["games"] if d else [], w["games"] if w else [],
+                               season_months=sport.get("season_months"), rules=rules)
     games = result.games
     t = tally_dicts(games)
     label = sport.get("total_label") or (d or w).get("total_label") or "points"
@@ -414,7 +415,7 @@ def merged_payload(sport: dict, raw: dict) -> tuple:
         "record": {"depauw_wins": t[0], "wabash_wins": t[1], "ties": t[2]},
         "games_played": len(games),
         "first_game": games[0]["date"],
-        "last_game": games[-1]["date"],
+        "last_game": max(g["date"] for g in games if g.get("date_known") is not False),
         "current_streak": streak_of(games),
         "points": {"depauw": sum(g["depauw"] for g in games), "wabash": sum(g["wabash"] for g in games)},
         "total_label": label,
@@ -454,11 +455,19 @@ def write_if_changed(path: Path, data: dict) -> bool:
 
 def report_merge(name: str, result) -> None:
     print("     " + merge.summary_line(name, result.stats))
+    for m in merge.beyond_window(result):
+        d, w = m["depauw"], m["wabash"]
+        print(f"REVIEW {name}: matched beyond {merge.MAX_DATE_GAP_DAYS} days ({m['kind']}): DePauw {d['date']} "
+              f"{d['depauw']}-{d['wabash']}  /  Wabash {w['date']} {w['depauw']}-{w['wabash']}")
     for m in merge.near_misses(result):
         d, w = m["depauw"], m["wabash"]
         print(f"CHECK {name}: DePauw only {d['date']} {d['depauw']}-{d['wabash']}  /  Wabash only {w['date']} "
               f"{w['depauw']}-{w['wabash']}  ({m['days']} days apart"
               f"{', same score' if m['same_score'] else ''}); not merged")
+    for r in result.unused_rulings:
+        print(f"WARN {name}: a same-game ruling in overrides.json matched no games: DePauw "
+              f"{r['depauw']['date']} {r['depauw']['score'][0]}-{r['depauw']['score'][1]}, Wabash "
+              f"{r['wabash']['date']} {r['wabash']['score'][0]}-{r['wabash']['score'][1]}", file=sys.stderr)
 
 
 def scrape_schedules(cfg: dict, previous: dict, fixtures: Optional[Path], pacer: Pacer) -> dict:
@@ -518,6 +527,8 @@ def main(argv=None) -> int:
     ap.add_argument("--output", type=Path, default=OUTPUT)
     ap.add_argument("--depauw-output", type=Path, help="default: depauw.json next to --output")
     ap.add_argument("--wabash-output", type=Path, help="default: wabash.json next to --output")
+    ap.add_argument("--overrides", type=Path, help="rulings on same/different games; default: overrides.json "
+                                                   "next to --output")
     ap.add_argument("--upcoming-output", type=Path, default=UPCOMING)
     ap.add_argument("--checked-file", type=Path, default=CHECKED_AT,
                     help="where to record the time of a successful live check")
@@ -529,6 +540,11 @@ def main(argv=None) -> int:
                  "wabash": args.wabash_output or args.output.parent / "wabash.json"}
 
     cfg = json.loads(SOURCES.read_text(encoding="utf-8"))
+    try:
+        overrides = merge.load_overrides(args.overrides or args.output.parent / "overrides.json")
+    except merge.MergeError as exc:
+        print(f"FAIL overrides: {exc}", file=sys.stderr)
+        return 1
     previous = json.loads(args.output.read_text(encoding="utf-8")) if args.output.exists() else {}
     prev_sports = previous.get("sports", {})
     prev_raw = {school: load_sports(path) for school, path in raw_paths.items()}
@@ -566,7 +582,7 @@ def main(argv=None) -> int:
                 new_sports[key] = prev_sports[key]
             continue
         try:
-            new_sports[key], result = merged_payload(sport, raw)
+            new_sports[key], result = merged_payload(sport, raw, overrides.get(key))
             report_merge(sport["name"], result)
         except Exception as exc:  # a merge that does not add up never replaces good data
             failures.append(("merge", key))

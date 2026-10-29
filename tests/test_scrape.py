@@ -479,19 +479,19 @@ def test_end_to_end_merges_both_schools_and_keeps_each_schools_games(both_dir, t
     data = read(tmp_path, "series.json")
     sp = data["sports"]
     assert {k: v["games_played"] for k, v in sp.items()} == {
-        "football": 131, "mens-basketball": 234, "baseball": 316, "mens-soccer": 65,
+        "football": 132, "mens-basketball": 238, "baseball": 316, "mens-soccer": 65,
         "mens-lacrosse": 12, "mens-tennis": 123}
-    assert data["totals"] == {"depauw_wins": 517, "wabash_wins": 344, "ties": 20, "games_played": 881}
-    assert sp["football"]["record"] == {"depauw_wins": 59, "wabash_wins": 63, "ties": 9}
+    assert data["totals"] == {"depauw_wins": 518, "wabash_wins": 348, "ties": 20, "games_played": 886}
+    assert sp["football"]["record"] == {"depauw_wins": 60, "wabash_wins": 63, "ties": 9}   # 1891 counted twice until ruled on
     assert sp["mens-tennis"]["record"] == {"depauw_wins": 115, "wabash_wins": 7, "ties": 1}
     # Everything derived comes from the merged games, not from either school's page.
     assert (sp["baseball"]["first_game"], sp["baseball"]["last_game"]) == ("1888-01-03", "2026-04-28")
     assert {k: v["current_streak"] for k, v in sp.items()} == {
         "football": "W4", "mens-basketball": "L1", "baseball": "L1",
         "mens-soccer": "W2", "mens-lacrosse": "W12", "mens-tennis": "W61"}
-    assert sp["baseball"]["points"] == {"depauw": 1794, "wabash": 1749}
-    assert sp["football"]["sources"] == {"both": 131, "depauw_only": 0, "wabash_only": 0, "disputed": 2,
-                                         "date_differs": 3, "dates_not_recorded": 0}
+    assert sp["baseball"]["points"] == {"depauw": 1801, "wabash": 1750}
+    assert sp["football"]["sources"] == {"both": 130, "depauw_only": 1, "wabash_only": 1, "disputed": 2,
+                                         "date_differs": 2, "dates_not_recorded": 0}
     assert sp["mens-tennis"]["unit"] == ["match", "matches"] and "unit" not in sp["football"]
     assert sp["football"]["wabash_source_url"] == \
         "https://sports.wabash.edu/sports/football/opponent-history/depauw-university/4"
@@ -507,7 +507,7 @@ def test_end_to_end_merges_both_schools_and_keeps_each_schools_games(both_dir, t
     assert wabash["sports"]["football"]["games"][0]["result"] == "W"       # Wabash's 1890 loss, flipped
 
     out = capsys.readouterr().out
-    assert "Football: 131 matched, 0 DePauw only, 0 Wabash only, 2 disputed, 3 date-differs" in out
+    assert "Football: 130 matched, 1 DePauw only, 1 Wabash only, 2 disputed, 2 date-differs" in out
     assert "Men's Tennis: 33 matched, 0 DePauw only, 90 Wabash only, 1 disputed, 0 date-differs" in out
 
 
@@ -540,7 +540,7 @@ def test_a_failed_school_does_not_hold_back_the_pages_that_passed(both_dir, tmp_
     sp = read(tmp_path, "series.json")["sports"]
     assert sp["mens-tennis"]["games_played"] == 33 and "sources" not in sp["mens-tennis"]      # DePauw alone
     assert "wabash_source_url" not in sp["mens-tennis"]
-    assert sp["baseball"]["games_played"] == 316 and sp["football"]["sources"]["both"] == 131
+    assert sp["baseball"]["games_played"] == 316 and sp["football"]["sources"]["both"] == 130
     assert "mens-tennis" not in read(tmp_path, "wabash.json")["sports"]
     assert (tmp_path / "depauw.json").exists()
 

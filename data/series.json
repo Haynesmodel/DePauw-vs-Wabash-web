@@ -1,12 +1,12 @@
 {
   "schema_version": 2,
-  "updated_at": "2026-10-29T00:05:41+00:00",
+  "updated_at": "2026-10-29T00:42:02+00:00",
   "perspective": "DePauw",
   "totals": {
-    "depauw_wins": 517,
-    "wabash_wins": 344,
+    "depauw_wins": 518,
+    "wabash_wins": 348,
     "ties": 20,
-    "games_played": 881
+    "games_played": 886
   },
   "sports": {
     "football": {
@@ -14,25 +14,25 @@
       "source_url": "https://depauwtigers.com/sports/football/opponent-history/wabash/215",
       "wabash_source_url": "https://sports.wabash.edu/sports/football/opponent-history/depauw-university/4",
       "record": {
-        "depauw_wins": 59,
+        "depauw_wins": 60,
         "wabash_wins": 63,
         "ties": 9
       },
-      "games_played": 131,
+      "games_played": 132,
       "first_game": "1890-11-22",
       "last_game": "2025-11-15",
       "current_streak": "W4",
       "points": {
-        "depauw": 1917,
+        "depauw": 1918,
         "wabash": 2185
       },
       "total_label": "points",
       "sources": {
-        "both": 131,
-        "depauw_only": 0,
-        "wabash_only": 0,
+        "both": 130,
+        "depauw_only": 1,
+        "wabash_only": 1,
         "disputed": 2,
-        "date_differs": 3,
+        "date_differs": 2,
         "dates_not_recorded": 0
       },
       "games": [
@@ -49,7 +49,7 @@
           "source": "both"
         },
         {
-          "date": "1891-11-21",
+          "date": "1891-11-02",
           "season": "1891",
           "location": "home",
           "site": "Greencastle, IN",
@@ -58,9 +58,19 @@
           "wabash": 0,
           "note": "Forfeit",
           "boxscore": null,
-          "source": "both",
-          "date_differs": true,
-          "wabash_date": "1891-11-02"
+          "source": "wabash"
+        },
+        {
+          "date": "1891-11-21",
+          "season": "1891",
+          "location": "home",
+          "site": null,
+          "result": "W",
+          "depauw": 1,
+          "wabash": 0,
+          "note": null,
+          "boxscore": null,
+          "source": "depauw"
         },
         {
           "date": "1892-11-05",
@@ -1635,24 +1645,24 @@
       "wabash_source_url": "https://sports.wabash.edu/sports/mens-basketball/opponent-history/depauw-university/4",
       "record": {
         "depauw_wins": 133,
-        "wabash_wins": 100,
+        "wabash_wins": 104,
         "ties": 1
       },
-      "games_played": 234,
+      "games_played": 238,
       "first_game": "1903-03-03",
       "last_game": "2026-01-28",
       "current_streak": "L1",
       "points": {
-        "depauw": 13304,
-        "wabash": 13139
+        "depauw": 13348,
+        "wabash": 13307
       },
       "total_label": "points",
       "sources": {
-        "both": 230,
-        "depauw_only": 1,
-        "wabash_only": 3,
+        "both": 226,
+        "depauw_only": 5,
+        "wabash_only": 7,
         "disputed": 7,
-        "date_differs": 17,
+        "date_differs": 13,
         "dates_not_recorded": 0
       },
       "games": [
@@ -1680,9 +1690,7 @@
           "wabash": 40,
           "note": null,
           "boxscore": null,
-          "source": "both",
-          "date_differs": true,
-          "wabash_date": "1906-02-24"
+          "source": "depauw"
         },
         {
           "date": "1906-02-13",
@@ -1694,9 +1702,55 @@
           "wabash": 52,
           "note": null,
           "boxscore": null,
-          "source": "both",
-          "date_differs": true,
-          "wabash_date": "1906-02-26"
+          "source": "depauw"
+        },
+        {
+          "date": "1906-02-24",
+          "season": "1905-06",
+          "location": "neutral",
+          "site": null,
+          "result": "L",
+          "depauw": 7,
+          "wabash": 40,
+          "note": null,
+          "boxscore": null,
+          "source": "wabash"
+        },
+        {
+          "date": "1906-02-26",
+          "season": "1905-06",
+          "location": "neutral",
+          "site": null,
+          "result": "L",
+          "depauw": 7,
+          "wabash": 52,
+          "note": null,
+          "boxscore": null,
+          "source": "wabash"
+        },
+        {
+          "date": "1907-01-10",
+          "season": "1906-07",
+          "location": "neutral",
+          "site": null,
+          "result": "L",
+          "depauw": 12,
+          "wabash": 35,
+          "note": null,
+          "boxscore": null,
+          "source": "wabash"
+        },
+        {
+          "date": "1907-01-11",
+          "season": "1906-07",
+          "location": "neutral",
+          "site": null,
+          "result": "L",
+          "depauw": 18,
+          "wabash": 41,
+          "note": null,
+          "boxscore": null,
+          "source": "wabash"
         },
         {
           "date": "1907-02-05",
@@ -1708,9 +1762,7 @@
           "wabash": 35,
           "note": null,
           "boxscore": null,
-          "source": "both",
-          "date_differs": true,
-          "wabash_date": "1907-01-10"
+          "source": "depauw"
         },
         {
           "date": "1907-02-27",
@@ -1722,9 +1774,7 @@
           "wabash": 41,
           "note": null,
           "boxscore": null,
-          "source": "both",
-          "date_differs": true,
-          "wabash_date": "1907-01-11"
+          "source": "depauw"
         },
         {
           "date": "1909-01-29",
@@ -4557,17 +4607,17 @@
       "last_game": "2026-04-28",
       "current_streak": "L1",
       "points": {
-        "depauw": 1794,
-        "wabash": 1749
+        "depauw": 1801,
+        "wabash": 1750
       },
       "total_label": "runs",
       "sources": {
         "both": 139,
         "depauw_only": 2,
         "wabash_only": 175,
-        "disputed": 0,
+        "disputed": 2,
         "date_differs": 14,
-        "dates_not_recorded": 61
+        "dates_not_recorded": 64
       },
       "games": [
         {
@@ -4578,6 +4628,45 @@
           "result": "W",
           "depauw": 7,
           "wabash": 6,
+          "note": null,
+          "boxscore": null,
+          "source": "wabash",
+          "date_known": false
+        },
+        {
+          "date": "1889-01-05",
+          "season": "1889",
+          "location": "neutral",
+          "site": null,
+          "result": "L",
+          "depauw": 2,
+          "wabash": 5,
+          "note": null,
+          "boxscore": null,
+          "source": "wabash",
+          "date_known": false
+        },
+        {
+          "date": "1889-01-07",
+          "season": "1889",
+          "location": "neutral",
+          "site": null,
+          "result": "L",
+          "depauw": 2,
+          "wabash": 5,
+          "note": null,
+          "boxscore": null,
+          "source": "wabash",
+          "date_known": false
+        },
+        {
+          "date": "1889-01-11",
+          "season": "1889",
+          "location": "neutral",
+          "site": null,
+          "result": "W",
+          "depauw": 4,
+          "wabash": 3,
           "note": null,
           "boxscore": null,
           "source": "wabash",
@@ -4595,42 +4684,6 @@
           "boxscore": null,
           "source": "wabash",
           "date_known": false
-        },
-        {
-          "date": "1889-01-05",
-          "season": "1889",
-          "location": "neutral",
-          "site": null,
-          "result": "L",
-          "depauw": 2,
-          "wabash": 5,
-          "note": null,
-          "boxscore": null,
-          "source": "wabash"
-        },
-        {
-          "date": "1889-01-07",
-          "season": "1889",
-          "location": "neutral",
-          "site": null,
-          "result": "L",
-          "depauw": 2,
-          "wabash": 5,
-          "note": null,
-          "boxscore": null,
-          "source": "wabash"
-        },
-        {
-          "date": "1889-01-11",
-          "season": "1889",
-          "location": "neutral",
-          "site": null,
-          "result": "W",
-          "depauw": 4,
-          "wabash": 3,
-          "note": null,
-          "boxscore": null,
-          "source": "wabash"
         },
         {
           "date": "1890-01-01",
@@ -6894,52 +6947,44 @@
           "wabash_date": "1984-04-11"
         },
         {
-          "date": "1984-04-24",
-          "season": "1984",
-          "location": "home",
-          "site": "Greencastle, IN",
-          "result": "W",
-          "depauw": 11,
-          "wabash": 5,
-          "note": null,
-          "boxscore": null,
-          "source": "wabash"
-        },
-        {
-          "date": "1984-04-24",
-          "season": "1984",
-          "location": "home",
-          "site": "Greencastle, IN",
-          "result": "W",
-          "depauw": 10,
-          "wabash": 2,
-          "note": null,
-          "boxscore": null,
-          "source": "wabash"
-        },
-        {
           "date": "1984-04-25",
           "season": "1984",
           "location": "home",
-          "site": null,
+          "site": "Greencastle, IN",
           "result": "W",
           "depauw": 12,
           "wabash": 5,
           "note": null,
           "boxscore": null,
-          "source": "depauw"
+          "source": "both",
+          "date_differs": true,
+          "wabash_date": "1984-04-24",
+          "disputed": true,
+          "wabash_version": {
+            "result": "W",
+            "depauw": 11,
+            "wabash": 5
+          }
         },
         {
           "date": "1984-04-25",
           "season": "1984",
           "location": "away",
-          "site": null,
+          "site": "Greencastle, IN",
           "result": "W",
           "depauw": 11,
           "wabash": 1,
           "note": null,
           "boxscore": null,
-          "source": "depauw"
+          "source": "both",
+          "date_differs": true,
+          "wabash_date": "1984-04-24",
+          "disputed": true,
+          "wabash_version": {
+            "result": "W",
+            "depauw": 10,
+            "wabash": 2
+          }
         },
         {
           "date": "1985-03-16",
@@ -6995,18 +7040,40 @@
           "date": "1986-03-19",
           "season": "1986",
           "location": "home",
+          "site": null,
+          "result": "W",
+          "depauw": 12,
+          "wabash": 4,
+          "note": null,
+          "boxscore": null,
+          "source": "depauw"
+        },
+        {
+          "date": "1986-03-19",
+          "season": "1986",
+          "location": "home",
+          "site": null,
+          "result": "W",
+          "depauw": 16,
+          "wabash": 4,
+          "note": null,
+          "boxscore": null,
+          "source": "depauw"
+        },
+        {
+          "date": "1986-03-23",
+          "season": "1986",
+          "location": "home",
           "site": "Greencastle, IN",
           "result": "W",
           "depauw": 12,
           "wabash": 4,
           "note": null,
           "boxscore": null,
-          "source": "both",
-          "date_differs": true,
-          "wabash_date": "1986-03-23"
+          "source": "wabash"
         },
         {
-          "date": "1986-03-19",
+          "date": "1986-03-23",
           "season": "1986",
           "location": "home",
           "site": "Greencastle, IN",
@@ -7015,9 +7082,7 @@
           "wabash": 4,
           "note": null,
           "boxscore": null,
-          "source": "both",
-          "date_differs": true,
-          "wabash_date": "1986-03-23"
+          "source": "wabash"
         },
         {
           "date": "1986-04-08",

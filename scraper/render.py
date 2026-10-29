@@ -63,6 +63,8 @@ TITLE = "DePauw University vs. Wabash College: All-Time Head-to-Head Records"
 SUBTITLE = "DePauw University vs. Wabash College: all-time head-to-head records in men’s sports."
 NOT_INCLUDED = ("cross country, track and field, swimming and diving, and golf. "
                 "They are multi-team events rather than head-to-head games.")
+MEN_ONLY = ("Only men’s head-to-head sports are compared: Wabash is an all-male college, and multi-team "
+            "sports (cross country, track and field, swimming and diving, golf) aren’t head-to-head.")
 DISCLAIMER = "Unofficial fan site, not affiliated with DePauw University or Wabash College."
 COPYRIGHT_HOLDER = "Jackson Mote"
 COPYRIGHT_START = 2026
@@ -841,7 +843,9 @@ def site_footer(now: dt.datetime, *, prefix: str = "", data: dict | None = None,
             f'<ul class="sources">\n{sources}\n</ul>',
         ]
     lines += [
-        '<p>Only men’s sports are compared because Wabash is an all-male college.</p>',
+        f'<p class="footer-links"><a href="{esc(prefix + HOW_PATH)}">How the numbers work</a> · '
+        f'<a href="{esc(REPO_URL)}">Built in the open: code and data on GitHub</a></p>',
+        f'<p>{esc(MEN_ONLY)}</p>',
         f'<p>{esc(DISCLAIMER)}</p>',
         f'<p class="copyright">{esc(copyright_line(now))}</p>',
         '</div>',

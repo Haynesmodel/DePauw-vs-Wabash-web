@@ -256,6 +256,7 @@ HASH_MARK = "<!-- data-review-hash: "
 BODY_LIMIT = 60000                      # GitHub rejects an issue body over 65,536 characters
 PER_SPORT_CAPS = (25, 10, 5, 2, 0)      # entries shown per sport, tried in turn until the body fits
 SCHOOLS = {"depauw": "DePauw", "wabash": "Wabash"}
+FIELD_WORDS = {"depauw": "DePauw's score", "wabash": "Wabash's score", "site": "location"}
 APPROVE_HELP = (
     'Open the repository on GitHub, then Actions, "Update data and deploy site", Run workflow, tick '
     '"Apply the changes to old games waiting for review", and run it.')
@@ -272,7 +273,7 @@ def _game_text(g: dict | None) -> str:
 def _changed_fields(o: dict | None, n: dict | None) -> str:
     if o is None or n is None:
         return ""
-    names = [k for k in FIELDS if _clean(o.get(k)) != _clean(n.get(k))]
+    names = [FIELD_WORDS.get(k, k) for k in FIELDS if _clean(o.get(k)) != _clean(n.get(k))]
     return f" (changed: {', '.join(names)})" if names else ""
 
 

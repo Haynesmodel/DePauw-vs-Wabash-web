@@ -276,6 +276,12 @@ def test_the_issue_body_is_capped_and_always_fits():
     assert "more, see" not in small and small.count("- **DePauw, edited**") == 3
 
 
+def test_the_issue_names_what_changed_in_words():
+    old = game("1957-11-16", 37, 6)
+    [e] = settle([old], [{**old, "wabash": 7}])[1]
+    assert "(changed: Wabash's score)" in review.render_body([e])
+
+
 def test_the_issue_body_tells_how_to_approve_and_reject():
     body = review.render_body(entries(1))
     assert "Apply the changes to old games waiting for review" in body and "keep_previous" in body

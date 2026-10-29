@@ -176,7 +176,7 @@ def test_a_doubleheader_from_one_school_is_one_entry_with_both_times(tmp_path):
     html = baseball_page(tmp_path, dh("2027-04-28", "12:00 PM", "3:30 PM"))
     top = text_of(html[html.index('id="next-meeting"'):html.index('id="overall-h"')])
     assert ("Baseball, Wed, Apr 28, 2027 · Doubleheader · 12:00 PM and 3:30 PM · "
-            "Goodrich Ballpark, Crawfordsville, IN (from Wabash's schedule)") in top.replace("’", "'")
+            "Goodrich Ballpark, Crawfordsville, Ind. (from Wabash's schedule)") in top.replace("’", "'")
     card = baseball_card(html)
     assert "Next meeting Wed, Apr 28, 2027 · Doubleheader · 12:00 PM and 3:30 PM" in card
     assert card.count("Apr 28, 2027") == 1 and html.count("Doubleheader") == 2   # top box + card, never listed twice

@@ -32,6 +32,7 @@ from urllib.parse import quote, urlparse
 import facts
 import images
 import meetings
+import places
 
 ROOT = Path(__file__).resolve().parent.parent
 DATA = ROOT / "data" / "series.json"
@@ -232,7 +233,7 @@ def score_text(g: dict) -> str:
 
 def where_text(g: dict) -> str:
     label = {"home": "Home", "away": "Away", "neutral": "Neutral"}.get(g["location"], "Site unknown")
-    site = g.get("site") or {"home": HOME_SITE, "away": AWAY_SITE}.get(g["location"])
+    site = places.ap_place(g.get("site")) or {"home": HOME_SITE, "away": AWAY_SITE}.get(g["location"])
     return f"{label} · {site}" if site else label
 
 
@@ -250,7 +251,7 @@ def fmt_when(g: dict, today: dt.date) -> str:
 
 
 def meeting_site(g: dict) -> str:
-    site = g.get("site") or {"home": HOME_SITE, "away": AWAY_SITE}.get(g.get("location"))
+    site = places.ap_place(g.get("site")) or {"home": HOME_SITE, "away": AWAY_SITE}.get(g.get("location"))
     return site or ("Neutral site" if g.get("location") == "neutral" else "Site TBA")
 
 

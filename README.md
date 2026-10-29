@@ -160,6 +160,8 @@ The schedule pages are separate: the yearless URL (`/sports/<sport>/schedule`) a
 
 "Last checked" is the time of the last live scrape that reached at least one page. It is written to an uncommitted `.checked-at` file and read by the render step in the same workflow run, so the data files still change only when games change. If every page fails, or the file is missing (for example in a pull request check), the page leaves "Last checked" off instead of showing the build time. The workflow scrapes on every run (schedule, manual and push), so every deploy carries a fresh check.
 
+Locations are shown in one style, AP style ("Ind.", "Ohio", "Ill."), wherever the page shows one, because the two schools write states differently (DePauw "Greencastle, Ind.", Wabash "Greencastle, IN"). This is display only (`scraper/places.py`): the data files and `games.csv` keep each source's own spelling, and a location that does not end in a recognised state is left exactly as it was.
+
 The site is plain HTML and CSS with no JavaScript.
 
 ## Preview image and icons

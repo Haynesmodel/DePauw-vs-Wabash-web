@@ -310,7 +310,7 @@ def test_missing_site_is_filled_from_home_or_away_but_not_neutral(tmp_path):
     _, page = build(tmp_path, {"baseball": s})
     t = text_of(page)
     assert "Home · Greencastle, Ind." in t and "Away · Crawfordsville, Ind." in t
-    assert "Home · Westfield, IN" in t  # a site the source gives is never replaced
+    assert "Home · Westfield, Ind." in t  # a site the source gives is never replaced (only its state is restyled)
     neutral_cell = re.search(r'<td data-label="Site">(Neutral[^<]*)</td>', page).group(1)
     assert neutral_cell == "Neutral"
     # the data file itself is untouched

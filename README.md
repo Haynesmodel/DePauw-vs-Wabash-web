@@ -15,6 +15,8 @@ Cross country, track and field, swimming and diving, and golf are left out becau
 
 **Live site: https://depauwvswabash.com/**
 
+The site also has a sourced **[Alumni and endowment comparison](https://depauwvswabash.com/alumni/)**. Athletics remains the home page at `/`; the new page is a separate destination.
+
 Unofficial fan site, not affiliated with DePauw University or Wabash College. Only men's head-to-head sports are compared: Wabash is an all-male college, and multi-team sports (cross country, track and field, swimming and diving, golf) aren't head-to-head.
 
 ## What the site shows
@@ -31,10 +33,19 @@ Unofficial fan site, not affiliated with DePauw University or Wabash College. On
 - **Download the data.** `data/series.json` (the merged data file as-is) and `games.csv` (one row per game: sport, date, season, location, site, DePauw score, Wabash score, result, note, box score link, plus which record it comes from, whether its date is recorded, whether the schools disagree on the score or the date, and Wabash's date and both schools' scores, in DePauw-Wabash order, when they differ) are published with the site and linked in the footer.
 - **Report a data error.** Each card and the footer link to a GitHub issue form (`.github/ISSUE_TEMPLATE/data-correction.yml`) asking for the sport, game date, which school's record looks wrong (DePauw's, Wabash's, both, not sure), what is wrong and a link to the correct result. The issues are public, so the form asks for nothing personal.
 - **How the numbers work.** A plain-language page for fans at `/how-it-works/` (`scraper/howitworks.py`, built by `render.py`): where the data comes from, what is counted, how the two schools' records are combined, disputed games, the hand-made rulings, how often the site updates, how to report a mistake, and a link back here. Every number on it (games, disputed games, games with no recorded date, games one school lists, rulings, the match window, the placeholder dates, the game-day interval) is read from the data files or from the constants in `merge.py` and `gameday.py`, never typed in. It has the home page's header, footer, stylesheet, security policy, light and dark mode, canonical URL, preview card and share image, is in `sitemap.xml`, and is linked from every footer and from the 404 page.
+- **Alumni and endowment.** `/alumni/` lists named earned-degree holders in ten award and public-service categories with person-level sources and school-specific counts. It includes audited FY2025 endowment figures dated June 30, 2025, with each school's accounting scope stated. The page and its JSON records are reviewed separately from the athletics scrape.
 - **Footer.** Every page (home, how-it-works, 404) gets the same footer from one function (`site_footer()` in `render.py`): update and check times, downloads, source pages, "How the numbers work", "Built in the open: code and data on GitHub", the men's head-to-head note, the unofficial-fan-site note and the copyright.
 - **Link previews.** Texting or sharing the link shows a card with the current totals and the Monon Bell holder, plus a "Game day" or "Final" label on game day (see "Preview image" below).
 
 Every number on the page comes from the scraped data or is calculated from it.
+
+## Alumni and endowment records
+
+The `/alumni/` page is manually researched and generated from `data/alumni.json` and `data/endowment.json`. The ten reviewed categories are Nobel Prize winners, U.S. vice presidents, U.S. senators, U.S. representatives, U.S. state governors, Fortune 500 CEOs, Pulitzer Prize winners, Rhodes Scholars, astronauts who flew in space, and Academy Award winners. Each record names the person’s degree and year, category-specific achievement and date, and sources for both the degree and achievement. Fortune 500 CEO records also identify the company, ranking year and rank, with a source for the ranking.
+
+Counts include earned-degree holders of any gender and historical school names. Honorary-only degrees, attendance without an earned degree, nominees, finalists, and people without the relevant individual office or award are excluded. A person is counted once per school and category. Lists represent named graduates verified in the reviewed sources, not a claim of complete all-time coverage. Categories with no verified people at either school are omitted; a one-sided zero remains visible. Update both-school review notes and citations when editing the JSON, then run the tests and regenerate the site.
+
+The endowment figures use the same audited fiscal date, June 30, 2025, but the audited scopes differ: DePauw reports total endowment net assets including pledges receivable and perpetual trusts, while Wabash reports pooled endowment net assets. They should not be read as identical market-value bases or as cash available for general spending. The source statements and page references are recorded alongside each amount in `data/endowment.json`.
 
 ## How the data updates
 
@@ -67,9 +78,11 @@ flowchart LR
   WS --> U
   U --> UJ[("upcoming.json")]
   SJ --> RN["render.py<br/>with facts, meetings, gameday,<br/>howitworks, images"]
+  AL["alumni.json<br/>curated names and sources"] --> RN
+  EN["endowment.json<br/>matched fiscal date"] --> RN
   UJ --> RN
   OV --> RN
-  RN --> SITE["site/<br/>home page, how-it-works, 404,<br/>games.csv, og-image, icons"]
+  RN --> SITE["site/<br/>home page, how-it-works, alumni, 404,<br/>JSON data, games.csv, og-image, icons"]
   SITE --> GP["GitHub Pages<br/>depauwvswabash.com"]
   SJ -.-> SN["snapshot.yml (Jul 1, Jan 2)<br/>data files go to a<br/>GitHub Release first"]
   SN -.-> WB["then, best effort:<br/>source pages go to the<br/>Wayback Machine"]

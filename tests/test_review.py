@@ -156,9 +156,9 @@ def football(tmp_path, name="series.json"):
 
 
 def test_a_fixture_run_never_writes_into_the_real_data_folder(both_dir, tmp_path):
-    before = {p.name: p.read_bytes() for p in (ROOT / "data").iterdir()}
+    before = {p.name: p.read_bytes() for p in (ROOT / "data").iterdir() if p.is_file()}
     assert run(both_dir, tmp_path) == 0
-    assert {p.name: p.read_bytes() for p in (ROOT / "data").iterdir()} == before
+    assert {p.name: p.read_bytes() for p in (ROOT / "data").iterdir() if p.is_file()} == before
     assert pending_of(tmp_path) == []
 
 

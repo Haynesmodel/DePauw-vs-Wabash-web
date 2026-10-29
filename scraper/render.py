@@ -38,6 +38,7 @@ import meetings
 import merge
 import places
 import review
+import alumni as alumni_page
 from timeutil import from_eastern, to_eastern
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -51,6 +52,9 @@ CHECKED_AT = ROOT / ".checked-at"  # written by scrape.py after a live run; neve
 SITE_URL = "https://depauwvswabash.com/"
 HOW_PATH = "how-it-works/"      # the plain-language page, relative to the site root
 BASE_PATH = urlparse(SITE_URL).path  # "/" on the custom domain
+ALUMNI_PATH = "alumni/"
+ALUMNI_DATA = ROOT / "data" / "alumni.json"
+ENDOWMENT_DATA = ROOT / "data" / "endowment.json"
 REPO_URL = "https://github.com/jacksonmote/DePauw-vs-Wabash-web"
 SOURCE_HOST = "depauwtigers.com"
 WABASH_HOST = "sports.wabash.edu"
@@ -854,6 +858,16 @@ def site_footer(now: dt.datetime, *, prefix: str = "", data: dict | None = None,
     return lines
 
 
+def site_nav(prefix: str, current: str) -> str:
+    """Two real links, with only the current top-level destination marked current."""
+    athletics_current = ' aria-current="page"' if current == "athletics" else ""
+    alumni_current = ' aria-current="page"' if current == "alumni" else ""
+    athletics_href = prefix or "./"
+    return (f'<nav class="site-nav" aria-label="Main navigation">'
+            f'<a href="{esc(athletics_href)}"{athletics_current}>Athletics</a> '
+            f'<a href="{esc(prefix + ALUMNI_PATH)}"{alumni_current}>Alumni</a></nav>')
+
+
 def render_index(data: dict, checked: str | None = None, now: dt.datetime | None = None,
                  upcoming: dict | None = None) -> str:
     t = data["totals"]
@@ -881,6 +895,7 @@ def render_index(data: dict, checked: str | None = None, now: dt.datetime | None
         '<header class="site-header">',
         '<div class="wrap">',
         '<h1>DePauw vs. Wabash</h1>',
+        site_nav("", "athletics"),
         f'<p class="subtitle">{esc(SUBTITLE)}</p>',
         '</div>',
         '</header>',
@@ -922,6 +937,7 @@ def render_how(data: dict, rules: dict, kept: int, checked: str | None = None, n
         '<header class="site-header">',
         '<div class="wrap">',
         '<h1>DePauw vs. Wabash</h1>',
+        site_nav("../", ""),
         f'<p class="subtitle">{esc(SUBTITLE)}</p>',
         '</div>',
         '</header>',
@@ -944,6 +960,7 @@ def render_404(now: dt.datetime | None = None) -> str:
              prefix=BASE_PATH, canonical=None, noindex=True),
         '<body>',
         '<header class="site-header"><div class="wrap"><h1>DePauw vs. Wabash</h1>',
+        site_nav(BASE_PATH, ""),
         f'<p class="subtitle">{esc(SUBTITLE)}</p></div></header>',
         '<main class="wrap">',
         '<h2>Page not found</h2>',
@@ -957,7 +974,7 @@ def render_404(now: dt.datetime | None = None) -> str:
     ])
 
 
-def render_sitemap(data: dict, checked: str | None = None) -> str:
+def render_sitemap(data: dict, checked: str | None = None, alumni_verified: str | None = None) -> str:
     """lastmod is the Eastern date of the newest time the page states: when the data last changed or,
     when there is one, when they were last checked."""
     newest = max(dt.datetime.fromisoformat(s) for s in (data["updated_at"], checked) if s)
@@ -966,6 +983,8 @@ def render_sitemap(data: dict, checked: str | None = None) -> str:
             '<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n'
             f'  <url><loc>{esc(SITE_URL)}</loc><lastmod>{lastmod}</lastmod></url>\n'
             f'  <url><loc>{esc(SITE_URL + HOW_PATH)}</loc><lastmod>{lastmod}</lastmod></url>\n'
+            + (f'  <url><loc>{esc(SITE_URL + ALUMNI_PATH)}</loc><lastmod>{esc(alumni_verified)}</lastmod></url>\n'
+               if alumni_verified else '') +
             '</urlset>\n')
 
 
@@ -1003,8 +1022,17 @@ def render_csv(data: dict) -> str:
 
 def build(data_path: Path, out: Path, *, checked_at: str | None = None,
           now: dt.datetime | None = None, upcoming_path: Path | None = None,
-          overrides_path: Path | None = None) -> None:
+          overrides_path: Path | None = None, alumni_path: Path | None = None,
+          endowment_path: Path | None = None) -> None:
     data = load(data_path)
+    # Validate all curated input and render every page before removing the previous output.
+    alumni_data = alumni_page.validate_alumni(alumni_page.load_json(alumni_path or ALUMNI_DATA, "alumni"))
+    endowment_data = alumni_page.validate_endowment(alumni_page.load_json(endowment_path or ENDOWMENT_DATA, "endowment"))
+    alumni_head = head("Alumni and Endowment | DePauw vs. Wabash",
+                        "Verified named DePauw and Wabash graduates across achievement categories, plus dated endowment values.",
+                        prefix="../", canonical=SITE_URL + ALUMNI_PATH)
+    alumni_html = alumni_page.render_page(alumni_data, endowment_data, head_html=alumni_head,
+                                          copyright_year=(now or dt.datetime.now(dt.timezone.utc)).year)
     upcoming = meetings.load_upcoming(upcoming_path)
     overrides_path = overrides_path or OVERRIDES
     rules = merge.load_overrides(overrides_path)
@@ -1012,10 +1040,11 @@ def build(data_path: Path, out: Path, *, checked_at: str | None = None,
     pages = {
         "index.html": render_index(data, checked_at, now, upcoming),
         HOW_PATH + "index.html": render_how(data, rules, kept, checked_at, now, upcoming),
+        ALUMNI_PATH + "index.html": alumni_html,
         "404.html": render_404(now),
         "games.csv": render_csv(data),
         "site.webmanifest": render_manifest(),
-        "sitemap.xml": render_sitemap(data, checked_at),
+        "sitemap.xml": render_sitemap(data, checked_at, max(alumni_data["verified_at"], endowment_data["verified_at"])),
         "robots.txt": f"User-agent: *\nAllow: /\n\nSitemap: {SITE_URL}sitemap.xml\n",
         ".nojekyll": "",
     }
@@ -1038,6 +1067,8 @@ def build(data_path: Path, out: Path, *, checked_at: str | None = None,
     (out / "icon-maskable-512.png").write_bytes(images.icon_png(512, maskable=True))
     (out / "data").mkdir()
     shutil.copyfile(data_path, out / "data" / "series.json")  # the data file as-is
+    shutil.copyfile(alumni_path or ALUMNI_DATA, out / "data" / "alumni.json")
+    shutil.copyfile(endowment_path or ENDOWMENT_DATA, out / "data" / "endowment.json")
 
 
 def parse_now(text: str | None) -> dt.datetime | None:
@@ -1057,6 +1088,8 @@ def main(argv=None) -> int:
                     help="upcoming meetings from the schedule pages (optional)")
     ap.add_argument("--overrides", type=Path, default=OVERRIDES,
                     help="the rulings file, for the counts on the how-it-works page")
+    ap.add_argument("--alumni", type=Path, default=ALUMNI_DATA, help="curated alumni records")
+    ap.add_argument("--endowment", type=Path, default=ENDOWMENT_DATA, help="matched-year endowment records")
     ap.add_argument("--checked-file", type=Path, default=CHECKED_AT,
                     help="file holding the time of the last successful scrape (optional)")
     ap.add_argument("--now", help="pretend it is this time, for local previews and tests only (never used by "
@@ -1065,7 +1098,8 @@ def main(argv=None) -> int:
     args = ap.parse_args(argv)
     try:
         build(args.data, args.out, checked_at=read_checked(args.checked_file),
-              upcoming_path=args.upcoming, now=parse_now(args.now), overrides_path=args.overrides)
+              upcoming_path=args.upcoming, now=parse_now(args.now), overrides_path=args.overrides,
+              alumni_path=args.alumni, endowment_path=args.endowment)
     except (merge.MergeError, DataError, KeyError, TypeError, ValueError, AttributeError) as exc:
         print(f"render failed: {exc!r}", file=sys.stderr)
         return 1

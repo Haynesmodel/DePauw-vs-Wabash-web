@@ -86,6 +86,15 @@ def test_whitespace_alone_is_not_a_change():
     assert settle(old, [{**old[0], "site": " Greencastle,   Ind. "}])[1] == []
 
 
+def test_a_restyle_alone_is_not_a_change():
+    old = [game("1957-11-16", 37, 6)]
+    for restyle in ({"site": "Greencastle, IN"}, {"site": "GREENCASTLE, ind."}):
+        games, entries, _, _ = settle(old, [{**old[0], **restyle}])
+        assert entries == [], restyle
+    assert settle(old, [{**old[0], "site": "Muncie, IN"}])[1] != []              # a different place is a change
+    assert settle([{**old[0], "note": "OT"}], [{**old[0], "note": "ot"}])[1] == []
+
+
 def test_approving_applies_only_what_still_matches_pending():
     old = [game("1957-11-16", 37, 6), game("1958-11-15", 24, 8)]
     new = [game("1957-11-16", 37, 7), game("1958-11-15", 24, 9)]

@@ -27,6 +27,7 @@ import re
 from pathlib import Path
 
 import merge
+import places
 
 PENDING_SCHEMA = 1
 LABEL = "data-review"
@@ -44,9 +45,20 @@ def _clean(v):
     return re.sub(r"\s+", " ", v).strip() if isinstance(v, str) else v
 
 
+def _plain(field: str, v):
+    """A value with only its styling removed: spacing, capitalization and, for a place, the state
+    abbreviation style ("IN" and "Ind." are the same place). A restyle is not a change to the game."""
+    v = _clean(v)
+    if not isinstance(v, str):
+        return v
+    if field in ("location", "site"):
+        v = places.ap_place(v)
+    return v.casefold()
+
+
 def norm(g: dict) -> dict:
-    """The fields that count as the game, with runs of whitespace collapsed (so only a real edit differs)."""
-    return {k: _clean(g.get(k)) for k in FIELDS} | {"boxscore": _clean(g.get("boxscore"))}
+    """The fields that count as the game, compared with styling removed (so only a real edit differs)."""
+    return {k: _plain(k, g.get(k)) for k in FIELDS} | {"boxscore": _clean(g.get("boxscore"))}
 
 
 def _frozen(g: dict) -> str:
@@ -84,7 +96,7 @@ def _pair_changes(removed: list, added: list) -> list:
 
 def diff(old: list, new: list, current: int | None) -> list:
     """Every historical difference between a school's saved games and its new ones, as
-    [{kind: edited|added|removed, old, new}]. Games are compared whole, ignoring runs of whitespace."""
+    [{kind: edited|added|removed, old, new}]. Games are compared whole, ignoring styling (see _plain)."""
     left = {}
     for g in old:
         left.setdefault(_frozen(g), []).append(g)
@@ -273,7 +285,7 @@ def _game_text(g: dict | None) -> str:
 def _changed_fields(o: dict | None, n: dict | None) -> str:
     if o is None or n is None:
         return ""
-    names = [FIELD_WORDS.get(k, k) for k in FIELDS if _clean(o.get(k)) != _clean(n.get(k))]
+    names = [FIELD_WORDS.get(k, k) for k in FIELDS if _plain(k, o.get(k)) != _plain(k, n.get(k))]
     return f" (changed: {', '.join(names)})" if names else ""
 
 

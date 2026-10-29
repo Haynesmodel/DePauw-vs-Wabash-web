@@ -1,0 +1,76 @@
+{
+  "schema_version": 1,
+  "verified_at": "2026-10-29",
+  "methodology": "Admissions and student-success figures come from the schools’ Common Data Sets. Published values are reproduced as reported; cohorts and score-submission rates are shown because test-optional policies affect who submits scores. High-school GPA is not standardized between schools. Faculty degree figures use each school’s own published faculty population and are not a direct comparison.",
+  "metrics": [
+    {
+      "id": "sat",
+      "name": "SAT composite",
+      "group": "Entering class · Fall 2025",
+      "depauw": "1170–1390 (median 1290)",
+      "wabash": "1130–1335 (median 1250)",
+      "depauw_detail": "53% submitted SAT scores",
+      "wabash_detail": "40.5% submitted SAT scores",
+      "interpretation": "Middle 50% of first-year students who submitted scores; DePauw’s reported range and median are higher.",
+      "depauw_source": {"label": "DePauw 2025–26 Common Data Set, section C", "url": "https://www.depauw.edu/files/resources/depauw-cds-c-2526.pdf"},
+      "wabash_source": {"label": "Wabash 2025–26 Common Data Set", "url": "https://www.wabash.edu/institutional_research/docs/cds-2025-2026.xlsx"}
+    },
+    {
+      "id": "act",
+      "name": "ACT composite",
+      "group": "Entering class · Fall 2025",
+      "depauw": "26–32 (median 28)",
+      "wabash": "24–29.5 (median 25)",
+      "depauw_detail": "19% submitted ACT scores",
+      "wabash_detail": "10.2% submitted ACT scores",
+      "interpretation": "Middle 50% of first-year students who submitted scores; DePauw’s reported range and median are higher.",
+      "depauw_source": {"label": "DePauw 2025–26 Common Data Set, section C", "url": "https://www.depauw.edu/files/resources/depauw-cds-c-2526.pdf"},
+      "wabash_source": {"label": "Wabash 2025–26 Common Data Set", "url": "https://www.wabash.edu/institutional_research/docs/cds-2025-2026.xlsx"}
+    },
+    {
+      "id": "gpa",
+      "name": "Reported average high-school GPA",
+      "group": "Entering class · Fall 2025",
+      "depauw": "3.90",
+      "wabash": "3.52",
+      "depauw_detail": "Reported by the institution",
+      "wabash_detail": "Reported by the institution",
+      "interpretation": "The Common Data Set requests an average GPA, but high schools and colleges may weight or calculate GPA differently; treat this as context, not a standardized ranking.",
+      "depauw_source": {"label": "DePauw 2025–26 Common Data Set, section C", "url": "https://www.depauw.edu/files/resources/depauw-cds-c-2526.pdf"},
+      "wabash_source": {"label": "Wabash 2025–26 Common Data Set", "url": "https://www.wabash.edu/institutional_research/docs/cds-2025-2026.xlsx"}
+    },
+    {
+      "id": "retention",
+      "name": "First-year retention",
+      "group": "Fall 2024 entering cohort",
+      "depauw": "89%",
+      "wabash": "84.0%",
+      "depauw_detail": "Returned or completed by Fall 2025",
+      "wabash_detail": "Returned or completed by Fall 2025",
+      "interpretation": "Share of the Fall 2024 first-time, full-time cohort retained by Fall 2025; DePauw reports the higher rate.",
+      "depauw_source": {"label": "DePauw 2025–26 Common Data Set, section B", "url": "https://www.depauw.edu/files/resources/depauw-cds-b-2526.pdf"},
+      "wabash_source": {"label": "Wabash 2025–26 Common Data Set", "url": "https://www.wabash.edu/institutional_research/docs/cds-2025-2026.xlsx"}
+    },
+    {
+      "id": "graduation",
+      "name": "Six-year graduation rate",
+      "group": "Fall 2019 entering cohort",
+      "depauw": "78%",
+      "wabash": "72.7%",
+      "depauw_detail": "Completed within six years",
+      "wabash_detail": "Completed within six years",
+      "interpretation": "Common Data Set rate for the Fall 2019 first-time, full-time bachelor’s cohort; DePauw reports the higher rate.",
+      "depauw_source": {"label": "DePauw 2025–26 Common Data Set, section B", "url": "https://www.depauw.edu/files/resources/depauw-cds-b-2526.pdf"},
+      "wabash_source": {"label": "Wabash 2025–26 Common Data Set", "url": "https://www.wabash.edu/institutional_research/docs/cds-2025-2026.xlsx"}
+    }
+  ],
+  "faculty": {
+    "depauw": {"value": "99%", "population": "Tenure-track faculty holding a Ph.D. or highest degree", "source": {"label": "DePauw Quick Facts", "url": "https://www.depauw.edu/about/quick-facts/"}},
+    "wabash": {"value": "99%", "population": "Full-time faculty holding a Ph.D. or equivalent terminal degree", "source": {"label": "Wabash Facts & Figures", "url": "https://www.wabash.edu/aboutwabash/facts"}},
+    "awards": [
+      {"label": "DePauw faculty awards and fellowships", "url": "https://www.depauw.edu/offices/academic-affairs/faculty-development/awards-and-fellowships/"},
+      {"label": "Wabash Excellence in Teaching Award", "url": "https://blog.wabash.edu/teachingandlearning/news/mma-teaching-award/"}
+    ],
+    "note": "Both schools report 99% on faculty credentials, but the populations and wording differ. Faculty award programs also use different categories, so their counts are not ranked here."
+  }
+}

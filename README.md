@@ -71,7 +71,8 @@ flowchart LR
   OV --> RN
   RN --> SITE["site/<br/>home page, how-it-works, 404,<br/>games.csv, og-image, icons"]
   SITE --> GP["GitHub Pages<br/>depauwvswabash.com"]
-  SJ -.-> SN["snapshot.yml (Jul 1, Jan 2)<br/>data files go to a GitHub<br/>Release, source pages go<br/>to the Wayback Machine"]
+  SJ -.-> SN["snapshot.yml (Jul 1, Jan 2)<br/>data files go to a<br/>GitHub Release first"]
+  SN -.-> WB["then, best effort:<br/>source pages go to the<br/>Wayback Machine"]
 ```
 
 Each school's page for a sport is accepted only when its parsed wins, losses, ties, home/away records and current streak match that page's own summary, the page is for the right opponent, and its game count has not shrunk against that school's saved copy. Doubleheaders count as two games. If any check fails, that school keeps its last good games for that sport, the merge is redone from the two saved copies, and the run turns red; everything that passed still updates. A page that passes is then checked for changes to old games, which are held for review (see "Review hold" below). Requests identify the project in the User-Agent and are spaced a few seconds apart.
@@ -118,7 +119,7 @@ Three GitHub Actions workflows live in `.github/workflows/`:
 |---|---|---|
 | `update-and-deploy.yml` | Twice a day, every 30 minutes (ended at once by the gate unless a game is being played), on every push to `main`, and by hand | Scrapes both schools' pages, applies the review hold, merges, commits `data/` changes, renders the site, deploys it to GitHub Pages and keeps the `data-review` issue in step |
 | `checks.yml` | On every pull request to `main` | Runs the tests, renders the site, validates the generated HTML and renders every Mermaid diagram in this README |
-| `snapshot.yml` | July 1 and January 2, and by hand | Saves a GitHub Release with copies of the data files (skipped when nothing changed) and asks the Wayback Machine to save the source pages |
+| `snapshot.yml` | July 1 and January 2, and by hand | Saves a GitHub Release with copies of the data files (skipped when nothing changed), then, as a last job that can never fail the run, asks the Wayback Machine to save the source pages |
 
 What each run of `update-and-deploy.yml` does:
 
@@ -284,8 +285,10 @@ Tests are in `tests/test_review.py`; the logic is in `scraper/review.py` and `sc
 `.github/workflows/snapshot.yml` keeps a copy of the data outside the git history. It creates a GitHub Release tagged `data-YYYY-MM-DD` (a `-2`, `-3` ... is added only if that tag is taken) with `series.json`, `depauw.json`, `wabash.json`, `overrides.json`, `upcoming.json` and a freshly generated `games.csv` attached, and release notes listing the totals and each sport's record at that moment.
 
 - **When.** Twice a year, after the spring seasons (July 1) and after the fall seasons (January 2), at off-peak minutes, and on demand (Actions, "Data snapshot", Run workflow). It skips, and succeeds, when the data has not changed since the newest `data-*` release (a hash of `series.json`, `depauw.json`, `wabash.json` and `overrides.json` is kept in the release notes; `upcoming.json` is attached but does not count, because it changes with every schedule update).
-- **Internet Archive.** In the same run, each of the 12 source history pages (6 DePauw, 6 Wabash) is sent to the Wayback Machine's Save Page Now (`https://web.archive.org/save/<url>`), a few seconds apart. It is best effort: a refusal, timeout or rate limit logs a warning and never fails the run, and the archive links that came back are listed in the release notes.
-- **Permissions.** A read-only job builds the files; only the release job has `contents: write`. Every action is pinned to a full commit SHA. The first snapshot has to be made by hand once after this workflow is merged.
+- **Job order.** Three jobs, one after the other: `prepare` (checks for changes and builds the release files, with no calls to the Internet Archive), `release` (creates the GitHub Release; its notes say "Wayback Machine copies: being saved") and `archive`. A slow Internet Archive can therefore never delay or block the data release.
+- **Internet Archive.** The `archive` job sends each of the 12 source history pages (6 DePauw, 6 Wabash) to the Wayback Machine's Save Page Now (`https://web.archive.org/save/<url>`), about 6 seconds apart, then edits the release notes in place (`gh release edit`) to list the archive links and any pages it could not save ("Wayback Machine copies: none could be saved this time." if there were none). It is best effort and never fails the run: every error is caught and logged as a warning, the script always exits 0, and the job is also `continue-on-error`. Limits, named constants in `scraper/snapshot.py`: `SAVE_BUDGET` (10 minutes for the whole step; pages not reached are listed as not saved), `SAVE_TIMEOUT` (60 seconds per page) and `SAVE_PAUSE` (6 seconds between requests), plus a 15-minute job `timeout-minutes` as a backstop. The per-page limit is a socket timeout, so the budget and the job timeout are the real bounds.
+- **Manual runs.** Actions, "Data snapshot", Run workflow has two inputs. `archive` (default on): turn it off to make a snapshot without archiving; the notes then say the copies were not requested. `archive_release_tag`: to retry archiving for a release that already exists, for example after some pages were not saved, enter its tag (such as `data-2026-10-29`). That run makes no new snapshot; it only archives the 12 pages again and replaces the archive section of that release's notes, leaving the rest of the notes alone. Retrying overwrites the earlier list of links, so the new list is the complete one.
+- **Permissions.** The `prepare` job is read-only; the `release` and `archive` jobs are the only ones with `contents: write`. Every action is pinned to a full commit SHA. The first snapshot has to be made by hand once after this workflow is merged.
 
 The logic is in `scraper/snapshot.py` and the tests in `tests/test_snapshot.py`.
 

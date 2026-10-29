@@ -5,13 +5,17 @@ Internet Archive to save each source page. Used by .github/workflows/snapshot.ym
 
   python scraper/snapshot.py check              print changed=true/false (also to $GITHUB_OUTPUT): has the
                                                 data changed since the newest data-* release?
-  python scraper/snapshot.py build --out DIR    write the release files and notes into DIR
+  python scraper/snapshot.py build --out DIR    write the release files and notes into DIR (no network calls to
+                                                the Internet Archive)
+  python scraper/snapshot.py archive --tag TAG  ask the Internet Archive to save the source pages, then edit the
+                                                release notes of TAG in place; always exits 0
 
 The change check compares a hash of series.json, depauw.json, wabash.json and overrides.json with the hash
 the last release recorded in its notes. data/upcoming.json is attached to every release but does not count
 as a change, because it changes with every schedule update.
 
-The Wayback Machine part is best effort: a failure logs a warning and never fails the run.
+The Wayback Machine part runs after the release exists and is best effort: it has a total time budget and a
+per-page timeout, a failure logs a warning, and it never fails the run or touches the release files.
 """
 
 from __future__ import annotations
@@ -24,6 +28,7 @@ import os
 import re
 import subprocess
 import sys
+import tempfile
 import time
 import urllib.error
 import urllib.request
@@ -39,8 +44,12 @@ DATA_FILES = ("series.json", "depauw.json", "wabash.json", "overrides.json", "up
 HASHED_FILES = ("series.json", "depauw.json", "wabash.json", "overrides.json")
 USER_AGENT = "DePauw-vs-Wabash-fan-site snapshot (https://github.com/jacksonmote/DePauw-vs-Wabash-web)"
 SAVE_URL = "https://web.archive.org/save/"
-SAVE_TIMEOUT = 150            # Save Page Now can take a minute or more per page
+SAVE_TIMEOUT = 60             # seconds to wait on one page (Save Page Now can be slow)
 SAVE_PAUSE = 6                # seconds between requests
+SAVE_BUDGET = 600             # seconds for the whole archive step; pages left over are recorded as not saved
+ARCHIVE_START = "<!-- archive:start -->"
+ARCHIVE_END = "<!-- archive:end -->"
+TAG_RE = re.compile(r"data-\d{4}-\d{2}-\d{2}(-\d+)?")
 
 
 def data_hash(data_dir: Path = DATA) -> str:
@@ -78,7 +87,23 @@ def source_urls(cfg: dict) -> list:
     return [d + s["path"] for s in cfg["sports"]] + [w + s["wabash_path"] for s in cfg["sports"]]
 
 
-def release_notes(series: dict, links: list, failed: list, data_digest: str, day: dt.date) -> str:
+def archive_section(links: list | None, failed: list | None = None, requested: bool = True) -> str:
+    """The notes block between the archive markers. links None means the archive has not run yet."""
+    if not requested:
+        body = ["Wayback Machine copies: not requested for this snapshot."]
+    elif links is None:
+        body = ["Wayback Machine copies: being saved"]
+    elif links:
+        body = ["Wayback Machine copies of the source pages, saved after this snapshot was made:", ""]
+        body += [f"- {link}" for link in links]
+    else:
+        body = ["Wayback Machine copies: none could be saved this time."]
+    if failed:
+        body += ["", f"Not saved ({len(failed)}): " + ", ".join(failed)]
+    return "\n".join([ARCHIVE_START, *body, ARCHIVE_END])
+
+
+def release_notes(series: dict, data_digest: str, day: dt.date, archive: str | None = None) -> str:
     t = series["totals"]
     lines = [f"Snapshot of the data behind depauwvswabash.com on {day.isoformat()}.", "",
              f"**All head-to-head sports:** DePauw {t['depauw_wins']}, Wabash {t['wabash_wins']}, "
@@ -90,27 +115,45 @@ def release_notes(series: dict, links: list, failed: list, data_digest: str, day
                      f"({s['games_played']} {unit})")
     lines += ["", "Attached: `series.json` (the merged record), `depauw.json` and `wabash.json` (each school's "
               "games as read), `overrides.json` (the rulings), `upcoming.json` (the schedule at that moment) and "
-              "`games.csv` (one row per game).", ""]
-    if links:
-        lines += ["Internet Archive copies of the source pages, saved when this snapshot was made:", ""]
-        lines += [f"- {link}" for link in links]
-    else:
-        lines.append("The Internet Archive saved none of the source pages this time.")
-    if failed:
-        lines += ["", f"Not saved ({len(failed)}): " + ", ".join(failed)]
-    lines += ["", f"{HASH_MARK}{data_digest} -->"]
+              "`games.csv` (one row per game).", "",
+              archive or archive_section(None), "", f"{HASH_MARK}{data_digest} -->"]
     return "\n".join(lines) + "\n"
 
 
-def wayback_save(urls: list, opener=urllib.request.urlopen, sleep=time.sleep, log=print) -> tuple:
-    """Ask the Internet Archive to save each page. Returns (archive links, urls it did not save). Never raises."""
+def replace_archive(notes: str, section: str) -> str:
+    """Swap the archive block in release notes for a new one; everything else is left as it was.
+    Notes from before the markers existed have their old Internet Archive paragraph replaced instead."""
+    pat = re.compile(re.escape(ARCHIVE_START) + r".*?" + re.escape(ARCHIVE_END), re.S)
+    if pat.search(notes):
+        return pat.sub(lambda _: section, notes, count=1)
+    legacy = re.compile(r"(Internet Archive copies of the source pages|The Internet Archive saved none).*?(?=\n*"
+                        + re.escape(HASH_MARK) + r"|\Z)", re.S)
+    if legacy.search(notes):
+        return legacy.sub(lambda _: section, notes, count=1)
+    i = notes.find(HASH_MARK)
+    if i < 0:
+        return notes.rstrip("\n") + "\n\n" + section + "\n"
+    return notes[:i] + section + "\n\n" + notes[i:]
+
+
+def wayback_save(urls: list, opener=urllib.request.urlopen, sleep=time.sleep, log=print,
+                 clock=time.monotonic, budget: float = SAVE_BUDGET, timeout: float = SAVE_TIMEOUT) -> tuple:
+    """Ask the Internet Archive to save each page. Returns (archive links, urls it did not save). Never raises.
+    Stops when the total budget is used up; every page not tried is returned as not saved. The timeout is
+    urllib's per-socket-operation limit, so the budget is the real bound on the whole step."""
     links, failed = [], []
+    start = clock()
     for i, url in enumerate(urls):
         if i:
             sleep(SAVE_PAUSE)
+        left = budget - (clock() - start)
+        if left <= 0:
+            failed += urls[i:]
+            log(f"WARN time budget of {budget:.0f}s used up; not saved: {len(urls) - i} pages", file=sys.stderr)
+            break
         try:
             req = urllib.request.Request(SAVE_URL + url, headers={"User-Agent": USER_AGENT})
-            with opener(req, timeout=SAVE_TIMEOUT) as resp:
+            with opener(req, timeout=min(timeout, left)) as resp:
                 link = resp.headers.get("Content-Location") or resp.geturl()
             if link.startswith("/"):
                 link = "https://web.archive.org" + link
@@ -128,6 +171,27 @@ def gh(*args: str) -> str:
     return subprocess.run(["gh", *args], capture_output=True, text=True, check=True).stdout
 
 
+def archive_release(tag: str, run=gh, saver=wayback_save, log=print) -> bool:
+    """Archive the source pages, then edit the notes of release `tag` in place. Never raises; True if the notes
+    were updated. The release files and the rest of the notes are not touched."""
+    try:
+        if not TAG_RE.fullmatch(tag or ""):
+            raise ValueError(f"{tag!r} is not a data-YYYY-MM-DD release tag")
+        notes = json.loads(run("release", "view", tag, "--json", "body"))["body"]
+        cfg = json.loads(SOURCES.read_text(encoding="utf-8"))
+        links, failed = saver(source_urls(cfg))
+        updated = replace_archive(notes, archive_section(links, failed))
+        with tempfile.TemporaryDirectory() as d:
+            f = Path(d) / "notes.md"
+            f.write_text(updated, encoding="utf-8", newline="")
+            run("release", "edit", tag, "--notes-file", str(f))
+        log(f"OK   release {tag} notes updated: {len(links)} saved, {len(failed)} not saved")
+        return True
+    except Exception as exc:  # the archive is a nice extra: whatever goes wrong, the run stays green
+        log(f"WARN archiving {tag} did not finish: {exc!r}", file=sys.stderr)
+        return False
+
+
 def changed_since_last_release(run=gh, data_dir: Path = DATA) -> tuple:
     """(changed, reason). A first snapshot always counts as a change."""
     tag = newest_data_release(json.loads(run("release", "list", "--limit", "100", "--json", "tagName")))
@@ -140,7 +204,8 @@ def changed_since_last_release(run=gh, data_dir: Path = DATA) -> tuple:
     return now != last, f"{tag} recorded {last}, the data is {now}"
 
 
-def build(out: Path, run=gh, data_dir: Path = DATA, saver=wayback_save, today: dt.date | None = None) -> str:
+def build(out: Path, run=gh, data_dir: Path = DATA, today: dt.date | None = None, archive: bool = True) -> str:
+    """Write the release files. Makes no request to the Internet Archive: that happens after the release."""
     import render                                    # imported here: the check step needs only the standard library
 
     out.mkdir(parents=True, exist_ok=True)
@@ -148,13 +213,11 @@ def build(out: Path, run=gh, data_dir: Path = DATA, saver=wayback_save, today: d
     for name in DATA_FILES:
         (out / name).write_bytes((data_dir / name).read_bytes())
     (out / "games.csv").write_text(render.render_csv(series), encoding="utf-8", newline="")
-    cfg = json.loads(SOURCES.read_text(encoding="utf-8"))
-    links, failed = saver(source_urls(cfg))
     from timeutil import to_eastern
     day = today or to_eastern(dt.datetime.now(dt.timezone.utc))[0].date()
     existing = {r["tagName"] for r in json.loads(run("release", "list", "--limit", "200", "--json", "tagName"))}
     tag = pick_tag(day, existing)
-    (out / "NOTES.md").write_text(release_notes(series, links, failed, data_hash(data_dir), day), encoding="utf-8")
+    (out / "NOTES.md").write_text(release_notes(series, data_hash(data_dir), day, archive_section(None, requested=archive)), encoding="utf-8")
     (out / "TAG").write_text(tag + "\n", encoding="utf-8")
     return tag
 
@@ -172,13 +235,20 @@ def main(argv=None) -> int:
     sub.add_parser("check")
     b = sub.add_parser("build")
     b.add_argument("--out", type=Path, required=True)
+    b.add_argument("--archive", choices=("true", "false"), default="true",
+                   help="false: the notes say the Internet Archive copies were not requested")
+    a = sub.add_parser("archive")
+    a.add_argument("--tag", required=True)
     args = ap.parse_args(argv)
     if args.command == "check":
         changed, why = changed_since_last_release()
         print(f"changed={'true' if changed else 'false'}: {why}")
         _output("changed", "true" if changed else "false")
         return 0
-    print(f"Snapshot tag: {build(args.out)}")
+    if args.command == "archive":
+        archive_release(args.tag)
+        return 0                                          # never fails the run, whatever happened
+    print(f"Snapshot tag: {build(args.out, archive=args.archive == 'true')}")
     return 0
 
 

@@ -1,15 +1,29 @@
 name: Data snapshot
 
-# A copy of the data kept outside the git history: a GitHub Release tagged data-YYYY-MM-DD, and a request to
-# the Internet Archive to save each source page (scraper/snapshot.py). Twice a year, after the spring seasons
+# A copy of the data kept outside the git history: a GitHub Release tagged data-YYYY-MM-DD, and then a request
+# to the Internet Archive to save each source page (scraper/snapshot.py). Twice a year, after the spring seasons
 # (July 1) and after the fall seasons (January 2), at off-peak minutes, and on demand. It does nothing, and
 # succeeds, when the data has not changed since the newest data-* release.
+#
+# Job order: prepare (build the files) -> release (create the GitHub Release) -> archive (Internet Archive, then
+# edit the release notes). The archive job comes last and can never fail the run or hold up the release.
+# Manual runs: `archive: false` makes a snapshot without archiving; `archive_release_tag: data-YYYY-MM-DD`
+# skips the snapshot and only archives that existing release (to retry pages that were not saved).
 
 on:
   schedule:
     - cron: "23 14 1 7 *"
     - cron: "41 15 2 1 *"
   workflow_dispatch:
+    inputs:
+      archive:
+        description: "Ask the Internet Archive to save the source pages after the release is made"
+        type: boolean
+        default: true
+      archive_release_tag:
+        description: "Retry archiving only: an existing release tag (data-YYYY-MM-DD). Makes no new snapshot."
+        type: string
+        default: ""
 
 permissions:
   contents: read
@@ -20,11 +34,11 @@ concurrency:
 
 jobs:
   prepare:
-    # Read-only: decides whether anything changed, then builds the release files, asks the Internet Archive to
-    # save the source pages (best effort, so a slow or refusing archive never fails the run) and hands the
-    # files to the release job as an artifact.
+    # Read-only: decides whether anything changed, then builds the release files (no Internet Archive calls)
+    # and hands them to the release job as an artifact. Skipped when a manual run only retries archiving.
+    if: ${{ github.event.inputs.archive_release_tag == '' }}
     runs-on: ubuntu-latest
-    timeout-minutes: 60
+    timeout-minutes: 10
     permissions:
       contents: read
     outputs:
@@ -33,6 +47,7 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           ref: main
+          persist-credentials: false
 
       - name: Has the data changed since the last snapshot?
         id: check
@@ -52,9 +67,10 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           GH_REPO: ${{ github.repository }}
+          ARCHIVE: ${{ github.event.inputs.archive || 'true' }}
         run: |
           pip install -r requirements.txt
-          python scraper/snapshot.py build --out release
+          python scraper/snapshot.py build --out release --archive "$ARCHIVE"
 
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         if: ${{ steps.check.outputs.changed == 'true' }}
@@ -71,6 +87,8 @@ jobs:
     timeout-minutes: 10
     permissions:
       contents: write
+    outputs:
+      tag: ${{ steps.create.outputs.tag }}
     steps:
       - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
@@ -78,6 +96,7 @@ jobs:
           path: release
 
       - name: Create the release
+        id: create
         env:
           GH_TOKEN: ${{ github.token }}
           GH_REPO: ${{ github.repository }}
@@ -88,3 +107,31 @@ jobs:
             release/series.json release/depauw.json release/wabash.json release/overrides.json \
             release/upcoming.json release/games.csv \
             --title "Data snapshot ${tag#data-}" --notes-file release/NOTES.md --target "$TARGET"
+          echo "tag=$tag" >> "$GITHUB_OUTPUT"
+
+  archive:
+    # Last, and never fatal: asks the Internet Archive to save the 12 source pages (10 minute budget, 60 second
+    # limit per page, see scraper/snapshot.py), then edits the release notes in place. The script always exits 0
+    # and continue-on-error covers the rest (a timeout, a cancelled step), so the run's result is the release's.
+    # Runs after a new release, or alone on a manual run with archive_release_tag.
+    needs: [prepare, release]
+    if: >-
+      ${{ always() && github.event.inputs.archive != 'false' &&
+      (github.event.inputs.archive_release_tag != '' || needs.release.result == 'success') }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    continue-on-error: true
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: main
+          persist-credentials: false
+
+      - name: Save the source pages and update the release notes
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          TAG: ${{ github.event.inputs.archive_release_tag || needs.release.outputs.tag }}
+        run: python3 scraper/snapshot.py archive --tag "$TAG"

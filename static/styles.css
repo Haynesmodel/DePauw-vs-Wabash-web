@@ -83,6 +83,9 @@ h1, h2 { line-height: 1.2; margin: 0; }
 }
 .site-header h1 { font-size: clamp(1.75rem, 6vw, 2.75rem); letter-spacing: -0.01em; }
 .subtitle { margin: 0.5rem 0 0; color: var(--color-header-muted); font-size: 1.0625rem; }
+.site-nav { display: flex; flex-wrap: wrap; gap: 1rem; margin-top: 0.75rem; }
+.site-nav a { color: var(--color-header-text); font-weight: 650; text-decoration-thickness: 2px; text-underline-offset: 0.2em; }
+.site-nav a[aria-current="page"] { text-decoration-color: var(--color-depauw-accent); text-decoration-thickness: 4px; font-weight: 800; }
 
 main { padding-block: 1.5rem 2.5rem; display: grid; gap: 1.5rem; }
 
@@ -178,6 +181,25 @@ main { padding-block: 1.5rem 2.5rem; display: grid; gap: 1.5rem; }
 .bell { margin-top: 1.25rem; border: 1px solid var(--color-border); border-left: 6px solid var(--color-depauw-accent); border-radius: var(--radius); padding: 1rem var(--gutter); }
 .bell h3 { font-size: 1.125rem; margin: 0 0 0.5rem; }
 .bell-holder { margin: 0; font-size: 1.0625rem; }
+
+/* Curated alumni and endowment page */
+.alumni-main { max-width: 62rem; }
+.category-nav { display: flex; flex-wrap: wrap; gap: 0.25rem 0.75rem; padding: 0.75rem 0; }
+.alumni-method, .alumni-download { color: var(--color-text-muted); margin: 0; }
+.alumni-method-details { color: var(--color-text-muted); margin: 0.75rem 0 1.25rem; }
+.alumni-method-details summary { cursor: pointer; font-weight: 650; padding: 0.4rem 0; }
+.alumni-card > p, .endowment > p { margin: 0 0 0.75rem; }
+.alumni-school, .endowment-value { min-width: 0; }
+.alumni-school .tile-name, .endowment-value .tile-name { margin: 0; }
+.alumni-school details summary { cursor: pointer; font-weight: 600; padding: 0.4rem 0; }
+.alumni-school ul { margin: 0.5rem 0 0; padding-left: 1.25rem; }
+.alumni-school li { margin-bottom: 0.75rem; overflow-wrap: anywhere; }
+.alumni-zero, .endowment-value p { margin: 0.25rem 0; overflow-wrap: anywhere; }
+.money { overflow-wrap: anywhere; }
+
+@media (forced-colors: active) {
+  .site-nav a[aria-current="page"] { outline: 1px solid currentColor; outline-offset: 3px; }
+}
 .bell-note { color: var(--color-text-muted); font-size: 0.9375rem; }
 .bell-facts { margin-top: 0.75rem; grid-template-columns: minmax(0, 1fr); }
 .bell-facts .tiles { margin-top: 0.25rem; }

@@ -154,3 +154,85 @@ def parse_schedule(html: str, *, opponent_id: int) -> list:
             "doubleheader": "(DH)" in _text(li.select_one(".sidearm-schedule-game-opponent-name")),
         })
     return sorted(games, key=lambda g: g["date"])  # stable, so a doubleheader stays game 1 then game 2
+
+
+# --------------------------------------------------------------------------- #
+# Cross-checking DePauw's schedule against Wabash's
+# --------------------------------------------------------------------------- #
+
+FLIP_LOCATION = {"home": "away", "away": "home"}
+SITE_WORDS = re.compile(r"[^a-z0-9 ]")
+STATE_FIXES = {"ind": "in", "indiana": "in"}
+SCHEDULE_DATE_WINDOW = 3
+
+
+def flip_location(g: dict) -> dict:
+    """A game from Wabash's schedule, written from Wabash's side, as DePauw's point of view."""
+    return {**g, "location": FLIP_LOCATION.get(g["location"], g["location"])}
+
+
+def _site_words(site: Optional[str]) -> set:
+    words = SITE_WORDS.sub(" ", (site or "").lower()).split()
+    return {STATE_FIXES.get(w, w) for w in words}
+
+
+def same_site(a: Optional[str], b: Optional[str]) -> bool:
+    """'Scheumann Stadium, Muncie, Ind.' and 'Scheumann Stadium, Muncie, IN' are the same place, and
+    'Greencastle, IN' is a shorter way to name 'Neal Fieldhouse, Greencastle, Ind.'."""
+    wa, wb = _site_words(a), _site_words(b)
+    return not wa or not wb or wa <= wb or wb <= wa
+
+
+def merge_schedules(label: str, depauw: list, wabash: list) -> tuple:
+    """DePauw's upcoming games with Wabash's schedule folded in. Returns (games, warnings).
+
+    A game on both schedules is shown as DePauw lists it (source "both"); any difference in date,
+    time, site, place or status becomes a warning. A game only Wabash lists is shown too, with source
+    "wabash". Games match by date first (a doubleheader pairs in order), then by dates a few days
+    apart. This never affects the records."""
+    warnings = []
+    pairs: dict = {}
+    used_w: set = set()
+    for di, gd in enumerate(depauw):
+        for wi, gw in enumerate(wabash):
+            if wi not in used_w and gw["date"] == gd["date"] and di not in pairs:
+                pairs[di] = wi
+                used_w.add(wi)
+    edges = sorted((abs((dt.date.fromisoformat(gd["date"]) - dt.date.fromisoformat(gw["date"])).days), di, wi)
+                   for di, gd in enumerate(depauw) if di not in pairs
+                   for wi, gw in enumerate(wabash) if wi not in used_w)
+    for gap, di, wi in edges:
+        if gap <= SCHEDULE_DATE_WINDOW and di not in pairs and wi not in used_w:
+            pairs[di] = wi
+            used_w.add(wi)
+
+    merged = []
+    for di, gd in enumerate(depauw):
+        game = dict(gd)
+        game["source"] = "depauw"
+        if di in pairs:
+            gw = wabash[pairs[di]]
+            game["source"] = "both"
+            diffs = []
+            if gw["date"] != gd["date"]:
+                diffs.append(f"date (Wabash {gw['date']})")
+            if gd.get("time") and gw.get("time") and gd["time"] != gw["time"]:
+                diffs.append(f"time (Wabash {gw['time']})")
+            if not same_site(gd.get("site"), gw.get("site")):
+                diffs.append(f"site (Wabash {gw.get('site')})")
+            if "unknown" not in (gd["location"], gw["location"]) and gd["location"] != gw["location"]:
+                diffs.append(f"home/away (Wabash {gw['location']})")
+            if gd["status"] != gw["status"]:
+                diffs.append(f"status (Wabash {gw['status']})")
+            if diffs:
+                warnings.append(f"{label} {gd['date']}: DePauw's schedule and Wabash's differ on "
+                                f"{', '.join(diffs)}; showing DePauw's")
+            for k in ("time", "site"):
+                if not game.get(k) and gw.get(k):
+                    game[k] = gw[k]
+        merged.append(game)
+    for wi, gw in enumerate(wabash):
+        if wi not in used_w:
+            warnings.append(f"{label} {gw['date']}: only on Wabash's schedule; showing it as Wabash's")
+            merged.append({**gw, "source": "wabash"})
+    return sorted(merged, key=lambda g: g["date"]), warnings

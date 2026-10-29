@@ -239,7 +239,7 @@ def test_a_card_lists_its_fun_facts_from_its_own_games(tmp_path):
 def test_facts_that_make_no_sense_are_left_out(tmp_path):
     swept = [gm("2020-04-01", "W", 12, 3), gm("2021-04-01", "W", 9, 8), gm("2022-04-01", "W", 14, 5)]
     text = fun_text(tmp_path, "mens-lacrosse", sport_of("mens-lacrosse", "Men's Lacrosse", swept, "goals"))
-    assert "Biggest DePauw win: DePauw 14, Wabash 5 · Apr 1, 2022 · by 9 goals · happened twice, most recent shown" in text
+    assert "Biggest DePauw win: DePauw 14, Wabash 5 · by 9 goals (twice, most recently Apr 1, 2022)" in text
     assert "Biggest Wabash win" not in text and "Longest Wabash win streak" not in text
     assert "Overtime" not in text and "Extra-inning" not in text
     assert "One-score games: 1 decided by 1 goal · most recent: DePauw 9, Wabash 8" in text

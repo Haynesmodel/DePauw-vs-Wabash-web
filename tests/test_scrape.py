@@ -156,6 +156,26 @@ def fixture_dir(tmp_path):
     return d
 
 
+WABASH_BASE = "https://sports.wabash.edu"
+SPORT_KEYS = ["football", "mens-basketball", "baseball", "mens-soccer", "mens-lacrosse", "mens-tennis"]
+
+
+def parse_wabash(html):
+    return scrape.parse_page(html, base_url=WABASH_BASE, opponent_match="depauw")
+
+
+@pytest.fixture
+def both_dir(fixture_dir, tmp_path):
+    """DePauw's six pages plus Wabash's six, rebuilt from the real markup captured on 2026-10-28."""
+    d = tmp_path / "both"
+    d.mkdir()
+    for page in fixture_dir.iterdir():
+        (d / page.name).write_text(page.read_text(encoding="utf-8"), encoding="utf-8")
+    for key in SPORT_KEYS:
+        (d / f"wabash-{key}.html").write_text(full_html(f"wabash-{key}"), encoding="utf-8")
+    return d
+
+
 def test_end_to_end_writes_series_json(fixture_dir, tmp_path, capsys):
     out = tmp_path / "series.json"
     assert scrape.main(["--fixtures", str(fixture_dir), "--output", str(out)]) == 0
@@ -363,17 +383,20 @@ def test_reordering_sources_rewrites_the_file(fixture_dir, tmp_path, monkeypatch
 # --------------------------------------------------------------------------- #
 
 @pytest.fixture
-def live(fixture_dir, monkeypatch):
-    """Make live fetches serve the fixture pages, with a switch to break individual sports."""
+def live(both_dir, monkeypatch):
+    """Make live fetches serve the fixture pages of both schools, with a switch to break individual
+    sports (by sport key, at both schools)."""
     state = {"broken": set()}
 
     def fake_fetch(url):
-        key = re.search(r"/sports/([^/]+)/", url).group(1)
+        wabash = "wabash.edu" in url
+        slug = re.search(r"/sports/([^/]+)/", url).group(1)
+        key = "mens-tennis" if wabash and slug == "tennis" else slug      # Wabash's slug for men's tennis
         if url.endswith("/schedule"):
             raise OSError("schedule pages are not part of these tests")
         if key in state["broken"]:
             raise OSError("network down")
-        return (fixture_dir / f"{key}.html").read_text(encoding="utf-8")
+        return (both_dir / (f"wabash-{key}.html" if wabash else f"{key}.html")).read_text(encoding="utf-8")
 
     monkeypatch.setattr(scrape, "fetch", fake_fetch)
     monkeypatch.setattr(scrape, "REQUEST_GAP_SECONDS", 0)
@@ -415,3 +438,159 @@ def test_fixture_and_dry_runs_are_not_checks(tmp_path, fixture_dir, live):
                         "--checked-file", str(tmp_path / "checked")]) == 0
     assert run_live(tmp_path, "--dry-run") == 0
     assert not (tmp_path / "checked").exists()
+
+
+# --------------------------------------------------------------------------- #
+# Both schools: Wabash's pages, the merge, and the per-school raw files
+# --------------------------------------------------------------------------- #
+
+def run_both(both_dir, tmp_path, *extra):
+    return scrape.main(["--fixtures", str(both_dir), "--output", str(tmp_path / "series.json"),
+                        "--upcoming-output", str(tmp_path / "upcoming.json"), *extra])
+
+
+def read(tmp_path, name):
+    return json.loads((tmp_path / name).read_text(encoding="utf-8"))
+
+
+def test_wabash_rows_are_read_from_wabashs_side_and_flipped_for_the_site():
+    games, summary, skipped = parse_wabash((FIX / "wabash-football-subset.html").read_text(encoding="utf-8"))
+    assert skipped == [] and (summary.wins, summary.losses, summary.ties) == (63, 59, 9)   # Wabash's own view
+    latest = games[0]
+    assert (latest.date, latest.result, latest.location) == ("2025-11-15", "L", "home")    # Wabash lost at home
+    flipped = scrape.game_dicts(games, "wabash")[-1]
+    assert flipped["date"] == "2025-11-15" and (flipped["result"], flipped["depauw"], flipped["wabash"]) == ("W", 41, 20)
+    assert flipped["location"] == "away" and flipped["site"] == "Crawfordsville, IN"
+
+
+def test_wabashs_old_games_keep_their_placeholder_dates_as_the_page_gives_them():
+    games, _, _ = parse_wabash((FIX / "wabash-mens-tennis-subset.html").read_text(encoding="utf-8"))
+    assert min(g.date for g in games) == "1915-01-01"
+
+
+def test_every_wabash_page_agrees_with_its_own_summary():
+    for key in SPORT_KEYS:
+        games, summary, skipped = parse_wabash(full_html(f"wabash-{key}"))
+        assert scrape.validate(games, summary) == [] and skipped == [], key
+
+
+def test_end_to_end_merges_both_schools_and_keeps_each_schools_games(both_dir, tmp_path, capsys):
+    assert run_both(both_dir, tmp_path) == 0
+    data = read(tmp_path, "series.json")
+    sp = data["sports"]
+    assert {k: v["games_played"] for k, v in sp.items()} == {
+        "football": 132, "mens-basketball": 238, "baseball": 316, "mens-soccer": 65,
+        "mens-lacrosse": 12, "mens-tennis": 123}
+    assert data["totals"] == {"depauw_wins": 518, "wabash_wins": 348, "ties": 20, "games_played": 886}
+    assert sp["football"]["record"] == {"depauw_wins": 60, "wabash_wins": 63, "ties": 9}   # 1891 counted twice until ruled on
+    assert sp["mens-tennis"]["record"] == {"depauw_wins": 115, "wabash_wins": 7, "ties": 1}
+    # Everything derived comes from the merged games, not from either school's page.
+    assert (sp["baseball"]["first_game"], sp["baseball"]["last_game"]) == ("1888-01-03", "2026-04-28")
+    assert {k: v["current_streak"] for k, v in sp.items()} == {
+        "football": "W4", "mens-basketball": "L1", "baseball": "L1",
+        "mens-soccer": "W2", "mens-lacrosse": "W12", "mens-tennis": "W61"}
+    assert sp["baseball"]["points"] == {"depauw": 1801, "wabash": 1750}
+    assert sp["football"]["sources"] == {"both": 130, "depauw_only": 1, "wabash_only": 1, "disputed": 2,
+                                         "date_differs": 2, "dates_not_recorded": 0}
+    assert sp["mens-tennis"]["unit"] == ["match", "matches"] and "unit" not in sp["football"]
+    assert sp["football"]["wabash_source_url"] == \
+        "https://sports.wabash.edu/sports/football/opponent-history/depauw-university/4"
+    assert sp["mens-tennis"]["wabash_source_url"].endswith("/sports/tennis/opponent-history/depauw-university/4")
+    assert {g["source"] for g in sp["baseball"]["games"]} == {"both", "depauw", "wabash"}
+
+    # Each school's own games are kept apart, both in DePauw's point of view.
+    depauw, wabash = read(tmp_path, "depauw.json"), read(tmp_path, "wabash.json")
+    assert depauw["school"] == "DePauw" and wabash["school"] == "Wabash" and wabash["perspective"] == "DePauw"
+    assert depauw["sports"]["baseball"]["games_played"] == 141 and wabash["sports"]["baseball"]["games_played"] == 314
+    assert wabash["sports"]["baseball"]["record"] == {"depauw_wins": 155, "wabash_wins": 156, "ties": 3}
+    assert depauw["sports"]["mens-tennis"]["record"] == {"depauw_wins": 33, "wabash_wins": 0, "ties": 0}
+    assert wabash["sports"]["football"]["games"][0]["result"] == "W"       # Wabash's 1890 loss, flipped
+
+    out = capsys.readouterr().out
+    assert "Football: 130 matched, 1 DePauw only, 1 Wabash only, 2 disputed, 2 date-differs" in out
+    assert "Men's Tennis: 33 matched, 0 DePauw only, 90 Wabash only, 1 disputed, 0 date-differs" in out
+
+
+def test_a_second_run_on_unchanged_pages_exits_green_and_writes_nothing(both_dir, tmp_path, capsys):
+    assert run_both(both_dir, tmp_path) == 0
+    files = ("series.json", "depauw.json", "wabash.json")
+    before = {f: (tmp_path / f).read_bytes() for f in files}
+    stamp = read(tmp_path, "series.json")["updated_at"]
+    capsys.readouterr()
+    assert run_both(both_dir, tmp_path) == 0
+    assert {f: (tmp_path / f).read_bytes() for f in files} == before
+    assert read(tmp_path, "series.json")["updated_at"] == stamp
+    out = capsys.readouterr().out
+    assert "unchanged" in out and "Wrote" not in out
+
+
+def test_one_schools_failed_page_keeps_that_schools_last_good_games(both_dir, tmp_path):
+    assert run_both(both_dir, tmp_path) == 0
+    good = {f: read(tmp_path, f) for f in ("series.json", "depauw.json", "wabash.json")}
+    (both_dir / "wabash-football.html").write_text("<html><body>Service unavailable</body></html>")
+    assert run_both(both_dir, tmp_path) == 1
+    assert read(tmp_path, "wabash.json")["sports"]["football"] == good["wabash.json"]["sports"]["football"]
+    assert read(tmp_path, "series.json")["sports"]["football"] == good["series.json"]["sports"]["football"]
+    assert read(tmp_path, "depauw.json") == good["depauw.json"]
+
+
+def test_a_failed_school_does_not_hold_back_the_pages_that_passed(both_dir, tmp_path):
+    (both_dir / "wabash-mens-tennis.html").write_text("<html><body>Service unavailable</body></html>")
+    assert run_both(both_dir, tmp_path) == 1                      # red, but everything else still published
+    sp = read(tmp_path, "series.json")["sports"]
+    assert sp["mens-tennis"]["games_played"] == 33 and "sources" not in sp["mens-tennis"]      # DePauw alone
+    assert "wabash_source_url" not in sp["mens-tennis"]
+    assert sp["baseball"]["games_played"] == 316 and sp["football"]["sources"]["both"] == 130
+    assert "mens-tennis" not in read(tmp_path, "wabash.json")["sports"]
+    assert (tmp_path / "depauw.json").exists()
+
+
+def test_each_page_is_checked_against_its_own_summary_never_the_other_schools(both_dir, tmp_path, capsys):
+    page = (both_dir / "wabash-baseball.html").read_text(encoding="utf-8")
+    page = re.sub(r'<tr><th scope="row"><span class="hide-on-large">.*?</tr>', "", page, count=1, flags=re.S)
+    (both_dir / "wabash-baseball.html").write_text(page, encoding="utf-8")        # a game goes missing
+    assert run_both(both_dir, tmp_path) == 1
+    err = capsys.readouterr().err
+    assert "FAIL Baseball" in err and "Wabash" in err
+    sp = read(tmp_path, "series.json")["sports"]
+    assert sp["baseball"]["games_played"] == 141                                   # DePauw's page still stands
+    assert sp["mens-soccer"]["games_played"] == 65
+
+
+def test_each_schools_shrink_check_uses_that_schools_own_saved_copy(both_dir, tmp_path):
+    assert run_both(both_dir, tmp_path) == 0
+    wabash = read(tmp_path, "wabash.json")
+    wabash["sports"]["mens-lacrosse"]["games_played"] = 13           # Wabash used to list one more
+    (tmp_path / "wabash.json").write_text(json.dumps(wabash), encoding="utf-8")
+    assert run_both(both_dir, tmp_path) == 1
+    assert read(tmp_path, "wabash.json")["sports"]["mens-lacrosse"]["games_played"] == 13     # refused
+    assert read(tmp_path, "series.json")["sports"]["mens-lacrosse"]["games_played"] == 12
+    assert run_both(both_dir, tmp_path, "--allow-shrink") == 0
+    assert read(tmp_path, "wabash.json")["sports"]["mens-lacrosse"]["games_played"] == 12
+
+
+def test_merged_game_counts_never_trip_the_shrink_check(both_dir, tmp_path):
+    """series.json holds the merged games (far more than DePauw's page has), so the baseline is each
+    school's own file. A DePauw page with 141 baseball games must not be measured against 316."""
+    assert run_both(both_dir, tmp_path) == 0
+    assert read(tmp_path, "series.json")["sports"]["baseball"]["games_played"] == 316
+    assert run_both(both_dir, tmp_path) == 0
+
+
+def test_the_first_run_after_the_merge_starts_from_the_old_depauw_only_series_json(fixture_dir, both_dir, tmp_path):
+    assert scrape.main(["--fixtures", str(fixture_dir), "--output", str(tmp_path / "series.json")]) == 0
+    (tmp_path / "depauw.json").unlink()                              # the repo has no raw files yet
+    (tmp_path / "wabash.json").unlink(missing_ok=True)
+    legacy = read(tmp_path, "series.json")
+    for sport in legacy["sports"].values():                          # the file as it was before games had a source
+        for game in sport["games"]:
+            game.pop("source")
+    (tmp_path / "series.json").write_text(json.dumps(legacy), encoding="utf-8")
+    assert run_both(both_dir, tmp_path) == 0
+    assert read(tmp_path, "depauw.json")["sports"]["baseball"]["games_played"] == 141
+    assert read(tmp_path, "series.json")["sports"]["baseball"]["games_played"] == 316
+
+
+def test_dry_run_with_both_schools_writes_nothing(both_dir, tmp_path):
+    assert run_both(both_dir, tmp_path, "--dry-run") == 0
+    assert not any((tmp_path / f).exists() for f in ("series.json", "depauw.json", "wabash.json"))

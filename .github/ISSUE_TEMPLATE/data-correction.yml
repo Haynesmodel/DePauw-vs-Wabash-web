@@ -23,6 +23,18 @@ body:
       placeholder: "2025-11-15"
     validations:
       required: false
+  - type: dropdown
+    id: which_record
+    attributes:
+      label: Which school's record looks wrong?
+      description: The site combines DePauw's and Wabash's records. Pick the one that has the mistake.
+      options:
+        - DePauw's record
+        - Wabash's record
+        - Both
+        - Not sure
+    validations:
+      required: false
   - type: textarea
     id: what_is_wrong
     attributes:

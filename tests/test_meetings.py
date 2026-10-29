@@ -112,7 +112,7 @@ def test_the_soonest_sport_wins_the_top_spot_and_every_card_shows_its_own(tmp_pa
     assert "Men's Basketball, Thu, Nov 12 · 7:00 PM · Neal Fieldhouse" in top
     football_card = html[html.index('id="football"'):html.index('id="mens-basketball"')]
     assert "Next meeting" in text_of(football_card) and "Sat, Nov 14 · 1:07 PM" in text_of(football_card)
-    assert '>Schedule</a>' in football_card
+    assert '>DePauw schedule</a>' in football_card
 
 
 def test_a_game_with_no_time_says_tba_and_one_next_year_shows_the_year(tmp_path):
@@ -144,7 +144,7 @@ def test_a_game_today_still_counts_by_eastern_time(tmp_path):
 def test_off_season_shows_no_box_and_no_stray_label(tmp_path):
     html = page(tmp_path, {"football": entry(), "mens-basketball": entry()})
     assert "next-meeting" not in html and "Next meeting" not in html and "Result pending" not in html
-    assert html.count('>Schedule</a>') == 2  # the link stays so visitors can check for new games
+    assert html.count('>DePauw schedule</a>') == 2  # the link stays so visitors can check for new games
 
 
 def test_missing_schedule_data_never_stops_the_records_page(tmp_path):

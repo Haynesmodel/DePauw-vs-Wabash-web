@@ -1,47 +1,108 @@
 {
-  "_comment": "One entry per sport, in the order the page shows them. URLs are DePauw's Sidearm 'opponent history' pages vs. Wabash; the opponent id (215) is the same across sports on depauwtigers.com. Head-to-head sports only: multi-team events (cross country, track and field, swimming and diving, golf) are deliberately left out. Optional 'total_label' overrides the page's own label for the points/goals/runs total. 'schedule_path' is the yearless Sidearm schedule page, which always serves the current season; it is read for upcoming meetings only and can never block the records.",
+  "_comment": "One entry per sport, in the order the page shows them. 'path' is DePauw's Sidearm 'opponent history' page vs. Wabash (opponent id 215 on every sport at depauwtigers.com); 'wabash_path' is Wabash's page vs. DePauw (opponent id 4 at sports.wabash.edu; the tennis slug there is 'tennis', not 'mens-tennis'). Each page is validated against its own summary, then the two game lists are merged (scraper/merge.py). Head-to-head sports only: multi-team events (cross country, track and field, swimming and diving, golf) are deliberately left out. Optional 'total_label' overrides the page's own label for the points/goals/runs total. Optional 'unit' is the word for one game [singular, plural] when it is not game/games (tennis plays matches). 'schedule_path' and 'wabash_schedule_path' are the yearless Sidearm schedule pages, which always serve the current season; they are read for upcoming meetings only and can never block the records. 'season_months' lists the months the sport is played in: a game dated in any other month has no usable date (the merge then matches it by season and score), so a mistyped month cannot split one game in two.",
   "school": "DePauw",
   "opponent": "Wabash",
   "opponent_match": "wabash",
   "opponent_id": 215,
   "base_url": "https://depauwtigers.com",
+  "wabash": {
+    "school": "Wabash",
+    "opponent": "DePauw",
+    "opponent_match": "depauw",
+    "opponent_id": 4,
+    "base_url": "https://sports.wabash.edu"
+  },
   "sports": [
     {
       "key": "football",
       "name": "Football",
       "path": "/sports/football/opponent-history/wabash/215",
-      "schedule_path": "/sports/football/schedule"
+      "wabash_path": "/sports/football/opponent-history/depauw-university/4",
+      "schedule_path": "/sports/football/schedule",
+      "wabash_schedule_path": "/sports/football/schedule",
+      "season_months": [
+        9,
+        10,
+        11,
+        12
+      ]
     },
     {
       "key": "mens-basketball",
       "name": "Men's Basketball",
       "path": "/sports/mens-basketball/opponent-history/wabash/215",
-      "schedule_path": "/sports/mens-basketball/schedule"
+      "wabash_path": "/sports/mens-basketball/opponent-history/depauw-university/4",
+      "schedule_path": "/sports/mens-basketball/schedule",
+      "wabash_schedule_path": "/sports/mens-basketball/schedule",
+      "season_months": [
+        11,
+        12,
+        1,
+        2,
+        3
+      ]
     },
     {
       "key": "baseball",
       "name": "Baseball",
       "path": "/sports/baseball/opponent-history/wabash/215",
-      "schedule_path": "/sports/baseball/schedule"
+      "wabash_path": "/sports/baseball/opponent-history/depauw-university/4",
+      "schedule_path": "/sports/baseball/schedule",
+      "wabash_schedule_path": "/sports/baseball/schedule",
+      "season_months": [
+        2,
+        3,
+        4,
+        5,
+        6
+      ]
     },
     {
       "key": "mens-soccer",
       "name": "Men's Soccer",
       "path": "/sports/mens-soccer/opponent-history/wabash/215",
-      "schedule_path": "/sports/mens-soccer/schedule"
+      "wabash_path": "/sports/mens-soccer/opponent-history/depauw-university/4",
+      "schedule_path": "/sports/mens-soccer/schedule",
+      "wabash_schedule_path": "/sports/mens-soccer/schedule",
+      "season_months": [
+        8,
+        9,
+        10,
+        11
+      ]
     },
     {
       "key": "mens-lacrosse",
       "name": "Men's Lacrosse",
       "path": "/sports/mens-lacrosse/opponent-history/wabash/215",
-      "schedule_path": "/sports/mens-lacrosse/schedule"
+      "wabash_path": "/sports/mens-lacrosse/opponent-history/depauw-university/4",
+      "schedule_path": "/sports/mens-lacrosse/schedule",
+      "wabash_schedule_path": "/sports/mens-lacrosse/schedule",
+      "season_months": [
+        2,
+        3,
+        4,
+        5
+      ]
     },
     {
       "key": "mens-tennis",
       "name": "Men's Tennis",
       "path": "/sports/mens-tennis/opponent-history/wabash/215",
+      "wabash_path": "/sports/tennis/opponent-history/depauw-university/4",
       "total_label": "individual matches",
-      "schedule_path": "/sports/mens-tennis/schedule"
+      "unit": [
+        "match",
+        "matches"
+      ],
+      "schedule_path": "/sports/mens-tennis/schedule",
+      "wabash_schedule_path": "/sports/tennis/schedule",
+      "season_months": [
+        2,
+        3,
+        4,
+        5
+      ]
     }
   ]
 }

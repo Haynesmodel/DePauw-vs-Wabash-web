@@ -30,13 +30,16 @@ def test_games_csv_has_one_row_per_game_with_the_documented_columns(tmp_path):
     out, _ = build(tmp_path, {"football": football(), "mens-lacrosse": lacrosse(), "mens-basketball": basketball()})
     rows = list(csv.DictReader(io.StringIO((out / "games.csv").read_text(encoding="utf-8"))))
     assert list(rows[0]) == ["sport", "date", "season", "location", "site", "depauw_score", "wabash_score",
-                             "result", "note", "boxscore_url"]
+                             "result", "note", "boxscore_url", "source", "date_recorded", "disputed",
+                             "date_differs", "wabash_record_date", "depauw_record_score", "wabash_record_score"]
     assert len(rows) == 5 + 2 + len(basketball()["games"])
     ot = next(r for r in rows if r["date"] == "2002-11-09")
     assert ot == {"sport": "Football", "date": "2002-11-09", "season": "2002", "location": "home",
                   "site": "Greencastle, Ind.", "depauw_score": "30", "wabash_score": "27",
                   "result": "DePauw win", "note": "2 OT",
-                  "boxscore_url": "https://depauwtigers.com/boxscore.aspx?id=1&path=football"}
+                  "boxscore_url": "https://depauwtigers.com/boxscore.aspx?id=1&path=football",
+                  "source": "depauw", "date_recorded": "yes", "disputed": "no", "date_differs": "no",
+                  "wabash_record_date": "", "depauw_record_score": "", "wabash_record_score": ""}
     assert {r["result"] for r in rows} <= {"DePauw win", "Wabash win", "Tie"}
     tie = next(r for r in rows if r["date"] == "1999-11-06")
     assert (tie["result"], tie["depauw_score"], tie["wabash_score"]) == ("Tie", "7", "7")
@@ -94,11 +97,17 @@ def form():
     return yaml.safe_load((ROOT / ".github" / "ISSUE_TEMPLATE" / "data-correction.yml").read_text(encoding="utf-8"))
 
 
-def test_the_issue_form_asks_for_sport_date_problem_and_source_only():
+def test_the_issue_form_asks_for_sport_date_school_problem_and_source_only():
     body = [b for b in form()["body"] if b["type"] != "markdown"]
-    assert [b["id"] for b in body] == ["sport", "game_date", "what_is_wrong", "source_link"]
+    assert [b["id"] for b in body] == ["sport", "game_date", "which_record", "what_is_wrong", "source_link"]
     assert body[0]["type"] == "input"   # the card links prefill it by id
-    assert [b["validations"]["required"] for b in body] == [True, False, True, True]
+    assert [b["validations"]["required"] for b in body] == [True, False, False, True, True]
+
+
+def test_the_issue_form_asks_which_schools_record_looks_wrong():
+    which = next(b for b in form()["body"] if b.get("id") == "which_record")
+    assert which["type"] == "dropdown"
+    assert which["attributes"]["options"] == ["DePauw's record", "Wabash's record", "Both", "Not sure"]
 
 
 def test_the_issue_form_asks_for_nothing_personal_and_says_it_is_public():
@@ -106,7 +115,8 @@ def test_the_issue_form_asks_for_nothing_personal_and_says_it_is_public():
     assert "public" in text and "personal" in text
     for ask in ("email address:", "phone number:", "your name", "home address:"):
         assert ask not in text
-    assert not any(b["type"] in ("checkboxes", "dropdown") for b in form()["body"])
+    assert not any(b["type"] == "checkboxes" for b in form()["body"])
+    assert [b["id"] for b in form()["body"] if b["type"] == "dropdown"] == ["which_record"]
 
 
 def test_blank_issues_are_turned_off():

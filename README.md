@@ -87,6 +87,75 @@ Several games on one date pair by score first, then by order on the page. A game
 
 Dates are as each school's page lists them, and scores are always DePauw-Wabash (Wabash's page is already flipped). A `same_game` pair becomes one game even when the dates or scores differ (flagged accordingly); a `different_games` pair is never matched by any pass. Every ruling must still find the rows it names: if a source page changes and a ruling no longer finds both of its rows, the merge for that sport fails (that sport keeps its last good data and the run turns red) instead of the ruling silently stopping. A malformed file stops the run before anything is written.
 
+### Why the merge works this way
+
+The two pages are two independent hand-kept records of the same games, so the merge has to decide, for every row, "is this the same game as a row on the other page?" There is no shared game id. The rules exist to answer that question without quietly inventing or losing a game.
+
+**Principles**
+
+1. **Both mistakes change the record.** Merging two real games into one drops a game from the totals; leaving one game as two adds a game. The rules merge only on strong evidence. Anything doubtful stays as two games marked "Wabash record only" / "DePauw record only", which is visible and checkable, instead of a silent merge.
+2. **Nothing is hidden.** Every disagreement (score, winner, date, one-school game) is flagged on the page and in `games.csv`, and every match made on weaker evidence is logged by the scraper (`REVIEW`).
+3. **People decide the hard cases, in writing.** A judgement call becomes a ruling in `data/overrides.json` with a reason, so it is repeatable and reviewable instead of buried in code.
+4. **Each page must first be right about itself.** A page is accepted only when its games add up to its own summary. Merging never loosens that check, and one page failing never blocks the other.
+5. **The merge is a pure function** of the two saved lists plus the rulings. `data/series.json` can always be rebuilt from `data/depauw.json`, `data/wabash.json` and `data/overrides.json`, and a test checks that the committed files agree.
+
+**Why each pass is there**
+
+| Pass | Why it exists | What it risks |
+|---|---|---|
+| 0. Rulings | A person checked and knows. Beats every automatic rule. | A ruling that goes stale. That is why a ruling that can't find both its rows fails the run. |
+| 1. Same date and score | The common case: both schools record the game identically. | Essentially none. |
+| 2. No usable date: season and score | Wabash lists its oldest games on placeholder dates (Jan 1 to Jan 3), and some dates fall in a month the sport is never played, so the date carries no information. Season plus score is the best evidence left. | Two different games in one season with the same score would be merged. The per-sport counts and the logs make that visible. |
+| 3. Within 2 days, same score | Schools can differ by a day or two on the same game. An identical score that close together is treated as one game. | Two real games 1 to 2 days apart with identical scores. |
+| 4. Same date, different score | The same day is strong evidence of one game; the schools simply disagree on the result. | A doubleheader with no matching score on either side. Doubleheaders pair by score first, so this only happens when nothing matches. |
+| 5. Within 2 days, same winner, scores each within 3 | A game with a slightly different date and a slightly different score is treated as one disputed game. The same-winner and small-difference limits keep clearly different games apart. | A different game 1 to 2 days later with the same winner and a similar score. |
+| 6. Further apart, same score, single-field date typo | Date typos tend to be one slip: the year off by one, the month off by one, or one wrong digit in the day. Requiring exactly one such slip plus an identical score keeps this from being a catch-all. | Two games with the same score a month or a year apart. Every such match is logged for a person to confirm, and the confirmed ones are pinned as rulings. |
+
+Games more than 2 days apart that match no typo pattern are never merged automatically, even with the same score. They show as two one-school games and can be joined with a ruling once someone checks a box score.
+
+**The numbers are judgement calls, not measurements.** They were chosen to be wide enough for ordinary record-keeping drift and narrow enough that two genuinely different games rarely qualify. Changing one is allowed, but it affects every sport and season, so follow the steps below.
+
+- `MAX_DATE_GAP_DAYS = 2`: how far apart two dates may be and still count as the same game when the score also agrees.
+- `SCORE_TOLERANCE = 3` (points, goals or runs, per side): only used together with "same winner" and "within 2 days".
+- `PLACEHOLDER_DAYS` (Jan 1 to Jan 3): the dates Wabash's page uses for games it has no real date for.
+- `NEAR_MISS_DAYS = 5`: only for the `CHECK` log. It lists leftover one-school pairs worth a human look and never merges anything.
+- `season_months` (in `sources.json`): the months a sport is actually played. A date outside them is treated as unknown rather than believed.
+
+**Why DePauw's version wins a dispute.** This is a convention, not a finding that DePauw is right. The totals must come from one version so they are repeatable, and the other version is always shown beside it ("DePauw's record (DePauw-Wabash): 12-5 · Wabash's record (DePauw-Wabash): 11-5"). In the current data (12 disputed scores) it never changes who won. If a dispute ever would, check the box score before relying on either version.
+
+**Why undated games are handled separately.** A made-up date would corrupt "most recent game", streaks and the season list. A game with no usable date keeps `date_known: false`, shows only its season or year plus "date not recorded", sorts first within its season, and is never used for a dated fact.
+
+### Reading and adjusting the logic
+
+**How to explain any one game.** Look it up in `data/series.json` (or `games.csv`):
+
+- `source: both` and no flags: both schools list it the same way.
+- `source: both` with `date_differs` (and `wabash_date`): the same game, listed on different dates.
+- `disputed` (and `wabash_version`): the same game, listed with different scores or winners.
+- `source: wabash` or `depauw`: only that school lists it, even after matching and rulings.
+- `date_known: false`: no usable date; only the season is shown.
+
+To see why a pair was matched, run `python scraper/scrape.py --dry-run` and read the `REVIEW` lines (matches made more than 2 days apart, with the kind: a typo kind or `ruling`) and the `CHECK` lines (look-alike leftovers that were not merged).
+
+**When a school fixes its page.** The next scrape reads the corrected page and the merge changes by itself (a disputed game becomes agreed, a one-school game becomes matched). If a ruling named a row that changed, the run goes red with `overrides.json ... no longer finds ...`: check both pages, then update the ruling's date or score, or delete it if the pages now agree.
+
+**When you decide a pair is the same (or different) game.** Check a box score or the schools' pages, add a `same_game` or `different_games` ruling with a reason (format above), and run `python scraper/scrape.py --dry-run` to see the new counts. Prefer a ruling over changing a rule, because a rule change affects every sport and season.
+
+**When you want to change a rule or number.** They all live in `scraper/merge.py` (the passes, `MAX_DATE_GAP_DAYS`, `SCORE_TOLERANCE`, `PLACEHOLDER_DAYS`, `NEAR_MISS_DAYS`) and `season_months` in `scraper/sources.json`. Change one, then:
+
+1. Run the tests. `tests/test_merge.py` covers the passes, and `tests/test_overrides.py` pins the real-data totals, so a change that moves any sport's record fails loudly.
+2. Run `python scraper/scrape.py --dry-run` on the live pages and compare the per-sport counts and `REVIEW` lines with the previous run.
+3. Update the pinned totals in `tests/test_overrides.py` only after confirming each changed game is right, never just to make a test pass.
+4. Update this section and `CLAUDE.md` to match.
+
+**Worked examples from the real data**
+
+- *Football 1891:* DePauw lists a 1-0 win on 1891-11-21, Wabash on 1891-11-02. Both pages have one 1-0 game that year and 131 games in total, so it is one game. The dates are 19 days apart, beyond the automatic window, so a ruling pins it.
+- *Basketball 1962:* DePauw lists 66-69 on 1962-12-10, Wabash on 1962-09-03. September is outside basketball season, so Wabash's date is unusable; a ruling pins it as the same game.
+- *Basketball 1928:* DePauw lists 23-22 on 1928-02-14 and Wabash lists 32-30 on 1928-02-29. Neither the date nor the score agrees, so they are two different games, and a `different_games` ruling stops any rule from joining them. Each still counts, as a one-school game.
+- *Baseball 1986:* DePauw lists a doubleheader on 1986-03-19 (12-4 and 16-4), Wabash lists both on 1986-03-23. Same scores, 4 days apart, so rulings pin both; with them the merged baseball record equals Wabash's own page.
+- *A dispute:* both schools list the same date with different scores (for example 19-27 against 9-27). It is one game, DePauw's score counts, and both are shown.
+
 The schedule pages are separate: the yearless URL (`/sports/<sport>/schedule`) always serves the current season, so nothing needs editing each year. Wabash games are found by the opponent id the site puts on each game (215 on DePauw's site, 4 on Wabash's). A game on both schedules shows as DePauw lists it, and any difference in date, time, site or status is logged as a warning; a game only Wabash lists is shown as Wabash's. If a schedule page fails to load or parse, the scraper logs a warning, keeps that school's last good upcoming games, and the run stays green, because the records never depend on it.
 
 "Last checked" is the time of the last live scrape that reached at least one page. It is written to an uncommitted `.checked-at` file and read by the render step in the same workflow run, so the data files still change only when games change. If every page fails, or the file is missing (for example in a pull request check), the page leaves "Last checked" off instead of showing the build time. The workflow scrapes on every run (schedule, manual and push), so every deploy carries a fresh check.

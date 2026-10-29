@@ -23,6 +23,9 @@ Several games on one date (doubleheaders) pair by score first, then by order on 
 What is left is a game only one school lists; it still counts, and says whose record it is from.
 A disputed game counts DePauw's version; Wabash's is kept for display.
 
+Why each rule exists, what it risks, why the numbers are what they are, and how to change them
+safely are written up in the README ("Why the merge works this way"). Keep the two in step.
+
 Rows that differ in both date and score cannot be told from two separate games, so they stay separate
 unless a ruling says otherwise. near_misses() lists such pairs so a person can check them.
 

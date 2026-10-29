@@ -100,6 +100,7 @@ main { padding-block: 1.5rem 2.5rem; display: grid; gap: 1.5rem; }
 .next-line { margin: 0; font-size: 1.125rem; }
 .next-pending { margin: 0.25rem 0 0; color: var(--color-text-muted); }
 .overall-meta { margin: 0.75rem 0 0; color: var(--color-text-muted); }
+.series-summary { margin: 0.5rem 0 0; font-size: 1.0625rem; }
 .not-included { margin: 0.5rem 0 0; color: var(--color-text-muted); font-size: 0.9375rem; }
 
 /* Win tiles: side named in text, color is only an accent */

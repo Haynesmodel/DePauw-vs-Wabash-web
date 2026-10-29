@@ -703,6 +703,58 @@ def next_meeting_section(per_sport: dict, pending: dict, sports: dict, today: dt
                       heading(2, "next-meeting", "Next meeting"), *lines, '</section>'])
 
 
+def sport_word(name: str) -> str:
+    """"Men's Basketball" -> "basketball": the short, lower-case name used inside a sentence."""
+    return re.sub(r"^Men[’']s\s+", "", name).lower()
+
+
+def series_summary(sports: dict) -> str:
+    """One sentence on who leads which sports, from the merged records (never hardcoded).
+
+    A sport is led by whoever has more wins; an even sport is listed on its own ("Soccer is even."). Sports
+    keep the page order (sources.json), and each school's clause comes in the order of its first sport.
+    When the football card has a Monon Bell era (facts.bell), its leader is named too: appended to the
+    football leader's clause as "including the Monon Bell era" when the same school leads it, as "though X
+    leads the Monon Bell era" (or "...is even") when not, and as a sentence of its own when football itself
+    is even."""
+    leads: dict = {"DePauw": [], "Wabash": []}
+    even = []
+    for key, s in sports.items():
+        r = s["record"]
+        if r["depauw_wins"] == r["wabash_wins"]:
+            if s["games"]:
+                even.append(key)
+        else:
+            leads["DePauw" if r["depauw_wins"] > r["wabash_wins"] else "Wabash"].append(key)
+
+    bell = facts.bell(sports["football"]["games"]) if "football" in sports else None
+    bell_leader = None
+    if bell:
+        bell_leader = "DePauw" if bell["depauw"] > bell["wabash"] else "Wabash" if bell["wabash"] > bell["depauw"] else "even"
+
+    order = list(sports)
+    clauses = []
+    for school in sorted((k for k in leads if leads[k]), key=lambda k: order.index(leads[k][0])):
+        other = "Wabash" if school == "DePauw" else "DePauw"
+        text = f"{school} leads {join_and([sport_word(sports[k]['name']) for k in leads[school]])}"
+        if bell_leader and "football" in leads[school]:
+            if bell_leader == school:
+                text += ", including the Monon Bell era"
+            elif bell_leader == other:
+                text += f", though {other} leads the Monon Bell era"
+            else:
+                text += ", though the Monon Bell era is even"
+        clauses.append(text)
+    sentences = ["; ".join(clauses) + "."] if clauses else []
+    if even:
+        names = [sport_word(sports[k]["name"]) for k in even]
+        sentences.append(f"{join_and(names).capitalize()} {'is' if len(names) == 1 else 'are'} even.")
+    if bell_leader and "football" not in leads["DePauw"] + leads["Wabash"]:
+        sentences.append("The Monon Bell era is even." if bell_leader == "even"
+                         else f"{bell_leader} leads the Monon Bell era.")
+    return " ".join(sentences)
+
+
 def game_day_text(e: dict, sports: dict, several: bool) -> str:
     """One banner line for a sport playing today. `several` is true when the banner covers more than one
     sport, which is when a final score needs the sport's name to be understood."""
@@ -803,6 +855,7 @@ def render_index(data: dict, checked: str | None = None, now: dt.datetime | None
         '<h2 id="overall-h">All sports combined</h2>',
         tiles(t["depauw_wins"], t["wabash_wins"], t["ties"], "tiles-big"),
         f'<p class="overall-meta">{esc(plural(t["games_played"], "game"))} across {esc(plural(n_sports, "sport"))}</p>',
+        f'<p class="series-summary">{esc(series_summary(sports))}</p>' if series_summary(sports) else '',
         f'<p class="not-included"><strong>Not included:</strong> {esc(NOT_INCLUDED)}</p>',
         '</section>',
         *(card(k, s, ahead[k], pending[k], upcoming.get(k), today) for k, s in sports.items()),

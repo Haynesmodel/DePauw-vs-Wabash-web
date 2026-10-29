@@ -94,11 +94,13 @@ def test_a_disputed_game_shows_both_versions(tmp_path):
     g.update({"source": "both", "disputed": True, "wabash_version": {"result": "L", "depauw": 9, "wabash": 27}})
     ok = game("2003-11-08", "W", 41, 20)
     _, html = build(tmp_path, {"football": merged_sport("football", "Football", [g, ok])})
-    assert "Wabash 27, DePauw 19 (Wabash’s record: Wabash 27, DePauw 9)" in text_of(card(html, "football"))
+    t = text_of(card(html, "football"))
+    assert "Wabash 27, DePauw 19" in t                       # the counted version stays the result
+    assert "DePauw’s record (DePauw-Wabash): 19-27 · Wabash’s record (DePauw-Wabash): 9-27" in t
     flipped = game("1901-11-11", "W", 5, 3)
     flipped.update({"source": "both", "disputed": True, "wabash_version": {"result": "L", "depauw": 3, "wabash": 5}})
     _, html = build(tmp_path, {"football": merged_sport("football", "Football", [flipped, ok])})
-    assert "DePauw 5, Wabash 3 (Wabash’s record: Wabash 5, DePauw 3)" in text_of(card(html, "football"))
+    assert "DePauw’s record (DePauw-Wabash): 5-3 · Wabash’s record (DePauw-Wabash): 3-5" in text_of(card(html, "football"))
 
 
 def test_a_game_the_schools_date_differently_shows_wabashs_date(tmp_path):
@@ -225,8 +227,8 @@ def test_games_csv_carries_source_dispute_and_date_columns(tmp_path):
     rows = list(csv.DictReader(io.StringIO((out / "games.csv").read_text(encoding="utf-8"))))
     by = {(r["season"], r["depauw_score"]): r for r in rows}
     disputed = by[("1941", "19")]
-    assert (disputed["source"], disputed["disputed"], disputed["wabash_record_score"]) == \
-        ("both", "yes", "Wabash 27, DePauw 9")
+    assert (disputed["source"], disputed["disputed"], disputed["depauw_record_score"],
+            disputed["wabash_record_score"]) == ("both", "yes", "19-27", "9-27")
     differs = by[("1891", "1")]
     assert (differs["date_differs"], differs["wabash_record_date"], differs["date"]) == ("yes", "1891-11-02", "1891-11-21")
     unknown = by[("1895", "2")]
@@ -252,8 +254,11 @@ def test_the_real_series_file_is_the_merge_of_the_two_raw_files():
     depauw = json.loads((ROOT / "data" / "depauw.json").read_text(encoding="utf-8"))
     wabash = json.loads((ROOT / "data" / "wabash.json").read_text(encoding="utf-8"))
     import merge
+    cfg = {x["key"]: x for x in json.loads((ROOT / "scraper" / "sources.json").read_text(encoding="utf-8"))["sports"]}
+    rules = merge.load_overrides(ROOT / "data" / "overrides.json")
     for key, s in series["sports"].items():
-        r = merge.merge_sport(depauw["sports"][key]["games"], wabash["sports"][key]["games"])
+        r = merge.merge_sport(depauw["sports"][key]["games"], wabash["sports"][key]["games"],
+                              season_months=cfg[key]["season_months"], rules=rules.get(key))
         assert r.games == s["games"] and r.stats == s["sources"], key
         assert s["games_played"] == len(r.games)
     totals = series["totals"]
@@ -267,8 +272,10 @@ def test_the_real_series_never_shows_a_placeholder_january_date(tmp_path):
     series = json.loads((ROOT / "data" / "series.json").read_text(encoding="utf-8"))
     unknown = [g for s in series["sports"].values() for g in s["games"] if g.get("date_known") is False]
     assert unknown and all(g["source"] == "wabash" for g in unknown)
+    assert page.count("(date not recorded)") >= len(unknown)
     for g in unknown:
-        assert f'<time datetime="{g["date"][:4]}">' in page
+        assert render.undated_label(g) in page
+    assert "Jan 1, 18" not in page and "Jan 3, 18" not in page
     csv_rows = list(csv.DictReader(io.StringIO((out / "games.csv").read_text(encoding="utf-8"))))
     assert sum(1 for r in csv_rows if r["date_recorded"] == "no") == len(unknown)
     assert all(r["date"] == "" for r in csv_rows if r["date_recorded"] == "no")
@@ -396,3 +403,94 @@ def test_a_game_only_wabashs_schedule_lists_shows_on_the_page_with_its_source(tm
     assert "Sat, Nov 14 · 1:07 PM · Scheumann Stadium, Muncie, Ind. (from Wabash’s schedule)" in top
     lax = text_of(html[html.index('id="mens-lacrosse"'):html.index("</article>", html.index('id="mens-lacrosse"'))])
     assert "Nov 20" in lax and "from Wabash" not in lax
+
+
+# ---- undated games: labels, order, "most recent" ------------------------------------------------ #
+
+def undated(date, result, d, w, season, source="wabash"):
+    x = game(date, result, d, w, "unknown", None)
+    x.update({"source": source, "date_known": False, "season": season})
+    return x
+
+
+def test_an_undated_game_in_a_two_year_season_shows_the_season_and_never_a_day(tmp_path):
+    old = undated("1954-09-03", "L", 40, 55, "1954-55")
+    out, html = build(tmp_path, {"mens-basketball": merged_sport("mens-basketball", "Men's Basketball",
+                                                                 [old, game("1955-01-10", "W", 80, 70)])})
+    row = re.findall(r"<tr>.*?</tr>", card(html, "mens-basketball"), re.S)[-1]
+    assert "1954-55" in text_of(row) and "(date not recorded)" in text_of(row)
+    assert "Sep 3" not in html and "1954-09-03" not in html
+    first = list(csv.DictReader(io.StringIO((out / "games.csv").read_text(encoding="utf-8"))))[0]
+    assert (first["date"], first["season"], first["date_recorded"]) == ("", "1954-55", "no")
+
+
+def test_most_recent_ignores_a_game_with_no_date_even_when_it_is_listed_last(tmp_path):
+    games = [game("2003-11-08", "W", 41, 20), game("2004-11-13", "W", 28, 3)]
+    games.append(undated("2005-01-01", "L", 3, 9, "2005"))          # a stray undated row at the end of the list
+    _, html = build(tmp_path, {"football": merged_sport("football", "Football", games)})
+    recent = text_of(card(html, "football"))
+    assert "Most recent Nov 13, 2004 · DePauw 28, Wabash 3" in recent
+
+
+def test_games_are_listed_in_the_stored_order_not_re_sorted_by_a_stored_date(tmp_path):
+    a = undated("1962-09-03", "L", 40, 55, "1962-63")
+    b = game("1962-12-10", "W", 60, 50)
+    b["season"] = "1962-63"
+    c = game("1963-01-12", "W", 61, 50)
+    c["season"] = "1962-63"
+    _, html = build(tmp_path, {"mens-basketball": merged_sport("mens-basketball", "Men's Basketball", [a, b, c])})
+    rows = [text_of(r) for r in re.findall(r"<tr>.*?</tr>", card(html, "mens-basketball"), re.S) if "<td" in r]
+    assert [r.strip()[:7] for r in rows] == ["Jan 12,", "Dec 10,", "1962-63"]          # newest first; the undated one last
+
+
+# ---- fun facts that several games share ---------------------------------------------------------- #
+
+def repeated(n, d=9, w=0):
+    return [game(f"{2000 + i}-04-0{1 + i % 8}", "W", d, w) for i in range(n)]
+
+
+def test_a_repeated_record_says_how_many_times_and_when_it_last_happened(tmp_path):
+    games = repeated(36) + [game("2026-04-24", "W", 9, 0), game("2025-04-03", "L", 4, 5)]
+    s = merged_sport("mens-tennis", "Men's Tennis", games, unit=["match", "matches"], total_label="individual matches")
+    _, html = build(tmp_path, {"mens-tennis": s})
+    t = text_of(card(html, "mens-tennis"))
+    assert "Biggest DePauw win: DePauw 9, Wabash 0 · by 9 matches (37 times, most recently Apr 24, 2026)" in t
+    assert "happened" not in t and "most recent shown" not in t
+
+
+def test_a_record_that_happened_once_has_no_times_suffix(tmp_path):
+    s = merged_sport("football", "Football", [game("2003-11-08", "W", 41, 20), game("2004-11-13", "W", 28, 3)])
+    _, html = build(tmp_path, {"football": s})
+    t = text_of(card(html, "football"))
+    assert "Biggest DePauw win: DePauw 28, Wabash 3 · Nov 13, 2004 · by 25 points Longest" in t     # nothing in parentheses
+
+
+def test_the_most_recently_date_skips_undated_games_in_a_tie(tmp_path):
+    old = undated("1895-01-01", "W", 39, 2, "1895")
+    games = [old, game("2004-11-13", "W", 39, 2)]
+    _, html = build(tmp_path, {"football": merged_sport("football", "Football", games)})
+    t = text_of(card(html, "football"))
+    assert "Biggest DePauw win: DePauw 39, Wabash 2 · by 37 points (twice, most recently Nov 13, 2004)" in t
+    # and when every game of a tie is undated, the fact says so rather than inventing a day
+    only = [undated("1895-01-01", "W", 39, 2, "1895"), undated("1896-01-01", "W", 39, 2, "1896"),
+            game("2004-11-13", "W", 3, 2)]
+    _, html = build(tmp_path, {"football": merged_sport("football", "Football", only)})
+    t = text_of(card(html, "football"))
+    assert "(twice, most recently 1896 (date not recorded))" in t and "Jan 1" not in t
+
+
+def test_a_win_streak_through_undated_games_names_years_not_days():
+    import facts
+    games = [undated("1895-01-01", "W", 5, 1, "1895"), undated("1896-01-01", "W", 5, 1, "1896"),
+             game("1897-04-01", "W", 5, 1), game("1898-04-01", "L", 1, 5)]
+    run = facts.longest_streak(games, "W")
+    assert (run["games"], run["first"], run["last"]) == (3, "1895", "1897")
+
+
+def test_the_disputed_game_labels_say_whose_record_and_in_which_order(tmp_path):
+    g = game("1948-02-24", "W", 48, 34)
+    g.update({"source": "both", "disputed": True, "wabash_version": {"result": "W", "depauw": 48, "wabash": 32}})
+    s = merged_sport("mens-basketball", "Men's Basketball", [g, game("1950-01-10", "W", 80, 70)])
+    _, html = build(tmp_path, {"mens-basketball": s})
+    assert "DePauw’s record (DePauw-Wabash): 48-34 · Wabash’s record (DePauw-Wabash): 48-32" in text_of(card(html, "mens-basketball"))
+    assert "alt-score" not in html

@@ -7,6 +7,8 @@ Results are from DePauw's side: "W" is a DePauw win, "L" a Wabash win, "T" a tie
 
 from __future__ import annotations
 
+from merge import season_years
+
 # The football game became the Monon Bell game with the 1932 season.
 BELL_START = 1932
 
@@ -71,7 +73,27 @@ INNINGS_RE = re.compile(r"(\d+)\s*inn", re.I)
 
 
 def chronological(games: list) -> list:
-    return sorted(games, key=lambda g: g["date"])  # stable, so a doubleheader stays in playing order
+    """The games as stored: oldest first, a doubleheader in playing order, and a game with no usable date
+    first within its season. Sorting by the stored date would put such a game on a day it was not played."""
+    return list(games)
+
+
+def is_dated(g: dict) -> bool:
+    return g.get("date_known", True)
+
+
+def most_recent(games: list) -> dict | None:
+    """The newest game, going by dates: a game with no recorded date is never newer than one with a date.
+    Only when none of the games has a date does the last one stand in."""
+    dated = [g for g in games if is_dated(g)]
+    return (dated or games or [None])[-1]
+
+
+def game_year(g: dict) -> str:
+    """The year to show for a game: its date's year, or the year its season ends in when it has no date."""
+    if is_dated(g):
+        return g["date"][:4]
+    return str(season_years(g.get("season"), g["date"])[1])
 
 
 def margin(g: dict) -> int:
@@ -89,8 +111,7 @@ def biggest_wins(games: list, result: str) -> list:
 
 def biggest_win(games: list, result: str) -> dict | None:
     """The widest win for one side. When several share the margin, the most recent."""
-    found = biggest_wins(games, result)
-    return found[-1] if found else None
+    return most_recent(biggest_wins(games, result))
 
 
 def longest_streak(games: list, result: str) -> dict | None:
@@ -110,7 +131,7 @@ def longest_streak(games: list, result: str) -> dict | None:
         run = []
     if best is None:
         return None
-    return {"games": len(best), "first": best[0]["date"][:4], "last": best[-1]["date"][:4], "times": times}
+    return {"games": len(best), "first": game_year(best[0]), "last": game_year(best[-1]), "times": times}
 
 
 def one_score_games(key: str, games: list) -> list:
@@ -131,8 +152,7 @@ def highest_scoring_games(games: list) -> list:
 
 def highest_scoring(games: list) -> dict | None:
     """Most combined points/goals/runs in one game; the most recent when tied."""
-    found = highest_scoring_games(games)
-    return found[-1] if found else None
+    return most_recent(highest_scoring_games(games))
 
 
 def overtime_games(games: list) -> list:

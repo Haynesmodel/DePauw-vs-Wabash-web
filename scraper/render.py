@@ -125,16 +125,23 @@ def date_known(g: dict) -> bool:
     return g.get("date_known", True)
 
 
+def undated_label(g: dict) -> str:
+    """What stands in for a date: the season when it spans two years ("1954-55"), else the year."""
+    season = str(g.get("season") or "")
+    return season if "-" in season else facts.game_year(g)
+
+
 def date_text(g: dict) -> str:
-    """The game's date for display. A game with no real date shows its year and says so, never a made-up day."""
-    return fmt_date(g["date"]) if date_known(g) else f'{g["date"][:4]} (date not recorded)'
+    """The game's date for display. A game with no usable date shows its season or year and says so, never a made-up day."""
+    return fmt_date(g["date"]) if date_known(g) else f"{undated_label(g)} (date not recorded)"
 
 
 def date_html(g: dict) -> str:
     if date_known(g):
         return f'<time datetime="{esc(g["date"])}">{esc(fmt_date(g["date"]))}</time>'
-    year = esc(g["date"][:4])
-    return f'<time datetime="{year}">{year}</time> <span class="date-note">(date not recorded)</span>'
+    label = esc(undated_label(g))
+    shown = f'<time datetime="{label}">{label}</time>' if label.isdigit() else f"<span>{label}</span>"
+    return f'{shown} <span class="date-note">(date not recorded)</span>'
 
 
 def game_words(s: dict) -> tuple:
@@ -451,6 +458,14 @@ def times_text(n: int) -> str:
     return "twice" if n == 2 else f"{n} times"
 
 
+def repeat_text(found: list) -> str:
+    """" (36 times, most recently Apr 24, 2026)" for a record several games share, else nothing. The date is
+    the newest game that has one; games with no recorded date never count as the most recent."""
+    if len(found) < 2:
+        return ""
+    return f" ({times_text(len(found))}, most recently {date_text(facts.most_recent(found))})"
+
+
 def fun_facts(key: str, s: dict) -> list:
     """[(label, text)] worked out from the game list. A fact that makes no sense for the sport is left out."""
     games, label = s["games"], s.get("total_label") or "points"
@@ -458,9 +473,9 @@ def fun_facts(key: str, s: dict) -> list:
     for who, result in (("DePauw", "W"), ("Wabash", "L")):
         g = facts.biggest_win(games, result)
         if g:
-            n = len(facts.biggest_wins(games, result))
-            tie = f" · happened {times_text(n)}, most recent shown" if n > 1 else ""
-            out.append((f"Biggest {who} win", f"{game_line(g)} · by {unit(facts.margin(g), label)}{tie}"))
+            found = facts.biggest_wins(games, result)
+            lead = score_text(g) if len(found) > 1 else game_line(g)
+            out.append((f"Biggest {who} win", f"{lead} · by {unit(facts.margin(g), label)}{repeat_text(found)}"))
     for who, result in (("DePauw", "W"), ("Wabash", "L")):
         run = facts.longest_streak(games, result)
         if run:
@@ -473,17 +488,17 @@ def fun_facts(key: str, s: dict) -> list:
         limit = facts.ONE_SCORE[key]
         by = f"by {unit(limit, label)}" + (" or fewer" if limit > 1 else "")
         out.append((f"One-score {game_words(s)[1]}",
-                    f"{len(close):,} decided {by} · most recent: {game_line(close[-1])}"))
+                    f"{len(close):,} decided {by} · most recent: {game_line(facts.most_recent(close))}"))
     if label != "individual matches":  # nine matches are always played, so the total never varies
         tops = facts.highest_scoring_games(games)
-        top = tops[-1]
-        tie = f" · happened {times_text(len(tops))}, most recent shown" if len(tops) > 1 else ""
+        top = facts.most_recent(tops)
+        lead = score_text(top) if len(tops) > 1 else game_line(top)
         out.append(("Highest-scoring game",
-                    f"{game_line(top)} · {unit(top['depauw'] + top['wabash'], label)} combined{tie}"))
+                    f"{lead} · {unit(top['depauw'] + top['wabash'], label)} combined{repeat_text(tops)}"))
     for title, found in (("Overtime games", facts.overtime_games(games)),
                          ("Extra-inning games", facts.extra_inning_games(games))):
         if found:
-            last = found[-1]
+            last = facts.most_recent(found)
             out.append((title, f"{len(found):,} · most recent: {game_line(last)} ({fmt_note(last.get('note'))})"))
     return out
 
@@ -516,6 +531,12 @@ def game_flags(key: str, g: dict, merged: bool) -> list:
         flags.append("DePauw record only")
     if g.get("date_differs") and g.get("wabash_date"):
         flags.append(f"Wabash’s record lists this game on {fmt_date(g['wabash_date'])}")
+    if g.get("date_differs") and g.get("depauw_date"):
+        flags.append(f"DePauw’s record lists this game on {fmt_date(g['depauw_date'])}")
+    v = g.get("wabash_version")
+    if g.get("disputed") and v:
+        flags.append(f"DePauw’s record (DePauw-Wabash): {g['depauw']}-{g['wabash']} · "
+                     f"Wabash’s record (DePauw-Wabash): {v['depauw']}-{v['wabash']}")
     note = FOOTNOTES.get((key, g["date"]))
     if note and g["result"] == "T" and g.get("source") == "both" and not g.get("disputed"):
         flags.append(note)
@@ -523,17 +544,13 @@ def game_flags(key: str, g: dict, merged: bool) -> list:
 
 
 def result_html(g: dict) -> str:
-    html = esc(score_text(g))
-    v = g.get("wabash_version")
-    if g.get("disputed") and v:
-        html += f' <span class="alt-score">(Wabash’s record: {esc(score_text(v))})</span>'
-    return html
+    return esc(score_text(g))      # DePauw's version, the one that counts; a dispute is spelled out in the notes
 
 
 def games_table(key: str, games: list, words: tuple = ("game", "games"), merged: bool = False) -> str:
     rows = []
     # games arrive oldest first (doubleheaders in playing order), so reverse for newest first
-    for g in reversed(sorted(games, key=lambda g: g["date"])):
+    for g in reversed(games):
         winner = {"W": "win-depauw", "L": "win-wabash", "T": "tied"}[g["result"]]
         box = safe_url(g.get("boxscore"))
         box_html = f'<a href="{esc(box)}">Box score</a>' if box else ""
@@ -613,15 +630,15 @@ def page_links(s: dict, up: dict | None) -> list:
 
 
 def card(key: str, s: dict, ahead: list, pending: list, up: dict | None, today: dt.date) -> str:
-    games = sorted(s["games"], key=lambda g: g["date"])
+    games = s["games"]               # stored oldest first; games with no usable date come first in their season
     rec = s["record"]
     code = s.get("current_streak")
     if not (isinstance(code, str) and STREAK_RE.match(code)):
         code = derive_streak(games)
-    last = games[-1]
+    last = facts.most_recent(games)
     words = game_words(s)
-    since = games[0]["date"][:4]
-    facts = [
+    since = facts.game_year(games[0])
+    stat_rows = [
         ("Current streak", esc(streak_text(code))),
         ("Records since", esc(since)),
         (f"{words[1].capitalize()} played", esc(f"{len(games):,}")),
@@ -631,11 +648,11 @@ def card(key: str, s: dict, ahead: list, pending: list, up: dict | None, today: 
          f'{date_html(last)} · {esc(score_text(last))}'),
     ]
     if ahead:
-        facts.append(("Next meeting", meeting_html(ahead[0], today)))
+        stat_rows.append(("Next meeting", meeting_html(ahead[0], today)))
     if pending:
         day = fmt_when(pending[0], today).split(" · ")[0]
-        facts.append(("Result pending", esc(day) + " · not on the history page yet"))
-    dl = "\n".join(f'<div><dt>{esc(k)}</dt><dd>{v}</dd></div>' for k, v in facts)
+        stat_rows.append(("Result pending", esc(day) + " · not on the history page yet"))
+    dl = "\n".join(f'<div><dt>{esc(k)}</dt><dd>{v}</dd></div>' for k, v in stat_rows)
     merged = bool(s.get("sources"))
     links = [f'<a href="{esc(u)}">{esc(label)}</a>' for label, u in page_links(s, up)]
     links.append(report_link(s["name"]))
@@ -781,7 +798,7 @@ def render_sitemap(data: dict, checked: str | None = None) -> str:
 
 CSV_COLUMNS = ["sport", "date", "season", "location", "site", "depauw_score", "wabash_score",
                "result", "note", "boxscore_url", "source", "date_recorded", "disputed", "date_differs",
-               "wabash_record_date", "wabash_record_score"]
+               "wabash_record_date", "depauw_record_score", "wabash_record_score"]
 RESULT_WORDS = {"W": "DePauw win", "L": "Wabash win", "T": "Tie"}
 
 
@@ -798,7 +815,7 @@ def render_csv(data: dict) -> str:
     writer = csv.writer(buf, lineterminator="\n")
     writer.writerow(CSV_COLUMNS)
     for s in data["sports"].values():
-        for g in sorted(s["games"], key=lambda g: g["date"]):
+        for g in s["games"]:
             v = g.get("wabash_version")
             writer.writerow([csv_text(s["name"]), g["date"] if date_known(g) else "", csv_text(g.get("season")),
                              g["location"], csv_text(g.get("site")), g["depauw"], g["wabash"],
@@ -806,7 +823,8 @@ def render_csv(data: dict) -> str:
                              safe_url(g.get("boxscore")) or "", g.get("source", "depauw"),
                              "yes" if date_known(g) else "no", "yes" if g.get("disputed") else "no",
                              "yes" if g.get("date_differs") else "no", g.get("wabash_date") or "",
-                             score_text(v) if g.get("disputed") and v else ""])
+                             f"{g['depauw']}-{g['wabash']}" if g.get("disputed") and v else "",
+                             f"{v['depauw']}-{v['wabash']}" if g.get("disputed") and v else ""])
     return buf.getvalue()
 
 

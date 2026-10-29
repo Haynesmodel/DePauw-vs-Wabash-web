@@ -247,14 +247,14 @@ def render_page(data: dict, endowment: dict, *, head_html: str, copyright_year: 
                 details = f'<details><summary>{label}: {count} verified graduate{"s" if count != 1 else ""}</summary><ul>{"".join(rows)}</ul></details>'
             else:
                 details = f'<p class="alumni-zero"><strong>{label}: 0.</strong> No qualifying graduates were found in the reviewed sources.</p>'
-            schools_html.append(f'<div class="alumni-school alumni-{school}"><h3>{label} <span>({count})</span></h3>{details}</div>')
-        cards.append(f'<section class="alumni-card" id="{_esc(cid)}"><h2>{_esc(category["name"])}</h2>'
-                     f'<p>{_esc(category["definition"])}</p><div class="alumni-schools">{"".join(schools_html)}</div></section>')
+            schools_html.append(f'<div class="tile tile-{school} alumni-school"><h3 class="tile-name">{label} <span>({count})</span></h3>{details}</div>')
+        cards.append(f'<section class="sport alumni-card" id="{_esc(cid)}"><h2>{_esc(category["name"])}</h2>'
+                     f'<p>{_esc(category["definition"])}</p><div class="tiles alumni-schools">{"".join(schools_html)}</div></section>')
     endow_cards = []
     for key, label in SCHOOLS.items():
         item = endowment["schools"][key]
-        endow_cards.append(f'<div class="endowment-value alumni-{key}"><h3>{label}</h3>'
-                           f'<p class="money">${item["amount_usd"]:,}</p><p><a href="{_esc(item["source_url"])}">'
+        endow_cards.append(f'<div class="tile tile-{key} endowment-value"><h3 class="tile-name">{label}</h3>'
+                           f'<p class="tile-num money">${item["amount_usd"]:,}</p><p><a href="{_esc(item["source_url"])}">'
                            f'{_esc(item["source_label"])} · {_esc(item["source_note"])}</a></p></div>')
     return "\n".join([
         head_html, '<body>',
@@ -266,9 +266,9 @@ def render_page(data: dict, endowment: dict, *, head_html: str, copyright_year: 
         '<details class="alumni-method-details"><summary>Who counts and how sources were reviewed</summary>'
         f'<p>{_esc(data["methodology"])} A person may appear in more than one category; each person counts once per school and category. There is no overall alumni score.</p></details>',
         *cards,
-        f'<section class="endowment" id="endowment"><h2>Endowment</h2><p>{_esc(endowment["explanation"])}</p>'
+        f'<section class="overall endowment" id="endowment"><h2>Endowment</h2><p>{_esc(endowment["explanation"])}</p>'
         f'<p>Fiscal year { _esc(endowment["fiscal_year"]) } · as of { _esc(endowment["as_of"]) } · {_esc(endowment["basis"])}</p>'
-        f'<div class="endowment-values">{"".join(endow_cards)}</div><p>Verified { _esc(endowment["verified_at"]) }.</p></section>',
+        f'<div class="tiles endowment-values">{"".join(endow_cards)}</div><p>Verified { _esc(endowment["verified_at"]) }.</p></section>',
         '<p class="alumni-download">Download the curated records: <a href="../data/alumni.json">alumni.json</a> · '
         '<a href="../data/endowment.json">endowment.json</a> · <a href="../how-it-works/">How the athletics numbers work</a></p>',
         '</main>', '<footer class="site-footer"><div class="wrap"><p class="footer-links"><a href="../">Athletics</a> · '

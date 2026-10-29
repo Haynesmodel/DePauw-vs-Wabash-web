@@ -188,24 +188,14 @@ main { padding-block: 1.5rem 2.5rem; display: grid; gap: 1.5rem; }
 .alumni-method, .alumni-download { color: var(--color-text-muted); margin: 0; }
 .alumni-method-details { color: var(--color-text-muted); margin: 0.75rem 0 1.25rem; }
 .alumni-method-details summary { cursor: pointer; font-weight: 650; padding: 0.4rem 0; }
-.alumni-card, .endowment { min-width: 0; background: var(--color-surface); border: 1px solid var(--color-border); border-radius: var(--radius); padding: 1.25rem var(--gutter); }
-.alumni-card h2, .endowment h2 { font-size: 1.25rem; margin: 0 0 0.5rem; }
 .alumni-card > p, .endowment > p { margin: 0 0 0.75rem; }
-.alumni-schools, .endowment-values { display: grid; gap: 1rem; }
-.alumni-school, .endowment-value { min-width: 0; border-top: 4px solid var(--color-border); padding-top: 0.5rem; }
-.alumni-depauw { border-top-color: var(--color-depauw-accent); }
-.alumni-wabash { border-top-color: var(--color-wabash-accent); }
-.alumni-school h3, .endowment-value h3 { font-size: 1.05rem; margin: 0 0 0.35rem; }
+.alumni-school, .endowment-value { min-width: 0; }
+.alumni-school .tile-name, .endowment-value .tile-name { margin: 0; }
 .alumni-school details summary { cursor: pointer; font-weight: 600; padding: 0.4rem 0; }
 .alumni-school ul { margin: 0.5rem 0 0; padding-left: 1.25rem; }
 .alumni-school li { margin-bottom: 0.75rem; overflow-wrap: anywhere; }
 .alumni-zero, .endowment-value p { margin: 0.25rem 0; overflow-wrap: anywhere; }
-.money { font: 700 clamp(1.5rem, 7vw, 2.25rem)/1.2 var(--font-numbers); font-variant-numeric: tabular-nums; }
-
-@media (min-width: 40rem) {
-  .alumni-card, .endowment { padding: 1.5rem; }
-  .alumni-schools, .endowment-values { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-}
+.money { overflow-wrap: anywhere; }
 
 @media (forced-colors: active) {
   .site-nav a[aria-current="page"] { outline: 1px solid currentColor; outline-offset: 3px; }

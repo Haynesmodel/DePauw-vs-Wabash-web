@@ -79,3 +79,12 @@ def next_overall(per_sport: dict) -> tuple[str, dict] | None:
                 best = (key, g)
             break
     return best
+
+
+def next_group(ahead: list) -> list:
+    """The next meeting as one entry: the first game ahead plus every other game on the same date with
+    the same status, so a doubleheader is one meeting and not two. Empty when nothing is ahead."""
+    if not ahead:
+        return []
+    first = ahead[0]
+    return [g for g in ahead if g["date"] == first["date"] and g.get("status") == first.get("status")]

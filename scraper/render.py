@@ -254,10 +254,28 @@ def meeting_site(g: dict) -> str:
     return site or ("Neutral site" if g.get("location") == "neutral" else "Site TBA")
 
 
-def meeting_html(g: dict, today: dt.date) -> str:
-    html = (f'<time datetime="{esc(g["date"])}">{esc(fmt_when(g, today))}</time>'
-            f' · {esc(meeting_site(g))}')
-    if g.get("source") == "wabash":
+def join_and(items: list) -> str:
+    """'a', 'a and b', 'a, b and c' (no serial comma, like the rest of the page)."""
+    return items[0] if len(items) == 1 else ", ".join(items[:-1]) + " and " + items[-1]
+
+
+def fmt_when_group(games: list, today: dt.date) -> str:
+    """fmt_when for one meeting, which may be several games on one date:
+    'Wed, Apr 28, 2027 · Doubleheader · 12:00 PM and 3:30 PM'. A game without a time says TBA."""
+    first = games[0]
+    if len(games) == 1 or first.get("status") == "postponed":
+        return fmt_when(first, today)
+    day = fmt_when({**first, "time": "x"}, today).split(" · ")[0]
+    label = "Doubleheader" if len(games) == 2 else f"{len(games)} games"
+    return f"{day} · {label} · {join_and([g.get('time') or 'TBA' for g in games])}"
+
+
+def meeting_html(games: list, today: dt.date) -> str:
+    """The next meeting as HTML. `games` is one meeting's games (meetings.next_group), all on one date."""
+    sites = list(dict.fromkeys(meeting_site(g) for g in games))
+    html = (f'<time datetime="{esc(games[0]["date"])}">{esc(fmt_when_group(games, today))}</time>'
+            f' · {esc(" / ".join(sites))}')
+    if all(g.get("source") == "wabash" for g in games):
         html += ' <span class="date-note">(from Wabash’s schedule)</span>'
     return html
 
@@ -648,7 +666,7 @@ def card(key: str, s: dict, ahead: list, pending: list, up: dict | None, today: 
          f'{date_html(last)} · {esc(score_text(last))}'),
     ]
     if ahead:
-        stat_rows.append(("Next meeting", meeting_html(ahead[0], today)))
+        stat_rows.append(("Next meeting", meeting_html(meetings.next_group(ahead), today)))
     if pending:
         day = fmt_when(pending[0], today).split(" · ")[0]
         stat_rows.append(("Result pending", esc(day) + " · not on the history page yet"))
@@ -685,8 +703,9 @@ def next_meeting_section(per_sport: dict, pending: dict, sports: dict, today: dt
     lines = []
     if best:
         key, g = best
+        rest = per_sport[key][per_sport[key].index(g):]      # starts at the game picked, past any postponed one
         lines.append(f'<p class="next-line"><strong>{esc(sports[key]["name"])}</strong>, '
-                     f'{meeting_html(g, today)}</p>')
+                     f'{meeting_html(meetings.next_group(rest), today)}</p>')
     for key, games in pending.items():
         if games:
             lines.append(f'<p class="next-pending">{esc(sports[key]["name"])}: result pending</p>')

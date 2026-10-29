@@ -154,3 +154,69 @@ def test_missing_schedule_data_never_stops_the_records_page(tmp_path):
 
 def test_the_default_upcoming_file_is_the_one_scrape_writes():
     assert render.UPCOMING.name == "upcoming.json" and render.UPCOMING.parent.name == "data"
+
+
+# ---- doubleheaders ------------------------------------------------------- #
+
+def dh(date, *times, site="Goodrich Ballpark, Crawfordsville, IN", source="wabash"):
+    return [{**sched(date, t, "away", site), "doubleheader": True, "source": source} for t in times]
+
+
+def baseball_card(html):
+    return text_of(html[html.index('id="baseball"'):html.index('</article>', html.index('id="baseball"'))])
+
+
+def baseball_page(tmp_path, games, **kw):
+    from test_render import sport, game
+    sports = {"baseball": sport("baseball", "Baseball", [game("2026-04-28", "L", 3, 15)])}
+    return page(tmp_path, {"baseball": entry(*games)}, sports=sports, **kw)
+
+
+def test_a_doubleheader_from_one_school_is_one_entry_with_both_times(tmp_path):
+    html = baseball_page(tmp_path, dh("2027-04-28", "12:00 PM", "3:30 PM"))
+    top = text_of(html[html.index('id="next-meeting"'):html.index('id="overall-h"')])
+    assert ("Baseball, Wed, Apr 28, 2027 · Doubleheader · 12:00 PM and 3:30 PM · "
+            "Goodrich Ballpark, Crawfordsville, IN (from Wabash's schedule)") in top.replace("’", "'")
+    card = baseball_card(html)
+    assert "Next meeting Wed, Apr 28, 2027 · Doubleheader · 12:00 PM and 3:30 PM" in card
+    assert card.count("Apr 28, 2027") == 1 and html.count("Doubleheader") == 2   # top box + card, never listed twice
+
+
+def test_the_same_doubleheader_from_both_schools_is_still_two_games_not_four(tmp_path):
+    import upcoming
+    depauw = [{**g, "doubleheader": True} for g in (sched("2027-04-28", "12:00 PM", "away", "Goodrich Ballpark, Crawfordsville, Ind."),
+                                                      sched("2027-04-28", None, "away", "Goodrich Ballpark, Crawfordsville, Ind.", note="Following Game 1"))]
+    wabash = dh("2027-04-28", "12:00 PM", "3:30 PM")
+    games, _ = upcoming.merge_schedules("Baseball", depauw, wabash)
+    assert [g["source"] for g in games] == ["both", "both"] and [g["time"] for g in games] == ["12:00 PM", "3:30 PM"]
+    html = baseball_page(tmp_path, games)
+    assert "Doubleheader · 12:00 PM and 3:30 PM" in baseball_card(html)
+    assert "from Wabash" not in baseball_card(html)        # both schools list it, so no "only Wabash" note
+
+
+def test_a_doubleheader_with_one_time_missing_says_tba_for_that_game(tmp_path):
+    html = baseball_page(tmp_path, dh("2027-04-28", "12:00 PM", None))
+    assert "Doubleheader · 12:00 PM and TBA" in baseball_card(html)
+    html = baseball_page(tmp_path, dh("2027-04-28", None, None))
+    assert "Doubleheader · TBA and TBA" in baseball_card(html)
+
+
+def test_three_games_on_one_date_and_a_postponed_pair_read_sensibly(tmp_path):
+    assert "3 games · 12:00 PM, 2:00 PM and 4:00 PM" in baseball_card(
+        baseball_page(tmp_path, dh("2027-04-28", "12:00 PM", "2:00 PM", "4:00 PM")))
+    postponed = [{**g, "status": "postponed"} for g in dh("2027-04-28", "12:00 PM", "3:30 PM")]
+    card = baseball_card(baseball_page(tmp_path, postponed))
+    assert "Wed, Apr 28, 2027 · Postponed" in card and "12:00 PM" not in card
+
+
+def test_games_on_different_dates_stay_separate_meetings(tmp_path):
+    games = dh("2027-04-28", "12:00 PM") + dh("2027-04-29", "1:00 PM")
+    card = baseball_card(baseball_page(tmp_path, games))
+    assert "Wed, Apr 28, 2027 · 12:00 PM" in card and "Doubleheader" not in card and "Apr 29" not in card
+
+
+def test_the_top_box_groups_from_the_game_picked_when_a_postponed_one_comes_first():
+    ahead = [{**sched("2026-11-12"), "status": "postponed"}] + dh("2026-11-14", "1:00 PM", "3:00 PM")
+    assert meetings.next_group(ahead) == [ahead[0]]            # the postponed game is its own entry
+    best = meetings.next_overall({"baseball": ahead})
+    assert meetings.next_group(ahead[ahead.index(best[1]):]) == ahead[1:]

@@ -403,8 +403,9 @@ def scrape_one(sc: dict, sport: dict, school: str, fixtures: Optional[Path], pac
 def merged_payload(sport: dict, raw: dict, rules: Optional[dict] = None) -> tuple:
     """The sport as the site reads it: both schools' games merged. Returns (payload, MergeResult or None)."""
     d, w = raw.get("depauw"), raw.get("wabash")
+    # Rulings name a row from each school, so they only apply when both schools' games are here.
     result = merge.merge_sport(d["games"] if d else [], w["games"] if w else [],
-                               season_months=sport.get("season_months"), rules=rules)
+                               season_months=sport.get("season_months"), rules=rules if d and w else None)
     games = result.games
     t = tally_dicts(games)
     label = sport.get("total_label") or (d or w).get("total_label") or "points"
@@ -464,10 +465,6 @@ def report_merge(name: str, result) -> None:
         print(f"CHECK {name}: DePauw only {d['date']} {d['depauw']}-{d['wabash']}  /  Wabash only {w['date']} "
               f"{w['depauw']}-{w['wabash']}  ({m['days']} days apart"
               f"{', same score' if m['same_score'] else ''}); not merged")
-    for r in result.unused_rulings:
-        print(f"WARN {name}: a same-game ruling in overrides.json matched no games: DePauw "
-              f"{r['depauw']['date']} {r['depauw']['score'][0]}-{r['depauw']['score'][1]}, Wabash "
-              f"{r['wabash']['date']} {r['wabash']['score'][0]}-{r['wabash']['score'][1]}", file=sys.stderr)
 
 
 def scrape_schedules(cfg: dict, previous: dict, fixtures: Optional[Path], pacer: Pacer) -> dict:

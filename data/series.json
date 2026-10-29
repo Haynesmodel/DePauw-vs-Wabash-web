@@ -1,12 +1,12 @@
 {
   "schema_version": 2,
-  "updated_at": "2026-10-29T00:42:02+00:00",
+  "updated_at": "2026-10-29T01:20:41+00:00",
   "perspective": "DePauw",
   "totals": {
-    "depauw_wins": 518,
-    "wabash_wins": 348,
+    "depauw_wins": 515,
+    "wabash_wins": 344,
     "ties": 20,
-    "games_played": 886
+    "games_played": 879
   },
   "sports": {
     "football": {
@@ -14,25 +14,25 @@
       "source_url": "https://depauwtigers.com/sports/football/opponent-history/wabash/215",
       "wabash_source_url": "https://sports.wabash.edu/sports/football/opponent-history/depauw-university/4",
       "record": {
-        "depauw_wins": 60,
+        "depauw_wins": 59,
         "wabash_wins": 63,
         "ties": 9
       },
-      "games_played": 132,
+      "games_played": 131,
       "first_game": "1890-11-22",
       "last_game": "2025-11-15",
       "current_streak": "W4",
       "points": {
-        "depauw": 1918,
+        "depauw": 1917,
         "wabash": 2185
       },
       "total_label": "points",
       "sources": {
-        "both": 130,
-        "depauw_only": 1,
-        "wabash_only": 1,
+        "both": 131,
+        "depauw_only": 0,
+        "wabash_only": 0,
         "disputed": 2,
-        "date_differs": 2,
+        "date_differs": 3,
         "dates_not_recorded": 0
       },
       "games": [
@@ -49,7 +49,7 @@
           "source": "both"
         },
         {
-          "date": "1891-11-02",
+          "date": "1891-11-21",
           "season": "1891",
           "location": "home",
           "site": "Greencastle, IN",
@@ -58,19 +58,9 @@
           "wabash": 0,
           "note": "Forfeit",
           "boxscore": null,
-          "source": "wabash"
-        },
-        {
-          "date": "1891-11-21",
-          "season": "1891",
-          "location": "home",
-          "site": null,
-          "result": "W",
-          "depauw": 1,
-          "wabash": 0,
-          "note": null,
-          "boxscore": null,
-          "source": "depauw"
+          "source": "both",
+          "date_differs": true,
+          "wabash_date": "1891-11-02"
         },
         {
           "date": "1892-11-05",
@@ -1645,24 +1635,24 @@
       "wabash_source_url": "https://sports.wabash.edu/sports/mens-basketball/opponent-history/depauw-university/4",
       "record": {
         "depauw_wins": 133,
-        "wabash_wins": 104,
+        "wabash_wins": 100,
         "ties": 1
       },
-      "games_played": 238,
+      "games_played": 234,
       "first_game": "1903-03-03",
       "last_game": "2026-01-28",
       "current_streak": "L1",
       "points": {
-        "depauw": 13348,
-        "wabash": 13307
+        "depauw": 13304,
+        "wabash": 13139
       },
       "total_label": "points",
       "sources": {
-        "both": 226,
-        "depauw_only": 5,
-        "wabash_only": 7,
+        "both": 230,
+        "depauw_only": 1,
+        "wabash_only": 3,
         "disputed": 7,
-        "date_differs": 13,
+        "date_differs": 17,
         "dates_not_recorded": 0
       },
       "games": [
@@ -1690,7 +1680,9 @@
           "wabash": 40,
           "note": null,
           "boxscore": null,
-          "source": "depauw"
+          "source": "both",
+          "date_differs": true,
+          "wabash_date": "1906-02-24"
         },
         {
           "date": "1906-02-13",
@@ -1702,55 +1694,9 @@
           "wabash": 52,
           "note": null,
           "boxscore": null,
-          "source": "depauw"
-        },
-        {
-          "date": "1906-02-24",
-          "season": "1905-06",
-          "location": "neutral",
-          "site": null,
-          "result": "L",
-          "depauw": 7,
-          "wabash": 40,
-          "note": null,
-          "boxscore": null,
-          "source": "wabash"
-        },
-        {
-          "date": "1906-02-26",
-          "season": "1905-06",
-          "location": "neutral",
-          "site": null,
-          "result": "L",
-          "depauw": 7,
-          "wabash": 52,
-          "note": null,
-          "boxscore": null,
-          "source": "wabash"
-        },
-        {
-          "date": "1907-01-10",
-          "season": "1906-07",
-          "location": "neutral",
-          "site": null,
-          "result": "L",
-          "depauw": 12,
-          "wabash": 35,
-          "note": null,
-          "boxscore": null,
-          "source": "wabash"
-        },
-        {
-          "date": "1907-01-11",
-          "season": "1906-07",
-          "location": "neutral",
-          "site": null,
-          "result": "L",
-          "depauw": 18,
-          "wabash": 41,
-          "note": null,
-          "boxscore": null,
-          "source": "wabash"
+          "source": "both",
+          "date_differs": true,
+          "wabash_date": "1906-02-26"
         },
         {
           "date": "1907-02-05",
@@ -1762,7 +1708,9 @@
           "wabash": 35,
           "note": null,
           "boxscore": null,
-          "source": "depauw"
+          "source": "both",
+          "date_differs": true,
+          "wabash_date": "1907-01-10"
         },
         {
           "date": "1907-02-27",
@@ -1774,7 +1722,9 @@
           "wabash": 41,
           "note": null,
           "boxscore": null,
-          "source": "depauw"
+          "source": "both",
+          "date_differs": true,
+          "wabash_date": "1907-01-11"
         },
         {
           "date": "1909-01-29",
@@ -4598,25 +4548,25 @@
       "source_url": "https://depauwtigers.com/sports/baseball/opponent-history/wabash/215",
       "wabash_source_url": "https://sports.wabash.edu/sports/baseball/opponent-history/depauw-university/4",
       "record": {
-        "depauw_wins": 157,
+        "depauw_wins": 155,
         "wabash_wins": 156,
         "ties": 3
       },
-      "games_played": 316,
+      "games_played": 314,
       "first_game": "1888-01-03",
       "last_game": "2026-04-28",
       "current_streak": "L1",
       "points": {
-        "depauw": 1801,
-        "wabash": 1750
+        "depauw": 1773,
+        "wabash": 1742
       },
       "total_label": "runs",
       "sources": {
-        "both": 139,
-        "depauw_only": 2,
-        "wabash_only": 175,
+        "both": 141,
+        "depauw_only": 0,
+        "wabash_only": 173,
         "disputed": 2,
-        "date_differs": 14,
+        "date_differs": 16,
         "dates_not_recorded": 64
       },
       "games": [
@@ -7040,49 +6990,29 @@
           "date": "1986-03-19",
           "season": "1986",
           "location": "home",
-          "site": null,
+          "site": "Greencastle, IN",
           "result": "W",
           "depauw": 12,
           "wabash": 4,
           "note": null,
           "boxscore": null,
-          "source": "depauw"
+          "source": "both",
+          "date_differs": true,
+          "wabash_date": "1986-03-23"
         },
         {
           "date": "1986-03-19",
           "season": "1986",
           "location": "home",
-          "site": null,
-          "result": "W",
-          "depauw": 16,
-          "wabash": 4,
-          "note": null,
-          "boxscore": null,
-          "source": "depauw"
-        },
-        {
-          "date": "1986-03-23",
-          "season": "1986",
-          "location": "home",
-          "site": "Greencastle, IN",
-          "result": "W",
-          "depauw": 12,
-          "wabash": 4,
-          "note": null,
-          "boxscore": null,
-          "source": "wabash"
-        },
-        {
-          "date": "1986-03-23",
-          "season": "1986",
-          "location": "home",
           "site": "Greencastle, IN",
           "result": "W",
           "depauw": 16,
           "wabash": 4,
           "note": null,
           "boxscore": null,
-          "source": "wabash"
+          "source": "both",
+          "date_differs": true,
+          "wabash_date": "1986-03-23"
         },
         {
           "date": "1986-04-08",

@@ -190,7 +190,15 @@ class MergeResult:
     disputed: list = field(default_factory=list)      # (merged game) for each dispute
     date_differs: list = field(default_factory=list)  # (merged game) for each date mismatch
     pairs: list = field(default_factory=list)         # {"kind", "depauw", "wabash", "gap"} for each match
-    unused_rulings: list = field(default_factory=list)  # same_game rulings that matched no rows
+
+
+def _stale(r: dict, kind: str, missing_depauw: bool, missing_wabash: bool) -> str:
+    """The error for a ruling whose rows are gone: which ruling, and which school's row cannot be found."""
+    d, w = r["depauw"], r["wabash"]
+    gone = " and ".join(name for name, m in (("DePauw", missing_depauw), ("Wabash", missing_wabash)) if m)
+    return (f"overrides.json {kind} ruling no longer finds {gone}'s row: DePauw {d['date']} "
+            f"{d['score'][0]}-{d['score'][1]} / Wabash {w['date']} {w['score'][0]}-{w['score'][1]}"
+            f" (a source page changed, or the ruling was mistyped)")
 
 
 def _pair(edges: list, used_d: set, used_w: set, take) -> None:
@@ -215,7 +223,6 @@ def merge_sport(depauw: list, wabash: list, *, season_months=None, rules=None) -
     used_d: set = set()
     used_w: set = set()
     pairs: dict = {}                       # di -> (wi, kind)
-    unused_rulings: list = []
 
     def take(kind):
         def _take(di, wi):
@@ -227,13 +234,20 @@ def merge_sport(depauw: list, wabash: list, *, season_months=None, rules=None) -
     def allowed(gd, gw) -> bool:
         return (_identity(gd), _identity(gw)) not in different
 
+    # A ruling that no longer finds both rows it names means a source page changed under it. Stop
+    # rather than let a ruling silently stop applying (or keep a game counted twice).
+    for r in rules.get("different_games", []):
+        has_d = any(_identity(g) == _ruled(r["depauw"]) for g in d)
+        has_w = any(_identity(g) == _ruled(r["wabash"]) for g in w)
+        if not (has_d and has_w):
+            raise MergeError(_stale(r, "different_games", not has_d, not has_w))
+
     # 0. rulings: games a person confirmed are the same game
     for r in rules.get("same_game", []):
         di = next((i for i, g in enumerate(d) if i not in used_d and _identity(g) == _ruled(r["depauw"])), None)
         wi = next((i for i, g in enumerate(w) if i not in used_w and _identity(g) == _ruled(r["wabash"])), None)
         if di is None or wi is None:
-            unused_rulings.append(r)
-            continue
+            raise MergeError(_stale(r, "same_game", di is None, wi is None))
         used_d.add(di)
         used_w.add(wi)
         pairs[di] = (wi, "ruling")
@@ -331,7 +345,7 @@ def merge_sport(depauw: list, wabash: list, *, season_months=None, rules=None) -
     stats = {"both": len(pairs), "depauw_only": len(depauw_only), "wabash_only": len(wabash_only),
              "disputed": len(disputed), "date_differs": len(differs),
              "dates_not_recorded": sum(1 for g in merged if g.get("date_known") is False)}
-    result = MergeResult(merged, stats, depauw_only, wabash_only, disputed, differs, matches, unused_rulings)
+    result = MergeResult(merged, stats, depauw_only, wabash_only, disputed, differs, matches)
     check(d, w, result)
     return result
 

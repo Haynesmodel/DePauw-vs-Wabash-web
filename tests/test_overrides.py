@@ -32,8 +32,11 @@ def same(depauw, wabash, reason="checked the box score"):
 
 # ---- the file ---------------------------------------------------------------------------------- #
 
-def test_the_committed_file_is_valid_and_starts_with_no_rulings():
-    assert merge.load_overrides(ROOT / "data" / "overrides.json") == {}
+def test_the_committed_file_is_valid_and_every_ruling_has_a_reason():
+    rules = merge.load_overrides(ROOT / "data" / "overrides.json")
+    assert {k: (len(v["same_game"]), len(v["different_games"])) for k, v in rules.items()} == {
+        "football": (1, 0), "mens-basketball": (8, 1), "baseball": (3, 0), "mens-soccer": (3, 0)}
+    assert all(r["reason"] for v in rules.values() for kind in v.values() for r in kind)
 
 
 def test_a_missing_file_means_no_rulings(tmp_path):
@@ -83,7 +86,7 @@ def test_a_ruling_pairs_games_the_automatic_rules_would_leave_apart():
     game = r.games[0]
     assert len(r.games) == 1 and (game["source"], game["date"], game["wabash_date"], game["date_differs"]) == \
         ("both", "1891-11-21", "1891-11-02", True)
-    assert r.stats["both"] == 1 and r.unused_rulings == []
+    assert r.stats["both"] == 1
     assert [m["kind"] for m in r.pairs] == ["ruling"] and len(merge.beyond_window(r)) == 1
 
 
@@ -113,21 +116,33 @@ def test_a_ruling_uses_each_row_once_so_identical_doubleheader_rows_take_the_nex
     w = [g("1992-04-01", 2, 1), g("1992-04-01", 2, 1)]
     both = rules_for((("1992-04-03", "2-1"), ("1992-04-01", "2-1")), (("1992-04-03", "2-1"), ("1992-04-01", "2-1")))
     r = merge.merge_sport(d, w, rules=both)
-    assert r.stats["both"] == 2 and [m["kind"] for m in r.pairs] == ["ruling", "ruling"] and r.unused_rulings == []
+    assert r.stats["both"] == 2 and [m["kind"] for m in r.pairs] == ["ruling", "ruling"]
     once = merge.merge_sport(d, w, rules=rules_for((("1992-04-03", "2-1"), ("1992-04-01", "2-1"))))
     assert sorted(m["kind"] for m in once.pairs) == ["near_date", "ruling"]       # the other pair is automatic
 
 
-def test_a_ruling_that_matches_no_rows_is_reported_and_changes_nothing():
-    d, w = [g("2005-03-16", 11, 1)], [g("2005-03-16", 11, 1)]
-    r = merge.merge_sport(d, w, rules=rules_for((("1999-01-01", "1-0"), ("1999-01-02", "1-0"))))
-    assert r.stats["both"] == 1 and len(r.unused_rulings) == 1
-
-
-def test_a_ruling_needs_both_rows_or_it_pairs_neither():
+def test_a_ruling_that_no_longer_finds_both_rows_fails_loudly():
     d, w = [g("1891-11-21", 1, 0)], [g("1891-11-03", 1, 0)]                      # Wabash's row has another date
-    r = merge.merge_sport(d, w, rules=rules_for((("1891-11-21", "1-0"), ("1891-11-02", "1-0"))))
-    assert len(r.games) == 2 and len(r.unused_rulings) == 1
+    with pytest.raises(merge.MergeError, match=r"no longer finds Wabash's row: DePauw 1891-11-21 1-0 / Wabash 1891-11-02 1-0"):
+        merge.merge_sport(d, w, rules=rules_for((("1891-11-21", "1-0"), ("1891-11-02", "1-0"))))
+    with pytest.raises(merge.MergeError, match="no longer finds DePauw's row"):
+        merge.merge_sport([g("1891-11-20", 1, 0)], [g("1891-11-02", 1, 0)],
+                          rules=rules_for((("1891-11-21", "1-0"), ("1891-11-02", "1-0"))))
+    with pytest.raises(merge.MergeError, match="no longer finds DePauw and Wabash's row"):
+        merge.merge_sport([], [], rules=rules_for((("1891-11-21", "1-0"), ("1891-11-02", "1-0"))))
+
+
+def test_a_ruling_that_names_a_row_twice_but_the_page_has_it_once_fails():
+    d, w = [g("1992-04-03", 2, 1)], [g("1992-04-01", 2, 1)]
+    twice = rules_for((("1992-04-03", "2-1"), ("1992-04-01", "2-1")), (("1992-04-03", "2-1"), ("1992-04-01", "2-1")))
+    with pytest.raises(merge.MergeError):
+        merge.merge_sport(d, w, rules=twice)
+
+
+def test_a_different_games_ruling_that_no_longer_finds_its_rows_fails_loudly():
+    d, w = [g("1928-02-14", 23, 22)], [g("1928-02-28", 32, 30)]                  # Wabash's date moved
+    with pytest.raises(merge.MergeError, match="different_games ruling no longer finds Wabash's row"):
+        merge.merge_sport(d, w, rules=different((("1928-02-14", "23-22"), ("1928-02-29", "32-30"))))
 
 
 # ---- different-game rulings --------------------------------------------------------------------- #
@@ -188,10 +203,24 @@ def test_the_run_lists_every_match_beyond_the_window_and_every_leftover_pair(bot
     assert "CHECK Football: DePauw only 1891-11-21 1-0  /  Wabash only 1891-11-02 1-0" in out
 
 
-def test_a_stale_ruling_warns_but_does_not_turn_the_run_red(both_dir, tmp_path, capsys):
-    write(tmp_path, {"football": {"same_game": [same(("1801-01-01", "1-0"), ("1801-01-02", "1-0"))]}})
+def test_a_stale_ruling_turns_the_run_red_and_keeps_that_sports_last_good_data(both_dir, tmp_path, capsys):
     assert run(both_dir, tmp_path) == 0
-    assert "WARN Football: a same-game ruling in overrides.json matched no games" in capsys.readouterr().err
+    good = json.loads((tmp_path / "series.json").read_text(encoding="utf-8"))["sports"]
+    write(tmp_path, {"football": {"same_game": [same(("1801-01-01", "1-0"), ("1801-01-02", "1-0"))]}})
+    capsys.readouterr()
+    assert run(both_dir, tmp_path) == 1
+    err = capsys.readouterr().err
+    assert "FAIL Football" in err and "no longer finds DePauw and Wabash's row" in err
+    now = json.loads((tmp_path / "series.json").read_text(encoding="utf-8"))["sports"]
+    assert now["football"] == good["football"] and now["baseball"] == good["baseball"]   # nothing half-applied
+
+
+def test_rulings_are_skipped_when_only_one_school_has_data_for_the_sport(both_dir, tmp_path):
+    (both_dir / "wabash-football.html").write_text("<html><body>Service unavailable</body></html>")
+    write(tmp_path, {"football": {"same_game": [same(("1891-11-21", "1-0"), ("1891-11-02", "1-0"))]}})
+    assert run(both_dir, tmp_path) == 1                      # red because Wabash's page failed, not the ruling
+    sports = json.loads((tmp_path / "series.json").read_text(encoding="utf-8"))["sports"]
+    assert sports["football"]["games_played"] == 131 and "sources" not in sports["football"]
 
 
 def test_a_broken_overrides_file_stops_the_run_before_anything_is_written(both_dir, tmp_path, capsys):
@@ -208,3 +237,72 @@ def test_the_overrides_path_can_be_given_explicitly(both_dir, tmp_path):
         same(("1891-11-21", "1-0"), ("1891-11-02", "1-0"))]}}}), encoding="utf-8")
     assert run(both_dir, tmp_path, "--overrides", str(elsewhere)) == 0
     assert json.loads((tmp_path / "series.json").read_text(encoding="utf-8"))["sports"]["football"]["games_played"] == 131
+
+
+# ---- the committed rulings, applied to the real pages ------------------------------------------- #
+
+def committed(key):
+    from test_merge import MONTHS, both_schools
+    d, w = both_schools(key)
+    rules = merge.load_overrides(ROOT / "data" / "overrides.json").get(key)
+    return d, w, merge.merge_sport(d, w, season_months=MONTHS[key], rules=rules)      # raises if a ruling is stale
+
+
+EXPECTED = {   # sport: (games, DePauw wins, Wabash wins, ties)
+    "football": (131, 59, 63, 9), "mens-basketball": (234, 133, 100, 1), "baseball": (314, 155, 156, 3),
+    "mens-soccer": (65, 41, 18, 6), "mens-lacrosse": (12, 12, 0, 0), "mens-tennis": (123, 115, 7, 1)}
+
+
+@pytest.mark.parametrize("key", EXPECTED)
+def test_with_the_committed_rulings_each_sport_has_its_expected_record(key):
+    d, w, r = committed(key)
+    assert (len(r.games), *merge.tally(r.games)) == EXPECTED[key]
+
+
+def test_the_committed_rulings_give_879_games_and_a_515_344_20_total():
+    games = wins = losses = ties = 0
+    for key in EXPECTED:
+        r = committed(key)[2]
+        games += len(r.games)
+        w_, l_, t_ = merge.tally(r.games)
+        wins, losses, ties = wins + w_, losses + l_, ties + t_
+    assert (games, wins, losses, ties) == (879, 515, 344, 20)
+
+
+def test_the_committed_rulings_make_football_and_baseball_equal_the_wabash_page_or_both():
+    _, _, football = committed("football")
+    assert football.stats["both"] == 131 and football.stats["depauw_only"] == football.stats["wabash_only"] == 0
+    d, w, baseball = committed("baseball")
+    assert merge.tally(baseball.games) == merge.tally(w) == (155, 156, 3)             # Wabash's own page, exactly
+    assert baseball.stats["depauw_only"] == 0 and baseball.stats["wabash_only"] == 173
+
+
+def test_the_committed_rulings_pin_all_eight_matches_beyond_the_two_day_window():
+    pinned = set()
+    for key in ("mens-basketball", "baseball", "mens-soccer"):
+        for m in merge.beyond_window(committed(key)[2]):
+            assert m["kind"] == "ruling", (key, m["depauw"]["date"])                    # nothing left to automatic guesses
+            pinned.add((key, m["depauw"]["date"]))
+    football = committed("football")[2]
+    assert [m["kind"] for m in merge.beyond_window(football)] == ["ruling"]
+    assert pinned == {("mens-basketball", "1936-01-21"), ("mens-basketball", "1956-01-10"),
+                      ("mens-basketball", "1962-12-10"), ("mens-basketball", "1978-01-07"),
+                      ("mens-basketball", "1906-01-29"), ("mens-basketball", "1906-02-13"),
+                      ("mens-basketball", "1907-02-05"), ("mens-basketball", "1907-02-27"),
+                      ("baseball", "1990-04-07"), ("baseball", "1986-03-19"), ("baseball", "1986-03-19"),
+                      ("mens-soccer", "1969-10-12"), ("mens-soccer", "1969-10-15"), ("mens-soccer", "1969-11-16")}
+
+
+def test_the_1928_basketball_games_stay_two_games_by_ruling():
+    d, w, r = committed("mens-basketball")
+    assert [(x["date"], x["source"], x["depauw"], x["wabash"]) for x in r.games if x["date"].startswith("1928-02-")
+            and x["date"] in ("1928-02-14", "1928-02-29")] == [("1928-02-14", "depauw", 23, 22),
+                                                               ("1928-02-29", "wabash", 32, 30)]
+    assert merge.near_misses(r) == []                  # no leftover pair is left to look like the same game
+
+
+def test_the_1986_doubleheader_is_two_games_with_the_dates_shown():
+    d, w, r = committed("baseball")
+    games = [x for x in r.games if x["date"].startswith("1986-03")]
+    assert [(x["date"], x["depauw"], x["wabash"], x["source"], x["wabash_date"]) for x in games] == [
+        ("1986-03-19", 12, 4, "both", "1986-03-23"), ("1986-03-19", 16, 4, "both", "1986-03-23")]

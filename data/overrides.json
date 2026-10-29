@@ -1,4 +1,103 @@
 {
   "schema_version": 1,
-  "sports": {}
+  "sports": {
+    "football": {
+      "same_game": [
+        {
+          "depauw": {"date": "1891-11-21", "score": "1-0"},
+          "wabash": {"date": "1891-11-02", "score": "1-0"},
+          "reason": "Both schools list one 1-0 DePauw win in 1891 and each page has 131 games; only the date differs."
+        }
+      ]
+    },
+    "mens-basketball": {
+      "same_game": [
+        {
+          "depauw": {"date": "1906-01-29", "score": "7-40"},
+          "wabash": {"date": "1906-02-24", "score": "7-40"},
+          "reason": "Same unusual score in the same season, one game at each school; only the date differs."
+        },
+        {
+          "depauw": {"date": "1906-02-13", "score": "7-52"},
+          "wabash": {"date": "1906-02-26", "score": "7-52"},
+          "reason": "Same unusual score in the same season, one game at each school; only the date differs."
+        },
+        {
+          "depauw": {"date": "1907-02-05", "score": "12-35"},
+          "wabash": {"date": "1907-01-10", "score": "12-35"},
+          "reason": "Same unusual score in the same season, one game at each school; only the date differs."
+        },
+        {
+          "depauw": {"date": "1907-02-27", "score": "18-41"},
+          "wabash": {"date": "1907-01-11", "score": "18-41"},
+          "reason": "Same unusual score in the same season, one game at each school; only the date differs."
+        },
+        {
+          "depauw": {"date": "1936-01-21", "score": "25-34"},
+          "wabash": {"date": "1936-01-24", "score": "25-34"},
+          "reason": "Confirmed same game: same score, one digit of the day differs."
+        },
+        {
+          "depauw": {"date": "1956-01-10", "score": "85-72"},
+          "wabash": {"date": "1956-01-20", "score": "85-72"},
+          "reason": "Confirmed same game: same score, one digit of the day differs."
+        },
+        {
+          "depauw": {"date": "1962-12-10", "score": "66-69"},
+          "wabash": {"date": "1962-09-03", "score": "66-69"},
+          "reason": "Confirmed same game: same score and season; Wabash's September date is outside the basketball season."
+        },
+        {
+          "depauw": {"date": "1978-01-07", "score": "82-73"},
+          "wabash": {"date": "1978-01-17", "score": "82-73"},
+          "reason": "Confirmed same game: same score, one digit of the day differs."
+        }
+      ],
+      "different_games": [
+        {
+          "depauw": {"date": "1928-02-14", "score": "23-22"},
+          "wabash": {"date": "1928-02-29", "score": "32-30"},
+          "reason": "Confirmed different games: neither the date nor the score agrees."
+        }
+      ]
+    },
+    "baseball": {
+      "same_game": [
+        {
+          "depauw": {"date": "1986-03-19", "score": "12-4"},
+          "wabash": {"date": "1986-03-23", "score": "12-4"},
+          "reason": "First game of the 1986 doubleheader: identical score at both schools. With both games ruled the same, the merged record equals Wabash's own page."
+        },
+        {
+          "depauw": {"date": "1986-03-19", "score": "16-4"},
+          "wabash": {"date": "1986-03-23", "score": "16-4"},
+          "reason": "Second game of the 1986 doubleheader: identical score at both schools."
+        },
+        {
+          "depauw": {"date": "1990-04-07", "score": "8-7"},
+          "wabash": {"date": "1990-04-04", "score": "8-7"},
+          "reason": "Confirmed same game: same score, one digit of the day differs."
+        }
+      ]
+    },
+    "mens-soccer": {
+      "same_game": [
+        {
+          "depauw": {"date": "1969-10-12", "score": "3-1"},
+          "wabash": {"date": "1969-11-12", "score": "3-1"},
+          "reason": "Confirmed same game: same score, the month is off by one."
+        },
+        {
+          "depauw": {"date": "1969-10-15", "score": "3-4"},
+          "wabash": {"date": "1969-10-11", "score": "3-4"},
+          "reason": "Confirmed same game: same score, one digit of the day differs."
+        },
+        {
+          "depauw": {"date": "1969-11-16", "score": "3-0"},
+          "wabash": {"date": "1968-11-16", "score": "3-0"},
+          "reason": "Confirmed same game: same score, the year is off by one."
+        }
+      ]
+    }
+  }
 }

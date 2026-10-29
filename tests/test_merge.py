@@ -391,7 +391,7 @@ def test_real_football_with_the_1891_ruling_equals_both_schools_pages():
     ruled = {"same_game": [ruling(("1891-11-21", "1-0"), ("1891-11-02", "1-0"))], "different_games": []}
     d, w, r = real("football", ruled)
     assert len(r.games) == 131 and merge.tally(r.games) == (59, 63, 9)
-    assert r.stats["both"] == 131 and r.stats["date_differs"] == 3 and r.unused_rulings == []
+    assert r.stats["both"] == 131 and r.stats["date_differs"] == 3
     game = next(x for x in r.games if x["date"] == "1891-11-21")
     assert (game["source"], game["wabash_date"], game["date_differs"]) == ("both", "1891-11-02", True)
     b = facts.bell(r.games)

@@ -13,6 +13,7 @@ a blank or half-true page.
 Usage:
   python scraper/render.py                      # data/series.json -> site/
   python scraper/render.py --data FILE --out DIR
+  python scraper/render.py --now 2026-11-14T13:30     # preview game-day mode as if it were this Eastern time
 """
 
 from __future__ import annotations
@@ -30,8 +31,11 @@ from pathlib import Path
 from urllib.parse import quote, urlparse
 
 import facts
+import gameday
 import images
 import meetings
+import places
+from timeutil import from_eastern, to_eastern
 
 ROOT = Path(__file__).resolve().parent.parent
 DATA = ROOT / "data" / "series.json"
@@ -154,23 +158,6 @@ def count_noun(n: int, words: tuple) -> str:
     return f"{n:,} {words[0] if n == 1 else words[1]}"
 
 
-def _nth_sunday(year: int, month: int, n: int) -> int:
-    first = dt.date(year, month, 1)
-    return 1 + (6 - first.weekday()) % 7 + 7 * (n - 1)
-
-
-def to_eastern(utc: dt.datetime) -> tuple[dt.datetime, str]:
-    """UTC -> US Eastern with the current US DST rule (second Sunday of March to first
-    Sunday of November). Hand-coded because zoneinfo needs the tzdata package on Windows."""
-    utc = utc.astimezone(dt.timezone.utc)
-    y = utc.year
-    start = dt.datetime(y, 3, _nth_sunday(y, 3, 2), 7, tzinfo=dt.timezone.utc)   # 2:00 EST
-    end = dt.datetime(y, 11, _nth_sunday(y, 11, 1), 6, tzinfo=dt.timezone.utc)   # 2:00 EDT
-    if start <= utc < end:
-        return utc + dt.timedelta(hours=-4), "EDT"
-    return utc + dt.timedelta(hours=-5), "EST"
-
-
 def copyright_line(now: dt.datetime | None = None) -> str:
     """'© 2026 Jackson Mote', or '© 2026–2027 Jackson Mote' once the build year (Eastern) is later."""
     year = to_eastern(now or dt.datetime.now(dt.timezone.utc))[0].year
@@ -232,7 +219,7 @@ def score_text(g: dict) -> str:
 
 def where_text(g: dict) -> str:
     label = {"home": "Home", "away": "Away", "neutral": "Neutral"}.get(g["location"], "Site unknown")
-    site = g.get("site") or {"home": HOME_SITE, "away": AWAY_SITE}.get(g["location"])
+    site = places.ap_place(g.get("site")) or {"home": HOME_SITE, "away": AWAY_SITE}.get(g["location"])
     return f"{label} · {site}" if site else label
 
 
@@ -250,14 +237,32 @@ def fmt_when(g: dict, today: dt.date) -> str:
 
 
 def meeting_site(g: dict) -> str:
-    site = g.get("site") or {"home": HOME_SITE, "away": AWAY_SITE}.get(g.get("location"))
+    site = places.ap_place(g.get("site")) or {"home": HOME_SITE, "away": AWAY_SITE}.get(g.get("location"))
     return site or ("Neutral site" if g.get("location") == "neutral" else "Site TBA")
 
 
-def meeting_html(g: dict, today: dt.date) -> str:
-    html = (f'<time datetime="{esc(g["date"])}">{esc(fmt_when(g, today))}</time>'
-            f' · {esc(meeting_site(g))}')
-    if g.get("source") == "wabash":
+def join_and(items: list) -> str:
+    """'a', 'a and b', 'a, b and c' (no serial comma, like the rest of the page)."""
+    return items[0] if len(items) == 1 else ", ".join(items[:-1]) + " and " + items[-1]
+
+
+def fmt_when_group(games: list, today: dt.date) -> str:
+    """fmt_when for one meeting, which may be several games on one date:
+    'Wed, Apr 28, 2027 · Doubleheader · 12:00 PM and 3:30 PM'. A game without a time says TBA."""
+    first = games[0]
+    if len(games) == 1 or first.get("status") == "postponed":
+        return fmt_when(first, today)
+    day = fmt_when({**first, "time": "x"}, today).split(" · ")[0]
+    label = "Doubleheader" if len(games) == 2 else f"{len(games)} games"
+    return f"{day} · {label} · {join_and([g.get('time') or 'TBA' for g in games])}"
+
+
+def meeting_html(games: list, today: dt.date) -> str:
+    """The next meeting as HTML. `games` is one meeting's games (meetings.next_group), all on one date."""
+    sites = list(dict.fromkeys(meeting_site(g) for g in games))
+    html = (f'<time datetime="{esc(games[0]["date"])}">{esc(fmt_when_group(games, today))}</time>'
+            f' · {esc(" / ".join(sites))}')
+    if all(g.get("source") == "wabash" for g in games):
         html += ' <span class="date-note">(from Wabash’s schedule)</span>'
     return html
 
@@ -342,7 +347,7 @@ THEME_LIGHT, THEME_DARK = "#111111", "#000000"   # the header band's color in ea
 BACKGROUND = "#f6f4ee"                           # the page's light-mode background
 
 
-def preview_info(data: dict) -> dict:
+def preview_info(data: dict, label: str | None = None) -> dict:
     """What the share card shows, all from the data: the totals and the current Monon Bell holder. The
     image URL carries a version that changes only when those do, so chat apps refetch a new picture."""
     t = data["totals"]
@@ -351,8 +356,9 @@ def preview_info(data: dict) -> dict:
     holder = bell["holder"] if bell else None
     alt = (f"DePauw vs. Wabash all-time totals: DePauw {t['depauw_wins']:,} wins, "
            f"Wabash {t['wabash_wins']:,} wins" + (f", {plural(t['ties'], 'tie')}" if t["ties"] else "") + "."
-           + (f" {holder} holds the Monon Bell." if holder else ""))
-    return {"image": f"{SITE_URL}og-image.png?v={images.og_version(t, holder)}", "alt": alt, "holder": holder}
+           + (f" {holder} holds the Monon Bell." if holder else "") + (f" {label}." if label else ""))
+    return {"image": f"{SITE_URL}og-image.png?v={images.og_version(t, holder, label)}", "alt": alt,
+            "holder": holder, "label": label}
 
 
 def render_manifest() -> str:
@@ -648,7 +654,7 @@ def card(key: str, s: dict, ahead: list, pending: list, up: dict | None, today: 
          f'{date_html(last)} · {esc(score_text(last))}'),
     ]
     if ahead:
-        stat_rows.append(("Next meeting", meeting_html(ahead[0], today)))
+        stat_rows.append(("Next meeting", meeting_html(meetings.next_group(ahead), today)))
     if pending:
         day = fmt_when(pending[0], today).split(" · ")[0]
         stat_rows.append(("Result pending", esc(day) + " · not on the history page yet"))
@@ -685,8 +691,9 @@ def next_meeting_section(per_sport: dict, pending: dict, sports: dict, today: dt
     lines = []
     if best:
         key, g = best
+        rest = per_sport[key][per_sport[key].index(g):]      # starts at the game picked, past any postponed one
         lines.append(f'<p class="next-line"><strong>{esc(sports[key]["name"])}</strong>, '
-                     f'{meeting_html(g, today)}</p>')
+                     f'{meeting_html(meetings.next_group(rest), today)}</p>')
     for key, games in pending.items():
         if games:
             lines.append(f'<p class="next-pending">{esc(sports[key]["name"])}: result pending</p>')
@@ -694,6 +701,111 @@ def next_meeting_section(per_sport: dict, pending: dict, sports: dict, today: dt
         return ""
     return "\n".join(['<section class="next-meeting" id="next-meeting" aria-labelledby="next-meeting-h">',
                       heading(2, "next-meeting", "Next meeting"), *lines, '</section>'])
+
+
+def sport_word(name: str) -> str:
+    """"Men's Basketball" -> "basketball": the short, lower-case name used inside a sentence."""
+    return re.sub(r"^Men[’']s\s+", "", name).lower()
+
+
+def series_summary(sports: dict) -> str:
+    """One sentence on who leads which sports, from the merged records (never hardcoded).
+
+    A sport is led by whoever has more wins; an even sport is listed on its own ("Soccer is even."). Sports
+    keep the page order (sources.json), and each school's clause comes in the order of its first sport.
+    When the football card has a Monon Bell era (facts.bell), its leader is named too: appended to the
+    football leader's clause as "including the Monon Bell era" when the same school leads it, as "though X
+    leads the Monon Bell era" (or "...is even") when not, and as a sentence of its own when football itself
+    is even."""
+    leads: dict = {"DePauw": [], "Wabash": []}
+    even = []
+    for key, s in sports.items():
+        r = s["record"]
+        if r["depauw_wins"] == r["wabash_wins"]:
+            if s["games"]:
+                even.append(key)
+        else:
+            leads["DePauw" if r["depauw_wins"] > r["wabash_wins"] else "Wabash"].append(key)
+
+    bell = facts.bell(sports["football"]["games"]) if "football" in sports else None
+    bell_leader = None
+    if bell:
+        bell_leader = "DePauw" if bell["depauw"] > bell["wabash"] else "Wabash" if bell["wabash"] > bell["depauw"] else "even"
+
+    order = list(sports)
+    clauses = []
+    for school in sorted((k for k in leads if leads[k]), key=lambda k: order.index(leads[k][0])):
+        other = "Wabash" if school == "DePauw" else "DePauw"
+        text = f"{school} leads {join_and([sport_word(sports[k]['name']) for k in leads[school]])}"
+        if bell_leader and "football" in leads[school]:
+            if bell_leader == school:
+                text += ", including the Monon Bell era"
+            elif bell_leader == other:
+                text += f", though {other} leads the Monon Bell era"
+            else:
+                text += ", though the Monon Bell era is even"
+        clauses.append(text)
+    sentences = ["; ".join(clauses) + "."] if clauses else []
+    if even:
+        names = [sport_word(sports[k]["name"]) for k in even]
+        sentences.append(f"{join_and(names).capitalize()} {'is' if len(names) == 1 else 'are'} even.")
+    if bell_leader and "football" not in leads["DePauw"] + leads["Wabash"]:
+        sentences.append("The Monon Bell era is even." if bell_leader == "even"
+                         else f"{bell_leader} leads the Monon Bell era.")
+    return " ".join(sentences)
+
+
+def game_day_text(e: dict, sports: dict, several: bool) -> str:
+    """One banner line for a sport playing today. `several` is true when the banner covers more than one
+    sport, which is when a final score needs the sport's name to be understood."""
+    name = e["name"]
+    if e["phase"] == gameday.FINAL:
+        scores = " and ".join(score_text(g) for g in e["results"])
+        return f"Final, {name}: {scores}" if several else f"Final: {scores}"
+    if e["phase"] == gameday.UNDERWAY:
+        return (f"{name} vs. Wabash is underway or just finished. "
+                "The result will appear here soon after it's posted.")
+    games = e["games"]
+    sites = " / ".join(dict.fromkeys(meeting_site(g) for g in games))
+    if len(games) == 1:
+        when = games[0].get("time") or "time TBA"
+        what = ""
+    else:
+        when = join_and([g.get("time") or "TBA" for g in games])
+        what = " (doubleheader)" if len(games) == 2 else f" ({len(games)} games)"
+    return f"Game day: {name} vs. Wabash today{what}, {when} · {sites}"
+
+
+def bell_holder_sentence(e: dict, sports: dict) -> str:
+    """After a football final, who holds the Monon Bell now ("" for any other sport)."""
+    if e["key"] != "football":
+        return ""
+    b = facts.bell(sports["football"]["games"])
+    return f"{b['holder']} holds the Monon Bell." if b and b["holder"] else ""
+
+
+def game_day_html(entries: list, sports: dict) -> str:
+    """The game-day banner above everything else; empty (nothing at all) when no game is being played today.
+    A final score links to its sport's card."""
+    if not entries:
+        return ""
+    several = len(entries) > 1
+    lines = []
+    for e in entries:
+        text = esc(game_day_text(e, sports, several))
+        if e["phase"] == gameday.FINAL:
+            bell = bell_holder_sentence(e, sports)
+            text = f'<a href="#{esc(e["key"])}">{text}</a>' + (f" · {esc(bell)}" if bell else "")
+        lines.append(f'<p class="game-day-line">{text}</p>')
+    return "\n".join(['<section class="game-day" id="game-day" aria-label="Game day">', *lines, '</section>'])
+
+
+def game_day_label(entries: list) -> str | None:
+    """The small line on the share image while the banner shows: "Final" once every game today has its
+    result, "Game day" until then, nothing when there is no banner."""
+    if not entries:
+        return None
+    return "Final" if all(e["phase"] == gameday.FINAL for e in entries) else "Game day"
 
 
 def footer_source(key: str, s: dict, up: dict | None) -> str:
@@ -724,9 +836,11 @@ def render_index(data: dict, checked: str | None = None, now: dt.datetime | None
             upcoming.get(key, {}).get("games", []), s["games"], today)
 
     sources = "\n".join(footer_source(k, s, upcoming.get(k)) for k, s in sports.items())
+    today_games = gameday.todays_games(now, upcoming, sports)
 
     return "\n".join([
-        head(TITLE, description, prefix="", canonical=SITE_URL, preview=preview_info(data)),
+        head(TITLE, description, prefix="", canonical=SITE_URL,
+             preview=preview_info(data, game_day_label(today_games))),
         '<body>',
         '<header class="site-header">',
         '<div class="wrap">',
@@ -735,11 +849,13 @@ def render_index(data: dict, checked: str | None = None, now: dt.datetime | None
         '</div>',
         '</header>',
         '<main class="wrap">',
+        game_day_html(today_games, sports),
         next_meeting_section(ahead, pending, sports, today),
         '<section class="overall" aria-labelledby="overall-h">',
         '<h2 id="overall-h">All sports combined</h2>',
         tiles(t["depauw_wins"], t["wabash_wins"], t["ties"], "tiles-big"),
         f'<p class="overall-meta">{esc(plural(t["games_played"], "game"))} across {esc(plural(n_sports, "sport"))}</p>',
+        f'<p class="series-summary">{esc(series_summary(sports))}</p>' if series_summary(sports) else '',
         f'<p class="not-included"><strong>Not included:</strong> {esc(NOT_INCLUDED)}</p>',
         '</section>',
         *(card(k, s, ahead[k], pending[k], upcoming.get(k), today) for k, s in sports.items()),
@@ -849,8 +965,9 @@ def build(data_path: Path, out: Path, *, checked_at: str | None = None,
     for asset in ("styles.css", "favicon.svg"):
         shutil.copyfile(STATIC / asset, out / asset)
     # Images are drawn at build time from the bundled font, so every deploy has a card that matches the data.
-    info = preview_info(data)
-    (out / "og-image.png").write_bytes(images.og_image(data["totals"], info["holder"]))
+    when = now or dt.datetime.now(dt.timezone.utc)
+    info = preview_info(data, game_day_label(gameday.todays_games(when, upcoming, data["sports"])))
+    (out / "og-image.png").write_bytes(images.og_image(data["totals"], info["holder"], info["label"]))
     (out / "apple-touch-icon.png").write_bytes(images.icon_png(180))
     (out / "favicon-32.png").write_bytes(images.icon_png(32))
     (out / "icon-192.png").write_bytes(images.icon_png(192))
@@ -858,6 +975,15 @@ def build(data_path: Path, out: Path, *, checked_at: str | None = None,
     (out / "icon-maskable-512.png").write_bytes(images.icon_png(512, maskable=True))
     (out / "data").mkdir()
     shutil.copyfile(data_path, out / "data" / "series.json")  # the data file as-is
+
+
+def parse_now(text: str | None) -> dt.datetime | None:
+    """The --now value as an aware UTC time: a time with an offset is taken as given, one without as
+    Eastern. None (the default) means the real clock."""
+    if not text:
+        return None
+    t = dt.datetime.fromisoformat(text)
+    return t.astimezone(dt.timezone.utc) if t.tzinfo else from_eastern(t)
 
 
 def main(argv=None) -> int:
@@ -868,10 +994,13 @@ def main(argv=None) -> int:
                     help="upcoming meetings from the schedule pages (optional)")
     ap.add_argument("--checked-file", type=Path, default=CHECKED_AT,
                     help="file holding the time of the last successful scrape (optional)")
+    ap.add_argument("--now", help="pretend it is this time, for local previews and tests only (never used by "
+                                  "the workflow): an ISO time, with an offset or, without one, Eastern, "
+                                  "e.g. 2026-11-14T09:00")
     args = ap.parse_args(argv)
     try:
         build(args.data, args.out, checked_at=read_checked(args.checked_file),
-              upcoming_path=args.upcoming)
+              upcoming_path=args.upcoming, now=parse_now(args.now))
     except (DataError, KeyError, TypeError, ValueError, AttributeError) as exc:
         print(f"render failed: {exc!r}", file=sys.stderr)
         return 1

@@ -17,6 +17,8 @@
   --color-wabash-text: #a6192e;
   --color-tie-accent: #8a867a;
   --color-row-stripe: #faf8f2;
+  --color-banner-bg: #fff0b3;
+  --color-banner-text: #1b1b1b;
 
   --font-body: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
   --font-numbers: ui-rounded, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
@@ -35,6 +37,8 @@
     --color-focus: #8ab8f0;
     --color-header: #000000;
     --color-depauw-accent: #e0b020;
+    --color-banner-bg: #3d3000;
+    --color-banner-text: #fff3c4;
     --color-depauw-text: #f0c23a;
     --color-wabash-accent: #d3334b;
     --color-wabash-text: #ff8d9b;
@@ -96,6 +100,7 @@ main { padding-block: 1.5rem 2.5rem; display: grid; gap: 1.5rem; }
 .next-line { margin: 0; font-size: 1.125rem; }
 .next-pending { margin: 0.25rem 0 0; color: var(--color-text-muted); }
 .overall-meta { margin: 0.75rem 0 0; color: var(--color-text-muted); }
+.series-summary { margin: 0.5rem 0 0; font-size: 1.0625rem; }
 .not-included { margin: 0.5rem 0 0; color: var(--color-text-muted); font-size: 0.9375rem; }
 
 /* Win tiles: side named in text, color is only an accent */
@@ -193,3 +198,18 @@ main { padding-block: 1.5rem 2.5rem; display: grid; gap: 1.5rem; }
 .permalink { color: inherit; text-decoration: none; }
 .permalink:hover { text-decoration: underline; text-underline-offset: 0.2em; }
 .sport:target, .bell:target, .next-meeting:target { outline: 3px solid var(--color-focus); outline-offset: 2px; }
+
+/* Game-day banner: stands out from the white cards in light and dark mode */
+.game-day {
+  background: var(--color-banner-bg);
+  color: var(--color-banner-text);
+  border: 2px solid var(--color-depauw-accent);
+  border-radius: var(--radius);
+  padding: 1rem var(--gutter);
+  min-width: 0;
+  scroll-margin-top: 1rem;
+}
+.game-day-line { margin: 0; font-size: 1.125rem; font-weight: 600; }
+.game-day-line + .game-day-line { margin-top: 0.5rem; }
+.game-day a { color: inherit; text-decoration-thickness: 2px; text-underline-offset: 0.2em; }
+.game-day a:focus-visible { outline: 3px solid var(--color-focus); outline-offset: 2px; }

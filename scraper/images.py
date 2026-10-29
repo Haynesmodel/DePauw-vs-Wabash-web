@@ -50,10 +50,12 @@ def to_png(img: Image.Image, colors: int | None = None) -> bytes:
     return buf.getvalue()
 
 
-def og_version(totals: dict, holder: str | None) -> str:
+def og_version(totals: dict, holder: str | None, label: str | None = None) -> str:
     """Short query-string value that changes exactly when the picture would, so chat apps refetch it
     instead of showing a cached old one. Built from the inputs, not the PNG bytes."""
     key = f"{totals['depauw_wins']}-{totals['wabash_wins']}-{totals['ties']}-{holder or ''}"
+    if label:                                   # game day: the picture has a "Game day" / "Final" line
+        key += f"-{label}"
     return hashlib.sha1(key.encode("utf-8")).hexdigest()[:8]
 
 
@@ -66,8 +68,9 @@ def fit(text: str, path: Path, size: int, max_width: int) -> ImageFont.FreeTypeF
     return f
 
 
-def og_image(totals: dict, holder: str | None) -> bytes:
-    """The link-preview card: the three all-time totals, the Monon Bell holder and the site address."""
+def og_image(totals: dict, holder: str | None, label: str | None = None) -> bytes:
+    """The link-preview card: the three all-time totals, the Monon Bell holder and the site address.
+    On game day a small "Game day" or "Final" line (the `label`) sits at the right of the holder line."""
     w, h = OG_SIZE
     img = Image.new("RGB", OG_SIZE, BG)
     d = ImageDraw.Draw(img)
@@ -85,11 +88,11 @@ def og_image(totals: dict, holder: str | None) -> bytes:
     gap = 24
     tile_w = (w - 2 * margin - gap * (len(tiles) - 1)) // len(tiles)
     top, tile_h = 250, 210
-    for i, (label, n, accent, label_color) in enumerate(tiles):
+    for i, (tile_label, n, accent, label_color) in enumerate(tiles):
         x = margin + i * (tile_w + gap)
         d.rounded_rectangle((x, top, x + tile_w, top + tile_h), radius=14, outline=BORDER, width=3)
         d.rectangle((x + 3, top, x + tile_w - 3, top + 11), fill=accent)
-        d.text((x + 28, top + 70), label, font=font(MEDIUM, 44), fill=label_color, anchor="ls")
+        d.text((x + 28, top + 70), tile_label, font=font(MEDIUM, 44), fill=label_color, anchor="ls")
         number = f"{n:,}"
         d.text((x + 28, top + 182), number, font=fit(number, BOLD, 128, tile_w - 56), fill=TEXT, anchor="ls")
 
@@ -99,6 +102,14 @@ def og_image(totals: dict, holder: str | None) -> bytes:
         d.text((margin, 534), prefix, font=pf, fill=MUTED, anchor="ls")
         color = GOLD if holder == "DePauw" else SCARLET_TEXT
         d.text((margin + pf.getlength(prefix), 534), holder, font=font(BOLD, 50), fill=color, anchor="ls")
+
+    if label:
+        lf = font(BOLD, 46)
+        text = label.upper()
+        tw, pad = lf.getlength(text), 22
+        right = w - margin
+        d.rounded_rectangle((right - tw - 2 * pad, 487, right, 546), radius=10, fill=GOLD)
+        d.text((right - pad, 534), text, font=lf, fill=BG, anchor="rs")
 
     d.text((margin, 590), "Unofficial fan site", font=font(MEDIUM, 32), fill=MUTED, anchor="ls")
     d.text((w - margin, 592), SITE_ADDRESS, font=font(BOLD, 42), fill=TEXT, anchor="rs")

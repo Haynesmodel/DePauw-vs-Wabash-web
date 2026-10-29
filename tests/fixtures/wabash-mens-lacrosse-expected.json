@@ -1,0 +1,18 @@
+{
+  "_comment": "Every Wabash mens lacrosse game vs. DePauw as shown on sports.wabash.edu/sports/mens-lacrosse/opponent-history/depauw-university/4, captured 2026-10-28, from Wabash's own point of view (W = Wabash win). Columns: date (m/d/yyyy), season, location, site, result, wabash, depauw, note.",
+  "summary": {"wins": 0, "losses": 12, "ties": 0, "home": [0, 6, 0], "away": [0, 6, 0]},
+  "games": [
+["4/4/2026", "2026", "Home", "Crawfordsville, IN", "L", 5, 14, ""],
+["4/15/2025", "2025", "Away", "Greencastle, IN", "L", 8, 9, ""],
+["4/17/2024", "2024", "Home", "Crawfordsville, IN", "L", 9, 11, ""],
+["4/11/2023", "2023", "Away", "Greencastle, IN", "L", 5, 15, ""],
+["4/12/2022", "2022", "Home", "Crawfordsville, IN", "L", 1, 18, ""],
+["4/3/2021", "2021", "Away", "Greencastle, IN", "L", 7, 28, ""],
+["4/1/2021", "2021", "Home", "Crawfordsville, IN", "L", 6, 26, ""],
+["4/23/2019", "2019", "Away", "Greencastle, IN", "L", 7, 15, ""],
+["4/3/2018", "2018", "Home", "Crawfordsville, IN", "L", 4, 14, "Game called after three periods - weather, darkness"],
+["4/4/2017", "2017", "Away", "Greencastle, IN", "L", 9, 15, ""],
+["4/6/2016", "2016", "Home", "Crawfordsville, IN", "L", 9, 18, ""],
+["4/2/2015", "2015", "Away", "Greencastle, IN", "L", 4, 20, ""]
+  ]
+}

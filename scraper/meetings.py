@@ -18,7 +18,7 @@ PENDING_DAYS = 14
 
 
 def load_upcoming(path: Path | None) -> dict:
-    """Sport key -> {"schedule_url": ..., "games": [...]}. A missing or damaged file gives {}, because
+    """Sport key -> {"schedule_url": ..., "wabash_schedule_url": ..., "games": [...]}. A missing or damaged file gives {}, because
     the schedule is a nice-to-have and must never stop the records from being published."""
     if path is None:
         return {}
@@ -38,7 +38,8 @@ def load_upcoming(path: Path | None) -> dict:
             except (KeyError, TypeError, ValueError):
                 continue
             games.append(g)
-        clean[key] = {"schedule_url": entry.get("schedule_url"), "games": games}
+        clean[key] = {"schedule_url": entry.get("schedule_url"),
+                      "wabash_schedule_url": entry.get("wabash_schedule_url"), "games": games}
     return clean
 
 

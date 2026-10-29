@@ -1,29 +1,32 @@
 """
 DePauw vs. Wabash head-to-head scraper.
 
-Reads DePauw's Sidearm "opponent history" pages (one per sport), parses every
-game in the history table, checks the parsed games against the page's own
-summary block (wins / losses / ties, home and away records), and writes
-data/series.json.
+Reads each school's Sidearm "opponent history" page for every sport (DePauw's at depauwtigers.com,
+Wabash's at sports.wabash.edu), parses every game in the history table, and checks the parsed games
+against that page's own summary block (wins / losses / ties, home and away records). Each school's
+games are kept as they were read (data/depauw.json and data/wabash.json, both in DePauw's point of
+view) and merged into data/series.json, which the site reads. The matching rules are in merge.py.
 
 Safety rules, so a bad night never wipes good data:
-  * A sport whose page fails to load, parses to zero games, or disagrees with
-    its own summary is NOT updated; the previous data for that sport is kept.
-  * A sport whose game count shrinks compared with the saved file is NOT
-    updated unless --allow-shrink is passed.
-  * The file is only rewritten when the game data actually changed, so the
-    scheduled job doesn't make empty commits.
-  * Exit code is non-zero if any sport failed, so the GitHub Action shows red.
+  * A school's page for a sport that fails to load, parses to zero games, or disagrees with its own
+    summary is NOT updated; that school's previous games for the sport are kept, the merge is
+    redone from the two copies, and everything else still updates.
+  * A school's page whose game count shrinks compared with its saved copy is NOT updated unless
+    --allow-shrink is passed.
+  * Files are only rewritten when their content actually changed, so the scheduled job doesn't make
+    empty commits.
+  * Exit code is non-zero if any page failed, so the GitHub Action shows red.
   * The "last checked" time (.checked-at, uncommitted) is written only after a live run in which
-    at least one sport loaded and validated. A run where every sport failed leaves it alone.
+    at least one page loaded and validated. A run where every page failed leaves it alone.
 
-Upcoming meetings (data/upcoming.json) come from each sport's schedule page and are separate from
-the records: a schedule that fails to load or parse only logs a warning, keeps that sport's last
-good entry, and never changes the exit code or the validation of the history.
+Upcoming meetings (data/upcoming.json) come from each sport's schedule page at both schools and are
+separate from the records: a schedule that fails to load or parse only logs a warning, keeps that
+school's last good games, and never changes the exit code or the validation of the history.
 
 Usage:
-  python scraper/scrape.py                      # fetch live pages, update data/series.json
-  python scraper/scrape.py --fixtures DIR       # parse saved HTML (DIR/<sport-key>.html) instead
+  python scraper/scrape.py                      # fetch live pages, update the data files
+  python scraper/scrape.py --fixtures DIR       # parse saved HTML instead: DIR/<sport-key>.html for
+                                                # DePauw, DIR/wabash-<sport-key>.html for Wabash
   python scraper/scrape.py --dry-run            # parse and report, don't write
 """
 
@@ -42,6 +45,7 @@ from typing import Optional
 
 from bs4 import BeautifulSoup
 
+import merge
 import upcoming
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -306,55 +310,120 @@ def fetch(url: str) -> str:
     return resp.text
 
 
-def scrape_schedules(cfg: dict, previous: dict, fixtures: Optional[Path]) -> dict:
-    """Upcoming Wabash games per sport. Never raises: a schedule problem is a warning, and the
-    sport keeps whatever it had before."""
-    sports = dict(previous)
-    first = True
-    for sport in cfg["sports"]:
-        key, path = sport["key"], sport.get("schedule_path")
-        if not path:
-            continue
-        url = cfg["base_url"].rstrip("/") + path
-        try:
-            if fixtures:
-                page = fixtures / f"{key}-schedule.html"
-                if not page.exists():
-                    continue
-                html = page.read_text(encoding="utf-8")
-            else:
-                if not first:
-                    time.sleep(REQUEST_GAP_SECONDS)
-                first = False
-                html = fetch(url)
-            games = upcoming.parse_schedule(html, opponent_id=cfg["opponent_id"])
-            sports[key] = {"schedule_url": url, "games": games}
-            print(f"OK   {sport['name']:<16} schedule: {len(games)} game(s) not yet played")
-        except Exception as exc:  # a schedule problem must never block the records
-            print(f"WARN {sport['name']:<16} schedule not updated: {exc}", file=sys.stderr)
-    return {k: sports[k] for k in (s["key"] for s in cfg["sports"]) if k in sports}
+class Pacer:
+    """Waits REQUEST_GAP_SECONDS before every live request except the first of the run."""
+    def __init__(self):
+        self.first = True
+
+    def wait(self) -> None:
+        if not self.first:
+            time.sleep(REQUEST_GAP_SECONDS)
+        self.first = False
 
 
-def sport_payload(sr: SportResult) -> dict:
-    games = chronological(sr.games)
-    t = tally(games)
-    first = games[0] if games else None
-    last = games[-1] if games else None
-    # Current streak, from DePauw's perspective.
-    streak = streak_code(games) if games else None
-    return {
-        "name": sr.name,
-        "source_url": sr.source_url,
-        "record": {"depauw_wins": t["wins"], "wabash_wins": t["losses"], "ties": t["ties"]},
+def school_cfg(cfg: dict, school: str) -> dict:
+    """How to reach one school's pages. Wabash's pages are the same Sidearm markup, with the opponent
+    (DePauw) matched by its own name and id on sports.wabash.edu."""
+    if school == "depauw":
+        return {"name": "DePauw", "base_url": cfg["base_url"], "opponent_match": cfg["opponent_match"],
+                "opponent_id": cfg["opponent_id"], "path": "path", "schedule": "schedule_path", "prefix": ""}
+    w = cfg["wabash"]
+    return {"name": "Wabash", "base_url": w["base_url"], "opponent_match": w["opponent_match"],
+            "opponent_id": w["opponent_id"], "path": "wabash_path", "schedule": "wabash_schedule_path",
+            "prefix": "wabash-"}
+
+
+def game_dicts(games: list, school: str) -> list:
+    """Parsed games as dicts, oldest first, in DePauw's point of view. Wabash's page is written from
+    Wabash's side, so its games are flipped here."""
+    out = [asdict(g) for g in chronological(games)]
+    return [merge.flip(g) for g in out] if school == "wabash" else out
+
+
+def tally_dicts(games: list) -> tuple:
+    return tuple(sum(1 for g in games if g["result"] == r) for r in "WLT")
+
+
+def streak_of(games: list) -> str:
+    r, n = games[-1]["result"], 0
+    for g in reversed(games):
+        if g["result"] != r:
+            break
+        n += 1
+    return f"{r}{n}"
+
+
+def raw_payload(name: str, url: str, label: str, games: list, skipped: list) -> dict:
+    w, l, t = tally_dicts(games)
+    return {"name": name, "source_url": url, "total_label": label, "games_played": len(games),
+            "record": {"depauw_wins": w, "wabash_wins": l, "ties": t},
+            "games": games, "skipped_rows": skipped}
+
+
+def load_sports(path: Path) -> dict:
+    return json.loads(path.read_text(encoding="utf-8")).get("sports", {}) if path.exists() else {}
+
+
+def legacy_depauw(previous_sports: dict) -> dict:
+    """Before the merge, series.json held DePauw's page alone. On the first run it stands in for
+    data/depauw.json as the last good copy and the shrink baseline."""
+    if not previous_sports or any("source" in g for s in previous_sports.values() for g in s["games"]):
+        return {}
+    return {k: {**s, "games": [dict(g) for g in s["games"]]} for k, s in previous_sports.items()}
+
+
+def scrape_one(sc: dict, sport: dict, school: str, fixtures: Optional[Path], pacer: Pacer,
+               previous: dict, allow_shrink: bool):
+    """One school's history page for one sport: fetched, parsed and checked against that page's own
+    summary. Returns the raw payload, or None when a fixture run has no page for this school.
+    Raises on anything wrong, and the caller keeps the last good copy."""
+    key = sport["key"]
+    url = sc["base_url"].rstrip("/") + sport[sc["path"]]
+    if fixtures:
+        page = fixtures / f"{sc['prefix']}{key}.html"
+        if not page.exists():
+            return None
+        html = page.read_text(encoding="utf-8")
+    else:
+        pacer.wait()
+        html = fetch(url)
+    games, summary, skipped = parse_page(html, base_url=sc["base_url"], opponent_match=sc["opponent_match"])
+    problems = validate(games, summary)
+    if problems:
+        raise ParseError("; ".join(problems))
+    old_count = previous.get(key, {}).get("games_played", 0)
+    if len(games) < old_count and not allow_shrink:
+        raise ParseError(f"game count fell from {old_count} to {len(games)}; "
+                         f"rerun with --allow-shrink if that's expected")
+    label = sport.get("total_label") or summary.total_label or "points"
+    return raw_payload(sport["name"], url, label, game_dicts(games, school),
+                       [{**r, "school": sc["name"]} for r in skipped])
+
+
+def merged_payload(sport: dict, raw: dict) -> tuple:
+    """The sport as the site reads it: both schools' games merged. Returns (payload, MergeResult or None)."""
+    d, w = raw.get("depauw"), raw.get("wabash")
+    result = merge.merge_sport(d["games"] if d else [], w["games"] if w else [])
+    games = result.games
+    t = tally_dicts(games)
+    label = sport.get("total_label") or (d or w).get("total_label") or "points"
+    payload = {
+        "name": sport["name"],
+        "source_url": (d or w)["source_url"],
+        **({"wabash_source_url": w["source_url"]} if w else {}),
+        "record": {"depauw_wins": t[0], "wabash_wins": t[1], "ties": t[2]},
         "games_played": len(games),
-        "first_game": first.date if first else None,
-        "last_game": last.date if last else None,
-        "current_streak": streak,
-        "points": {"depauw": sum(g.depauw for g in games), "wabash": sum(g.wabash for g in games)},
-        "total_label": sr.total_label,
-        "games": [asdict(g) for g in games],
-        "skipped_rows": sr.skipped_rows,
+        "first_game": games[0]["date"],
+        "last_game": games[-1]["date"],
+        "current_streak": streak_of(games),
+        "points": {"depauw": sum(g["depauw"] for g in games), "wabash": sum(g["wabash"] for g in games)},
+        "total_label": label,
+        **({"unit": sport["unit"]} if sport.get("unit") else {}),
+        **({"sources": result.stats} if d and w else {}),
+        "games": games,
+        "skipped_rows": (d["skipped_rows"] if d else []) + (w["skipped_rows"] if w else []),
     }
+    return payload, result
 
 
 def build_output(sports: dict, previous: dict) -> dict:
@@ -365,7 +434,7 @@ def build_output(sports: dict, previous: dict) -> dict:
         totals["ties"] += s["record"]["ties"]
         totals["games_played"] += s["games_played"]
     return {
-        "schema_version": 1,
+        "schema_version": 2,
         "updated_at": previous.get("updated_at"),
         "perspective": "DePauw",
         "totals": totals,
@@ -373,10 +442,82 @@ def build_output(sports: dict, previous: dict) -> dict:
     }
 
 
+def write_if_changed(path: Path, data: dict) -> bool:
+    text = json.dumps(data, indent=2) + "\n"
+    if path.exists() and path.read_text(encoding="utf-8") == text:
+        return False
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(text, encoding="utf-8")
+    print(f"Wrote {path}")
+    return True
+
+
+def report_merge(name: str, result) -> None:
+    print("     " + merge.summary_line(name, result.stats))
+    for m in merge.near_misses(result):
+        d, w = m["depauw"], m["wabash"]
+        print(f"CHECK {name}: DePauw only {d['date']} {d['depauw']}-{d['wabash']}  /  Wabash only {w['date']} "
+              f"{w['depauw']}-{w['wabash']}  ({m['days']} days apart"
+              f"{', same score' if m['same_score'] else ''}); not merged")
+
+
+def scrape_schedules(cfg: dict, previous: dict, fixtures: Optional[Path], pacer: Pacer) -> dict:
+    """Upcoming Wabash games per sport, from both schools' schedule pages. Never raises: a schedule
+    problem is a warning, and a school whose page did not load keeps its games from the last run."""
+    sports = dict(previous)
+    for sport in cfg["sports"]:
+        key = sport["key"]
+        old = previous.get(key, {})
+        got: dict = {}
+        for school in ("depauw", "wabash"):
+            sc = school_cfg(cfg, school)
+            path = sport.get(sc["schedule"])
+            if not path:
+                continue
+            url = sc["base_url"].rstrip("/") + path
+            try:
+                if fixtures:
+                    page = fixtures / f"{sc['prefix']}{key}-schedule.html"
+                    if not page.exists():
+                        continue
+                    html = page.read_text(encoding="utf-8")
+                else:
+                    pacer.wait()
+                    html = fetch(url)
+                games = upcoming.parse_schedule(html, opponent_id=sc["opponent_id"])
+                if school == "wabash":
+                    games = [upcoming.flip_location(g) for g in games]
+                got[school] = (url, games)
+                print(f"OK   {sport['name']:<16} {sc['name']:<7} schedule: {len(games)} game(s) not yet played")
+            except Exception as exc:  # a schedule problem must never block the records
+                print(f"WARN {sport['name']:<16} {sc['name']:<7} schedule not updated: {exc}", file=sys.stderr)
+        if not got:
+            continue
+        kept = old.get("games", [])
+        d_url, d_games = got.get("depauw", (old.get("schedule_url"),
+                                            [g for g in kept if g.get("source", "depauw") in ("both", "depauw")]))
+        w_url, w_games = got.get("wabash", (old.get("wabash_schedule_url"),
+                                            [g for g in kept if g.get("source") in ("both", "wabash")]))
+        if not w_url:                                   # Wabash's schedule is not part of this sport yet
+            sports[key] = {"schedule_url": d_url, "games": d_games}
+            continue
+        try:
+            games, warnings = upcoming.merge_schedules(sport["name"], d_games, w_games)
+            for w in warnings:
+                print(f"WARN {w}", file=sys.stderr)
+            sports[key] = {"schedule_url": d_url, "wabash_schedule_url": w_url, "games": games}
+        except Exception as exc:
+            print(f"WARN {sport['name']:<16} schedules not merged: {exc}", file=sys.stderr)
+    return {k: sports[k] for k in (s["key"] for s in cfg["sports"]) if k in sports}
+
+
 def main(argv=None) -> int:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    ap.add_argument("--fixtures", type=Path, help="read <dir>/<sport-key>.html instead of fetching")
+    ap.add_argument("--fixtures", type=Path, help="read <dir>/<sport-key>.html (and wabash-<sport-key>.html) "
+                                                  "instead of fetching")
     ap.add_argument("--output", type=Path, default=OUTPUT)
+    ap.add_argument("--depauw-output", type=Path, help="default: depauw.json next to --output")
+    ap.add_argument("--wabash-output", type=Path, help="default: wabash.json next to --output")
     ap.add_argument("--upcoming-output", type=Path, default=UPCOMING)
     ap.add_argument("--checked-file", type=Path, default=CHECKED_AT,
                     help="where to record the time of a successful live check")
@@ -384,47 +525,54 @@ def main(argv=None) -> int:
     ap.add_argument("--allow-shrink", action="store_true",
                     help="accept a sport whose game count went down")
     args = ap.parse_args(argv)
+    raw_paths = {"depauw": args.depauw_output or args.output.parent / "depauw.json",
+                 "wabash": args.wabash_output or args.output.parent / "wabash.json"}
 
-    cfg = json.loads(SOURCES.read_text())
-    previous = json.loads(args.output.read_text()) if args.output.exists() else {}
+    cfg = json.loads(SOURCES.read_text(encoding="utf-8"))
+    previous = json.loads(args.output.read_text(encoding="utf-8")) if args.output.exists() else {}
     prev_sports = previous.get("sports", {})
+    prev_raw = {school: load_sports(path) for school, path in raw_paths.items()}
+    if not prev_raw["depauw"]:
+        prev_raw["depauw"] = legacy_depauw(prev_sports)
+
+    pacer = Pacer()
+    new_raw: dict = {school: dict(prev_raw[school]) for school in raw_paths}   # last good copy until replaced
+    failures = []
+    loaded = 0
+    for sport in cfg["sports"]:
+        key = sport["key"]
+        for school in ("depauw", "wabash"):
+            sc = school_cfg(cfg, school)
+            try:
+                raw = scrape_one(sc, sport, school, args.fixtures, pacer, prev_raw[school], args.allow_shrink)
+                if raw is None:
+                    continue
+                new_raw[school][key] = raw
+                loaded += 1
+                r = raw["record"]
+                print(f"OK   {sport['name']:<16} {sc['name']:<7} {raw['games_played']:>3} games  "
+                      f"DePauw {r['depauw_wins']}-{r['wabash_wins']}-{r['ties']}"
+                      + (f"  ({len(raw['skipped_rows'])} non-score rows skipped)" if raw["skipped_rows"] else ""))
+            except Exception as exc:  # keep going; one bad page shouldn't block the rest
+                failures.append((school, key))
+                print(f"FAIL {sport['name']:<16} {sc['name']:<7} {exc}", file=sys.stderr)
 
     new_sports: dict = {}
-    failures = []
-
-    for i, sport in enumerate(cfg["sports"]):
+    for sport in cfg["sports"]:
         key = sport["key"]
-        url = cfg["base_url"].rstrip("/") + sport["path"]
-        try:
-            if args.fixtures:
-                html = (args.fixtures / f"{key}.html").read_text()
-            else:
-                if i:
-                    time.sleep(REQUEST_GAP_SECONDS)
-                html = fetch(url)
-            games, summary, skipped = parse_page(html, base_url=cfg["base_url"],
-                                                 opponent_match=cfg["opponent_match"])
-            problems = validate(games, summary)
-            if problems:
-                raise ParseError("; ".join(problems))
-            old_count = prev_sports.get(key, {}).get("games_played", 0)
-            if len(games) < old_count and not args.allow_shrink:
-                raise ParseError(f"game count fell from {old_count} to {len(games)}; "
-                                 f"rerun with --allow-shrink if that's expected")
-            # sources.json can override the label (tennis: the page's "points" are individual matches).
-            label = sport.get("total_label") or summary.total_label or "points"
-            sr = SportResult(key=key, name=sport["name"], source_url=url, total_label=label,
-                             games=games, summary=summary, skipped_rows=skipped)
-            new_sports[key] = sport_payload(sr)
-            t = new_sports[key]["record"]
-            print(f"OK   {sport['name']:<16} {len(games):>3} games  "
-                  f"DePauw {t['depauw_wins']}-{t['wabash_wins']}-{t['ties']}"
-                  + (f"  ({len(skipped)} non-score rows skipped)" if skipped else ""))
-        except Exception as exc:  # keep going; one bad sport shouldn't block the rest
-            failures.append(key)
-            print(f"FAIL {sport['name']:<16} {exc}", file=sys.stderr)
+        raw = {school: new_raw[school].get(key) for school in raw_paths}
+        if not raw["depauw"] and not raw["wabash"]:
             if key in prev_sports:
-                new_sports[key] = prev_sports[key]  # keep last known-good data
+                new_sports[key] = prev_sports[key]
+            continue
+        try:
+            new_sports[key], result = merged_payload(sport, raw)
+            report_merge(sport["name"], result)
+        except Exception as exc:  # a merge that does not add up never replaces good data
+            failures.append(("merge", key))
+            print(f"FAIL {sport['name']:<16} merge: {exc}", file=sys.stderr)
+            if key in prev_sports:
+                new_sports[key] = prev_sports[key]
 
     out = build_output(new_sports, previous)
     changed = (json.dumps(out["sports"], sort_keys=True) != json.dumps(prev_sports, sort_keys=True)
@@ -433,24 +581,24 @@ def main(argv=None) -> int:
     print(f"All sports: DePauw {tot['depauw_wins']}-{tot['wabash_wins']}-{tot['ties']} "
           f"over {tot['games_played']} games. Data {'changed' if changed else 'unchanged'}.")
 
-    if changed and not args.dry_run:
-        out["updated_at"] = now_utc().isoformat()
-        args.output.parent.mkdir(parents=True, exist_ok=True)
-        args.output.write_text(json.dumps(out, indent=2) + "\n")
-        print(f"Wrote {args.output}")
+    if not args.dry_run:
+        for school, path in raw_paths.items():
+            if new_raw[school] != load_sports(path):
+                write_if_changed(path, {"schema_version": 1, "school": school_cfg(cfg, school)["name"],
+                                        "perspective": "DePauw", "sports": new_raw[school]})
+        if changed:
+            out["updated_at"] = now_utc().isoformat()
+            write_if_changed(args.output, out)
 
-    old_upcoming = json.loads(args.upcoming_output.read_text()) if args.upcoming_output.exists() else {}
-    new_upcoming = scrape_schedules(cfg, old_upcoming.get("sports", {}), args.fixtures)
+    old_upcoming = json.loads(args.upcoming_output.read_text(encoding="utf-8")) if args.upcoming_output.exists() else {}
+    new_upcoming = scrape_schedules(cfg, old_upcoming.get("sports", {}), args.fixtures, pacer)
     if new_upcoming != old_upcoming.get("sports", {}) and not args.dry_run:
-        args.upcoming_output.parent.mkdir(parents=True, exist_ok=True)
-        args.upcoming_output.write_text(
-            json.dumps({"schema_version": 1, "sports": new_upcoming}, indent=2) + "\n")
-        print(f"Wrote {args.upcoming_output}")
+        write_if_changed(args.upcoming_output, {"schema_version": 1, "sports": new_upcoming})
 
-    # A fixture run or a dry run is not a check of the live site, and a run where every sport failed
-    # proves nothing about the data, so only a real run with at least one good sport advances the time.
-    if len(failures) < len(cfg["sports"]) and not args.fixtures and not args.dry_run:
-        args.checked_file.write_text(now_utc().isoformat() + "\n")
+    # A fixture run or a dry run is not a check of the live site, and a run where every page failed
+    # proves nothing about the data, so only a real run with at least one good page advances the time.
+    if loaded and not args.fixtures and not args.dry_run:
+        args.checked_file.write_text(now_utc().isoformat() + "\n", encoding="utf-8")
 
     return 1 if failures else 0
 

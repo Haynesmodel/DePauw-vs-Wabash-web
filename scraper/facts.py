@@ -60,7 +60,10 @@ import re  # noqa: E402
 # What counts as a "one-score" game in each sport: decided by this many points/runs/goals/matches or fewer.
 # A sport that isn't listed gets no one-score fact rather than a guess.
 ONE_SCORE = {"football": 8, "mens-basketball": 3, "baseball": 1, "mens-soccer": 1,
-             "mens-lacrosse": 1, "mens-tennis": 1}
+             "mens-lacrosse": 1, "mens-tennis": 1, "mens-swimming-and-diving": 10}
+# The word before "games" in that fact. A swimming meet is scored in dozens of points, so 10 points is "close",
+# not "one score".
+CLOSE_WORD = {"mens-swimming-and-diving": "Close"}
 UNIT = {"points": "point", "runs": "run", "goals": "goal", "individual matches": "match"}
 # Sports that meet more than once a year get a season-by-season list when at least one season in five
 # has two or more games. Football (two such seasons) and soccer don't qualify; basketball, baseball and
@@ -96,13 +99,24 @@ def game_year(g: dict) -> str:
     return str(season_years(g.get("season"), g["date"])[1])
 
 
-def margin(g: dict) -> int:
-    return abs(g["depauw"] - g["wabash"])
+def has_score(g: dict) -> bool:
+    """False for a game whose school lists the result but no score (two 1934 swimming meets)."""
+    return g.get("score_known", True)
+
+
+def num(x):
+    """A score or margin without float noise: 147.5 - 143.5 is 4, not 4.0; 172.5 - 127.5 is 45."""
+    x = round(x, 1)
+    return int(x) if float(x).is_integer() else x
+
+
+def margin(g: dict):
+    return num(abs(g["depauw"] - g["wabash"]))
 
 
 def biggest_wins(games: list, result: str) -> list:
     """Every game of DePauw's ("W") or Wabash's ("L") widest margin, oldest first."""
-    wins = [g for g in chronological(games) if g["result"] == result]
+    wins = [g for g in chronological(games) if g["result"] == result and has_score(g)]
     if not wins:
         return []
     best = max(margin(g) for g in wins)
@@ -139,15 +153,16 @@ def one_score_games(key: str, games: list) -> list:
     limit = ONE_SCORE.get(key)
     if limit is None:
         return []
-    return [g for g in chronological(games) if g["result"] != "T" and margin(g) <= limit]
+    return [g for g in chronological(games) if g["result"] != "T" and has_score(g) and margin(g) <= limit]
 
 
 def highest_scoring_games(games: list) -> list:
     """Every game with the most combined points/goals/runs, oldest first."""
-    if not games:
+    scored = [g for g in games if has_score(g)]
+    if not scored:
         return []
-    best = max(g["depauw"] + g["wabash"] for g in games)
-    return [g for g in chronological(games) if g["depauw"] + g["wabash"] == best]
+    best = max(num(g["depauw"] + g["wabash"]) for g in scored)
+    return [g for g in chronological(scored) if num(g["depauw"] + g["wabash"]) == best]
 
 
 def highest_scoring(games: list) -> dict | None:

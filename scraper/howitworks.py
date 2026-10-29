@@ -39,10 +39,60 @@ def placeholder_range() -> str:
 
 
 def ruling_counts(rules: dict) -> tuple:
-    """(same-game rulings, different-games rulings) across every sport, from the loaded overrides."""
+    """(same-game, different-games, several-days-of-one-meet rulings) across every sport, from the overrides."""
     same = sum(len(r.get("same_game", [])) for r in rules.values())
     diff = sum(len(r.get("different_games", [])) for r in rules.values())
-    return same, diff
+    days_of_one = sum(len(r.get("session_of", [])) for r in rules.values())
+    return same, diff, days_of_one
+
+
+SWIMMING = "mens-swimming-and-diving"
+
+
+def unit_note(sports: dict) -> str:
+    """'tennis counts matches and swimming and diving counts meets': the sports that call a game something else."""
+    notes = [f"{words(s['name'])} counts {s['unit'][1]}" for s in sports.values() if s.get("unit")]
+    return " and ".join(notes)
+
+
+def words(name: str) -> str:
+    """"Men's Swimming and Diving" -> "swimming and diving"."""
+    return name.replace("Men’s ", "").replace("Men's ", "").lower()
+
+
+def swimming_lines(sports: dict) -> list:
+    """The swimming and diving section, from the data. Empty when the sport is not on the site."""
+    s = sports.get(SWIMMING)
+    if not s:
+        return []
+    games = s["games"]
+    half = sum(1 for g in games if any(isinstance(g.get(f), float) for f in ("depauw", "wabash")))
+    unscored = sum(1 for g in games if g.get("score_known") is False)
+    sessions = (s.get("sources") or {}).get("session_rows", 0)
+    return [
+        '<h3>Swimming and diving</h3>',
+        '<p>Only dual meets, where DePauw’s team swims Wabash’s team head to head, are counted. Invitationals, '
+        'relays and conference championships have many teams in the pool at once, so there is no head-to-head '
+        'result to add up, and they are left out of the records and out of “Next meeting”. '
+        'The site tells a dual meet from a multi-team event by the name the school gives it and by how many '
+        'opponents are listed.</p>',
+        '<ul>',
+        f'<li><strong>Half points:</strong> a meet can end with half a point on the board. Scores like 172.5 are '
+        f'shown just as the schools list them (meets with a half point right now: {half:,}), and the point '
+        'totals add them up exactly.</li>',
+        f'<li><strong>Meets with no score:</strong> a school may list who won a meet without listing the score. '
+        f'The meet still counts as a win or a loss, but it has no points to add to the totals, the biggest-win '
+        f'list or the close-meet count, and the page says “score not recorded” (right now: {unscored:,}).</li>',
+        '<li><strong>A score written the wrong way around:</strong> when a row says one school won but lists '
+        'a bigger score for the other, the site trusts the win or loss and swaps the two scores, then says so '
+        'beside the game. This is checked on every sport, not only swimming.</li>',
+        f'<li><strong>A meet spread over several days:</strong> in March 2021 the two schools swam one '
+        f'three-day meet. DePauw’s record has one meet; Wabash’s lists the running scores after each day as if '
+        f'they were separate meets (rows set aside right now: {sessions:,}). A person read Wabash’s own write-ups '
+        'and ruled that they are days of one meet, so it counts once, and the page shows the running scores '
+        'beside it.</li>',
+        '</ul>',
+    ]
 
 
 def totals(sports: dict) -> dict:
@@ -61,7 +111,7 @@ def content(data: dict, rules: dict, kept: int, *, sources_html: str, not_includ
     sports = data["sports"]
     t = data["totals"]
     n = totals(sports)
-    same, diff = ruling_counts(rules)
+    same, diff, days_of_one = ruling_counts(rules)
     names = [s["name"] for s in sports.values()]
     names_text = ", ".join(names[:-1]) + f" and {names[-1]}" if len(names) > 1 else "".join(names)
     both_listed = n["both"]
@@ -83,7 +133,8 @@ def content(data: dict, rules: dict, kept: int, *, sources_html: str, not_includ
         '<h3>What is counted</h3>',
         f'<p>Only men’s sports that DePauw and Wabash play head to head: {esc(names_text)}. Wabash is an '
         f'all-male college, so women’s sports have no Wabash side to compare with. Left out: {esc(not_included)} '
-        f'Together the sports above add up to {t["games_played"]:,} games so far (tennis counts matches).</p>',
+        f'Together the sports above add up to {t["games_played"]:,} games so far'
+        + (f' ({esc(unit_note(sports))}).</p>' if unit_note(sports) else '.</p>'),
 
         '<h3>How the two schools’ records are combined</h3>',
         '<p>Each school keeps its own list of these games, and the two lists are not always identical, so the '
@@ -108,6 +159,8 @@ def content(data: dict, rules: dict, kept: int, *, sources_html: str, not_includ
         '<p>The site would rather leave a doubtful pair as two separate one-school games, which is visible '
         'and can be checked, than quietly merge two real games into one.</p>',
 
+        *swimming_lines(sports),
+
         '<h3>Disputed games</h3>',
         f'<p>Sometimes the schools disagree on a score or even on who won. Disputed games right now: '
         f'{n["disputed"]:,}. In those cases DePauw’s version counts in the totals, so the totals come '
@@ -118,8 +171,10 @@ def content(data: dict, rules: dict, kept: int, *, sources_html: str, not_includ
 
         '<h3>Rulings</h3>',
         f'<p>When the automatic rules cannot decide, a person checks the box scores and records a ruling, '
-        f'with a reason. Rulings made so far: {same + diff:,} ({same:,} saying two entries '
-        f'are the same game, {diff:,} saying they are different games). They are public: '
+        f'with a reason. Rulings made so far: {same + diff + days_of_one:,} ({same:,} saying two entries '
+        f'are the same game, {diff:,} saying they are different games'
+        + (f', {days_of_one:,} saying several entries are days of one meet' if days_of_one else '')
+        + f'). They are public: '
         f'<a href="{esc(overrides_url)}">data/overrides.json</a> on GitHub.</p>',
 
         '<h3>How often it updates</h3>',

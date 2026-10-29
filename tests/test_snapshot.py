@@ -84,11 +84,11 @@ def test_notes_from_before_the_markers_are_updated_too():
     assert snapshot.recorded_hash(after) == "abc"
 
 
-def test_the_source_urls_are_the_six_history_pages_of_each_school():
+def test_the_source_urls_are_the_seven_history_pages_of_each_school():
     cfg = json.loads((ROOT / "scraper" / "sources.json").read_text(encoding="utf-8"))
     urls = snapshot.source_urls(cfg)
-    assert len(urls) == 12 and len(set(urls)) == 12
-    assert sum("depauwtigers.com" in u for u in urls) == 6 and sum("sports.wabash.edu" in u for u in urls) == 6
+    assert len(urls) == 14 and len(set(urls)) == 14
+    assert sum("depauwtigers.com" in u for u in urls) == 7 and sum("sports.wabash.edu" in u for u in urls) == 7
     assert all("opponent-history" in u for u in urls)
 
 
@@ -235,7 +235,7 @@ def test_a_run_where_every_page_fails_still_updates_the_notes_and_never_raises()
     gh = FakeRelease(snapshot.release_notes(SERIES, "abc123", DAY))
     assert snapshot.archive_release("data-2027-01-02", run=gh, saver=lambda urls: ([], list(urls)), log=quiet) is True
     assert "Wayback Machine copies: none could be saved this time." in gh.notes
-    assert "Not saved (12)" in gh.notes and snapshot.recorded_hash(gh.notes) == "abc123"
+    assert "Not saved (14)" in gh.notes and snapshot.recorded_hash(gh.notes) == "abc123"
     assert "being saved" not in gh.notes and gh.edits == ["data-2027-01-02"]
 
 
@@ -275,7 +275,7 @@ def notes_with(saved):
 
 
 def test_a_retry_only_tries_pages_without_a_link_and_keeps_the_earlier_links():
-    first = URLS[:9]
+    first = URLS[:11]
     gh, tried = FakeRelease(notes_with(first)), []
 
     def saver(urls):
@@ -283,20 +283,20 @@ def test_a_retry_only_tries_pages_without_a_link_and_keeps_the_earlier_links():
         return [link(urls[0], "20261030010101")], urls[1:]
 
     assert snapshot.archive_release("data-2027-01-02", run=gh, saver=saver, log=quiet) is True
-    assert tried == [URLS[9:]]                                               # the 3 missing pages, nothing else
+    assert tried == [URLS[11:]]                                              # the 3 missing pages, nothing else
     for u in first:
         assert link(u) in gh.notes                                           # nothing removed
-    assert link(URLS[9], "20261030010101") in gh.notes
-    assert f"Not saved (2): {URLS[10]}, {URLS[11]}" in gh.notes
+    assert link(URLS[11], "20261030010101") in gh.notes
+    assert f"Not saved (2): {URLS[12]}, {URLS[13]}" in gh.notes
     assert snapshot.recorded_hash(gh.notes) == "abc123"
 
 
 def test_a_retry_that_saves_nothing_changes_only_the_not_saved_list():
-    first = URLS[:9]
+    first = URLS[:11]
     before = notes_with(first)
     gh = FakeRelease(before)
     assert snapshot.archive_release("data-2027-01-02", run=gh, saver=lambda urls: ([], list(urls)), log=quiet)
-    assert gh.notes == before                                                # same 9 links, same 3 not saved
+    assert gh.notes == before                                                # same 11 links, same 3 not saved
     # and from a worse starting point (a "none could be saved" block) it stays that way
     none = notes_with([])
     gh = FakeRelease(none)

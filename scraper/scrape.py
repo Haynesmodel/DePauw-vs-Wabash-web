@@ -64,7 +64,9 @@ USER_AGENT = (
 )
 REQUEST_GAP_SECONDS = 3  # be polite between page requests
 
-SCORE_RE = re.compile(r"^([WLT])\s+(\d+)\s*-\s*(\d+)$")
+NUMBER = r"\d+(?:\.\d+)?"          # swimming scores can end in .5
+SCORE_RE = re.compile(rf"^([WLT])\s+({NUMBER})\s*-\s*({NUMBER})$")
+NO_SCORE_RE = re.compile(r"^([WLT])\s*-?$")   # "L -": the result is listed, the score is not
 RECORD_RE = re.compile(r"^(\d+)-(\d+)(?:-(\d+))?$")
 
 
@@ -79,10 +81,12 @@ class Game:
     location: str                  # "home" | "away" | "neutral" | "unknown" (DePauw's perspective)
     site: Optional[str]            # "Crawfordsville, Ind." etc., None when the page says N/A
     result: str                    # "W" | "L" | "T" for DePauw
-    depauw: int
-    wabash: int
+    depauw: Optional[float]        # None when the page lists a result but no score (see score_known)
+    wabash: Optional[float]        # a whole score is an int; only swimming has halves (147.5)
     note: Optional[str] = None     # e.g. "2 OT"
     boxscore: Optional[str] = None # absolute URL when the page links one
+    score_known: bool = True       # False: the result counts in the record, there is no score to count
+    score_order_reversed: bool = False   # the result letter and the score order disagreed; see parse_page
 
 
 @dataclass
@@ -94,7 +98,7 @@ class Summary:
     home: Optional[tuple] = None
     away: Optional[tuple] = None
     streak: Optional[str] = None        # e.g. "W4", "L1"
-    total: Optional[int] = None         # DePauw's total points / goals / runs, as the page reports it
+    total: Optional[float] = None       # DePauw's total points / goals / runs, as the page reports it
     total_label: Optional[str] = None   # "points", "goals", "runs", ...
 
 
@@ -116,6 +120,12 @@ class ParseError(Exception):
 # --------------------------------------------------------------------------- #
 # Parsing
 # --------------------------------------------------------------------------- #
+
+def to_number(text) -> float:
+    """A score as a number: a whole score is an int (147), a half stays a float (147.5), never 147.0."""
+    value = float(str(text).replace(",", ""))
+    return int(value) if value.is_integer() else value
+
 
 def _text(el) -> str:
     return " ".join(el.get_text(" ", strip=True).split()) if el else ""
@@ -158,8 +168,8 @@ def parse_summary(soup: BeautifulSoup) -> Summary:
         elif label == "streak":
             m = re.match(r"^([WLT])(\d+)$", number.replace(" ", ""))
             s.streak = m.group(0) if m else None
-        elif label.startswith("total ") and number.replace(",", "").isdigit():
-            s.total = int(number.replace(",", ""))
+        elif label.startswith("total ") and re.fullmatch(NUMBER, number.replace(",", "")):
+            s.total = to_number(number)
             s.total_label = label[len("total "):].strip()
     if s.wins is not None and s.ties is None:
         s.ties = 0  # the page omits the Ties box when there have never been any
@@ -208,11 +218,22 @@ def parse_page(html: str, *, base_url: str, opponent_match: str) -> tuple[list, 
         note = _text(post) or None
         score_text = _text(spans[-1]) if spans else ""
         m = SCORE_RE.match(score_text)
-        if not m:
-            # Canceled / postponed / no-score rows: keep a record but don't count them.
+        bare = NO_SCORE_RE.match(score_text)
+        reversed_order = False
+        if m:
+            result, ours, theirs = m.group(1), to_number(m.group(2)), to_number(m.group(3))
+            # The letter is the result. When the scores clearly say the other side won, the page wrote the
+            # two scores in the other order (Wabash's Nov 12, 2008 meet: "L 153 - 141"), so trust the letter.
+            if (result == "W" and ours < theirs) or (result == "L" and ours > theirs):
+                ours, theirs, reversed_order = theirs, ours, True
+        elif bare:
+            # "L -" beside "No Score Listed (Wabash Loss)": a result with no score. It counts in the record
+            # (the page's own summary includes it) but has nothing to add to point totals.
+            result, ours, theirs, note = bare.group(1), None, None, None
+        else:
+            # Canceled / postponed rows: keep a record but don't count them.
             skipped.append({"date": date, "season": season, "text": score_text or _text(score_cell)})
             continue
-        result, ours, theirs = m.group(1), int(m.group(2)), int(m.group(3))
 
         # The cell's CSS class (score W / L / T) should agree with the text.
         classes = score_cell.get("class", [])
@@ -227,7 +248,8 @@ def parse_page(html: str, *, base_url: str, opponent_match: str) -> tuple[list, 
                 break
 
         games.append(Game(date=date, season=season, location=location, site=site,
-                          result=result, depauw=ours, wabash=theirs, note=note, boxscore=box))
+                          result=result, depauw=ours, wabash=theirs, note=note, boxscore=box,
+                          score_known=ours is not None, score_order_reversed=reversed_order))
 
     return games, parse_summary(soup), skipped
 
@@ -338,7 +360,13 @@ def school_cfg(cfg: dict, school: str) -> dict:
 def game_dicts(games: list, school: str) -> list:
     """Parsed games as dicts, oldest first, in DePauw's point of view. Wabash's page is written from
     Wabash's side, so its games are flipped here."""
-    out = [asdict(g) for g in chronological(games)]
+    out = []
+    for g in chronological(games):
+        d = asdict(g)
+        for flag, default in (("score_known", True), ("score_order_reversed", False)):
+            if d[flag] is default:
+                del d[flag]                # only the unusual row carries a flag, so other games stay as they were
+        out.append(d)
     return [merge.flip(g) for g in out] if school == "wabash" else out
 
 
@@ -420,7 +448,8 @@ def merged_payload(sport: dict, raw: dict, rules: Optional[dict] = None) -> tupl
         "first_game": games[0]["date"],
         "last_game": max(g["date"] for g in games if g.get("date_known") is not False),
         "current_streak": streak_of(games),
-        "points": {"depauw": sum(g["depauw"] for g in games), "wabash": sum(g["wabash"] for g in games)},
+        "points": {side: merge.norm_num(sum(g[side] for g in games if g.get("score_known", True)))
+                   for side in ("depauw", "wabash")},
         "total_label": label,
         **({"unit": sport["unit"]} if sport.get("unit") else {}),
         **({"sources": result.stats} if d and w else {}),

@@ -175,7 +175,8 @@ def test_one_tennis_match_is_not_pluralised(tmp_path):
 def test_the_real_tennis_data_and_sources_json_say_matches():
     cfg = json.loads((ROOT / "scraper" / "sources.json").read_text(encoding="utf-8"))
     units = {s["key"]: s.get("unit") for s in cfg["sports"]}
-    assert units["mens-tennis"] == ["match", "matches"] and all(v is None for k, v in units.items() if k != "mens-tennis")
+    assert units["mens-tennis"] == ["match", "matches"] and units["mens-swimming-and-diving"] == ["meet", "meets"]
+    assert all(v is None for k, v in units.items() if k not in ("mens-tennis", "mens-swimming-and-diving"))
 
 
 # ---- links to both schools -------------------------------------------------------------------- #

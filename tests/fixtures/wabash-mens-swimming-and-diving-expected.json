@@ -1,0 +1,431 @@
+{
+ "_comment": "The complete game list and summary of the live Wabash College Athletics Swimming & Diving History vs DePauw University page, captured 2026-10-29. Rows are exactly as the page prints them (a no-score row has null scores).",
+ "summary": {
+  "Wins": "15",
+  "Losses": "26",
+  "Streak": "L1",
+  "Longest Win Streak": "5 Meets",
+  "Longest Losing Streak": "7 Meets",
+  "Home Record": "10-8",
+  "Away Record": "5-18",
+  "Conference Record": "0-0",
+  "First Matchup": "L 13-54",
+  "Last 10 Matchups": "6-4",
+  "Largest Margin of Victory": "W 231-120",
+  "Smallest Margin of Victory": "W 141-139",
+  "Total Points": "4612",
+  "Average Points": "112.49"
+ },
+ "games": [
+  [
+   "12/5/2025",
+   "2025-2026",
+   "Away",
+   "Greencastle, IN",
+   "L",
+   106,
+   193,
+   ""
+  ],
+  [
+   "12/6/2024",
+   "2024-2025",
+   "Home",
+   "Crawfordsville, IN",
+   "W",
+   194,
+   100,
+   ""
+  ],
+  [
+   "12/1/2023",
+   "2023-2024",
+   "Away",
+   "Greencastle, IN",
+   "L",
+   146,
+   148,
+   ""
+  ],
+  [
+   "12/2/2022",
+   "2022-2023",
+   "Home",
+   "Crawfordsville, IN",
+   "W",
+   141,
+   139,
+   ""
+  ],
+  [
+   "12/4/2021",
+   "2021-2022",
+   "Away",
+   "Greencastle, IN",
+   "W",
+   187,
+   107,
+   ""
+  ],
+  [
+   "3/21/2021",
+   "2020-2021",
+   "Home",
+   "Crawfordsville, IN",
+   "W",
+   231,
+   120,
+   ""
+  ],
+  [
+   "3/20/2021",
+   "2020-2021",
+   "Home",
+   "Crawfordsville, IN",
+   "W",
+   163,
+   76,
+   ""
+  ],
+  [
+   "3/19/2021",
+   "2020-2021",
+   "Home",
+   "Crawfordsville, IN",
+   "W",
+   59,
+   32,
+   ""
+  ],
+  [
+   "11/1/2019",
+   "2019-2020",
+   "Away",
+   "Greencastle, IN",
+   "L",
+   128,
+   169,
+   ""
+  ],
+  [
+   "11/2/2018",
+   "2018-2019",
+   "Home",
+   "Crawfordsville, IN",
+   "L",
+   143.5,
+   147.5,
+   ""
+  ],
+  [
+   "11/3/2017",
+   "2017-2018",
+   "Away",
+   "Greencastle, IN",
+   "L",
+   113,
+   178,
+   ""
+  ],
+  [
+   "11/4/2016",
+   "2016-2017",
+   "Home",
+   "Crawfordsville, IN",
+   "L",
+   119,
+   177,
+   ""
+  ],
+  [
+   "10/30/2015",
+   "2015-2016",
+   "Away",
+   "Greencastle, IN",
+   "W",
+   148,
+   146,
+   ""
+  ],
+  [
+   "10/31/2014",
+   "2014-2015",
+   "Home",
+   "Crawfordsville, IN",
+   "W",
+   162,
+   129,
+   ""
+  ],
+  [
+   "11/13/2013",
+   "2013-2014",
+   "Away",
+   "Greencastle, IN",
+   "L",
+   89,
+   181,
+   ""
+  ],
+  [
+   "11/7/2012",
+   "2012-2013",
+   "Home",
+   "Crawfordsville, IN",
+   "L",
+   84,
+   196,
+   ""
+  ],
+  [
+   "11/9/2011",
+   "2011-2012",
+   "Away",
+   "Greencastle, IN",
+   "L",
+   89,
+   205,
+   ""
+  ],
+  [
+   "11/10/2010",
+   "2010-2011",
+   "Home",
+   "Crawfordsville, IN",
+   "L",
+   135,
+   165,
+   ""
+  ],
+  [
+   "11/11/2009",
+   "2009-2010",
+   "Away",
+   "Greencastle, IN",
+   "L",
+   100,
+   200,
+   ""
+  ],
+  [
+   "11/12/2008",
+   "2008-2009",
+   "Home",
+   "Crawfordsville, IN",
+   "L",
+   153,
+   141,
+   ""
+  ],
+  [
+   "1/25/2008",
+   "2007-2008",
+   "Away",
+   "Greencastle, IN",
+   "L",
+   141,
+   159,
+   ""
+  ],
+  [
+   "11/3/2006",
+   "2006-2007",
+   "Home",
+   "Crawfordsville, IN",
+   "W",
+   172.5,
+   127.5,
+   ""
+  ],
+  [
+   "1/18/2006",
+   "2005-2006",
+   "Away",
+   "Greencastle, IN",
+   "L",
+   96,
+   147,
+   ""
+  ],
+  [
+   "1/19/2005",
+   "2004-2005",
+   "Home",
+   "Crawfordsville, IN",
+   "L",
+   97,
+   144,
+   ""
+  ],
+  [
+   "1/14/2004",
+   "2003-2004",
+   "Away",
+   "Greencastle, IN",
+   "L",
+   105,
+   132,
+   ""
+  ],
+  [
+   "1/17/2003",
+   "2002-2003",
+   "Home",
+   "Crawfordsville, IN",
+   "L",
+   98,
+   145,
+   ""
+  ],
+  [
+   "2/23/2002",
+   "2001-2002",
+   "Away",
+   "Greencastle, IN",
+   "W",
+   186,
+   113,
+   ""
+  ],
+  [
+   "2/23/2001",
+   "2000-2001",
+   "Home",
+   "Crawfordsville, IN",
+   "W",
+   165,
+   135,
+   ""
+  ],
+  [
+   "2/23/2000",
+   "1999-2000",
+   "Away",
+   "Greencastle, IN",
+   "W",
+   165,
+   135,
+   ""
+  ],
+  [
+   "1/27/1999",
+   "1998-1999",
+   "Home",
+   "Crawfordsville, IN",
+   "W",
+   135,
+   108,
+   ""
+  ],
+  [
+   "2/1/1998",
+   "1997-1998",
+   "Away",
+   "Greencastle, IN",
+   "L",
+   89,
+   154,
+   ""
+  ],
+  [
+   "2/5/1997",
+   "1996-1997",
+   "Home",
+   "Crawfordsville, IN",
+   "L",
+   121,
+   122,
+   ""
+  ],
+  [
+   "2/7/1996",
+   "1995-1996",
+   "Away",
+   "Greencastle, IN",
+   "W",
+   123,
+   120,
+   ""
+  ],
+  [
+   "2/1/1995",
+   "1994-1995",
+   "Home",
+   "Crawfordsville, IN",
+   "W",
+   126,
+   117,
+   ""
+  ],
+  [
+   "1/8/1937",
+   "1936-1937",
+   "Away",
+   "Greencastle, IN",
+   "L",
+   25,
+   50,
+   ""
+  ],
+  [
+   "2/12/1934",
+   "1933-1934",
+   "Away",
+   "Greencastle, IN",
+   "L",
+   null,
+   null,
+   "No Score Listed (Wabash Loss)"
+  ],
+  [
+   "1/5/1934",
+   "1933-1934",
+   "Away",
+   "Greencastle, IN",
+   "L",
+   null,
+   null,
+   "No Score Listed (Wabash Loss)"
+  ],
+  [
+   "2/27/1930",
+   "1929-1930",
+   "Away",
+   "Greencastle, IN",
+   "L",
+   26,
+   52,
+   ""
+  ],
+  [
+   "1/15/1929",
+   "1928-1929",
+   "Away",
+   "Greencastle, IN",
+   "L",
+   26,
+   40,
+   ""
+  ],
+  [
+   "2/2/1928",
+   "1927-1928",
+   "Away",
+   "Greencastle, IN",
+   "L",
+   12,
+   57,
+   ""
+  ],
+  [
+   "2/8/1927",
+   "1926-1927",
+   "Away",
+   "Greencastle, IN",
+   "L",
+   13,
+   54,
+   ""
+  ]
+ ]
+}

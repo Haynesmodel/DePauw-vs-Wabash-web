@@ -7,7 +7,8 @@ Everything here is from DePauw's point of view: Wabash's games are flipped first
 
 Matching runs in fixed passes, and every pass uses each row at most once. A row is never paired with a
 row a ruling in data/overrides.json says is a different game.
-  0. Rulings in data/overrides.json: games a person confirmed are the same game.
+  0. Rulings in data/overrides.json: games a person confirmed are the same game, and rows a person ruled
+     are only days of a longer meet (session_of): those are set aside, not counted as games.
   1. Same date and same score.
   2. Rows with no usable date match by season and score. A date is unusable when it is a placeholder
      (a Wabash row on Jan 1 to Jan 3) or falls in a month the sport is not played (season_months).
@@ -36,6 +37,11 @@ Each merged game is a dict with the fields of a game in series.json plus:
   wabash_version  Wabash's {result, depauw, wabash} for a disputed game, in DePauw's point of view
   date_differs    True when the two schools list the game on different dates (omitted otherwise)
   wabash_date     Wabash's date for such a game
+  score_known     False when the school lists the result but no score (omitted when True); depauw and wabash
+                  are then null, and the game counts in the record but in no point total
+  score_order_reversed  ["Wabash"] etc.: the school's page printed the two scores in the other order from
+                  its result letter; the letter was trusted and the scores swapped (omitted otherwise)
+  sessions        the running-score rows a session_of ruling set aside, on the meet they belong to
   depauw_date     DePauw's date, only when DePauw's was unusable and Wabash's date was used instead
 A disputed game can also have different dates. Games are stored oldest first; games with no usable date
 come first within their season, in the order the school's page listed them.
@@ -110,11 +116,24 @@ def day_gap(a: str, b: str) -> int:
     return abs((dt.date.fromisoformat(a) - dt.date.fromisoformat(b)).days)
 
 
+def norm_num(x):
+    """A sum or a score as the number it is: 4459.0 is 4459, 4459.5 stays 4459.5."""
+    return int(x) if isinstance(x, float) and x.is_integer() else x
+
+
+def score_known(g: dict) -> bool:
+    return g.get("score_known", True)
+
+
 def score(g: dict) -> tuple:
     return (g["depauw"], g["wabash"])
 
 
-def score_distance(a: dict, b: dict) -> int:
+def score_distance(a: dict, b: dict) -> float:
+    """How far apart two games' scores are. A game with no score is as far from a scored game as can be,
+    and no distance from another game with no score."""
+    if not (score_known(a) and score_known(b)):
+        return 0 if score_known(a) == score_known(b) else 10 ** 6
     return abs(a["depauw"] - b["depauw"]) + abs(a["wabash"] - b["wabash"])
 
 
@@ -139,7 +158,7 @@ def typo_kind(a: str, b: str) -> str | None:
 # --------------------------------------------------------------------------- #
 
 def load_overrides(path: Path) -> dict:
-    """The per-sport rulings, {sport key: {"same_game": [...], "different_games": [...]}}. ("keep_previous"
+    """The per-sport rulings, {sport key: {"same_game": [...], "different_games": [...], "session_of": [...]}}. ("keep_previous"
     rulings, which reject a school's edit to an old game, are read by review.load_keep_previous and take no
     part in the merge.) A missing file is no rulings. A malformed file raises MergeError, because a typo must not silently turn rulings off."""
     path = Path(path)
@@ -154,23 +173,50 @@ def load_overrides(path: Path) -> dict:
         raise MergeError(f'{path.name} needs a "sports" object')
     out = {}
     for key, rules in sports.items():
-        if not isinstance(rules, dict) or set(rules) - {"same_game", "different_games", "keep_previous"}:
-            raise MergeError(f'{path.name}: {key} may only have "same_game", "different_games" and '
-                             f'"keep_previous"')
+        if not isinstance(rules, dict) or set(rules) - {"same_game", "different_games", "session_of", "keep_previous"}:
+            raise MergeError(f'{path.name}: {key} may only have "same_game", "different_games", "session_of" '
+                             f'and "keep_previous"')
         out[key] = {kind: [_ruling(path.name, key, kind, r) for r in rules.get(kind, [])]
                     for kind in ("same_game", "different_games")}
+        out[key]["session_of"] = [_session_ruling(path.name, key, r) for r in rules.get("session_of", [])]
     return out
+
+
+SCORE_PAIR = re.compile(r"(\d+(?:\.\d+)?)-(\d+(?:\.\d+)?)")
+
+
+def _row(r: dict) -> dict:
+    """A ruling's name for one row: that school's date and the score as DePauw-Wabash ("12-5", "147.5-143.5")."""
+    return {"date": dt.date.fromisoformat(r["date"]).isoformat(),
+            "score": tuple(norm_num(float(x)) for x in SCORE_PAIR.fullmatch(r["score"]).groups())}
 
 
 def _ruling(name: str, key: str, kind: str, r) -> dict:
     try:
-        parsed = {side: {"date": dt.date.fromisoformat(r[side]["date"]).isoformat(),
-                         "score": tuple(int(x) for x in re.fullmatch(r"(\d+)-(\d+)", r[side]["score"]).groups())}
-                  for side in ("depauw", "wabash")}
+        parsed = {side: _row(r[side]) for side in ("depauw", "wabash")}
     except (KeyError, TypeError, ValueError, AttributeError):
         raise MergeError(f'{name}: {key} {kind}: each ruling needs "depauw" and "wabash", each with a '
                          f'"date" (YYYY-MM-DD) and a "score" ("DePauw-Wabash", e.g. "12-5"): {r!r}') from None
     parsed["reason"] = r.get("reason", "")
+    return parsed
+
+
+def _session_ruling(name: str, key: str, r) -> dict:
+    """A session_of ruling: one school's rows ("sessions") that are only parts of one meet ("meet", also a
+    row of that school's page). The sessions are set aside; the meet is matched like any other game."""
+    try:
+        if r["school"] not in ("depauw", "wabash"):
+            raise ValueError
+        parsed = {"school": r["school"], "meet": _row(r["meet"]),
+                  "sessions": [_row(x) for x in r["sessions"]]}
+        if not parsed["sessions"] or any(x["date"] > parsed["meet"]["date"] for x in parsed["sessions"]):
+            raise ValueError
+    except (KeyError, TypeError, ValueError, AttributeError):
+        raise MergeError(f'{name}: {key} session_of: each ruling needs a "school" ("depauw" or "wabash"), a '
+                         f'"meet" and a non-empty list of "sessions" (each a "date" and a "score" '
+                         f'"DePauw-Wabash"; no session may be dated after the meet): {r!r}') from None
+    parsed["reason"] = r.get("reason", "")
+    parsed["sources"] = list(r.get("sources", []))
     return parsed
 
 
@@ -195,6 +241,7 @@ class MergeResult:
     disputed: list = field(default_factory=list)      # (merged game) for each dispute
     date_differs: list = field(default_factory=list)  # (merged game) for each date mismatch
     pairs: list = field(default_factory=list)         # {"kind", "depauw", "wabash", "gap"} for each match
+    sessions: list = field(default_factory=list)      # the rows a session_of ruling set aside
 
 
 def _stale(r: dict, kind: str, missing_depauw: bool, missing_wabash: bool) -> str:
@@ -222,9 +269,9 @@ def merge_sport(depauw: list, wabash: list, *, season_months=None, rules=None) -
     doubleheader in playing order. season_months is the months the sport is played in (None: any month
     is plausible); rules is this sport's entry from load_overrides(). Raises MergeError if the
     bookkeeping does not add up."""
-    d, w = depauw, wabash
     months = set(season_months) if season_months else None
     rules = rules or {}
+    d, w, set_aside, attach = _set_aside_sessions(depauw, wabash, rules.get("session_of", []))
     used_d: set = set()
     used_w: set = set()
     pairs: dict = {}                       # di -> (wi, kind)
@@ -301,6 +348,7 @@ def merge_sport(depauw: list, wabash: list, *, season_months=None, rules=None) -
              for di, gd in live if di not in used_d
              for wi, gw in enumerate(w) if wi not in used_w and wi not in unknown_w
              and 0 < day_gap(gd["date"], gw["date"]) <= MAX_DATE_GAP_DAYS and gd["result"] == gw["result"]
+             and score_known(gd) and score_known(gw)
              and abs(gd["depauw"] - gw["depauw"]) <= SCORE_TOLERANCE
              and abs(gd["wabash"] - gw["wabash"]) <= SCORE_TOLERANCE and allowed(gd, gw)]
     _pair(edges, used_d, used_w, take("near_dispute"))
@@ -314,6 +362,7 @@ def merge_sport(depauw: list, wabash: list, *, season_months=None, rules=None) -
     _pair(edges, used_d, used_w, take("typo"))
 
     wabash_for = {wi: di for di, (wi, _) in pairs.items()}
+    for_meet = attach
     merged: list = []
     matches: list = []
     disputed, differs = [], []
@@ -324,6 +373,8 @@ def merge_sport(depauw: list, wabash: list, *, season_months=None, rules=None) -
             wi, kind = pairs[di]
             gw = w[wi]
             _combine(game, gd, gw, di in unknown_d, wi in unknown_w)
+            if sessions := for_meet.get(("depauw", di)) or for_meet.get(("wabash", wi)):
+                game["sessions"] = sessions
             placeholder = wi in unknown_w and is_placeholder(gw)
             matches.append({"kind": kind, "depauw": gd, "wabash": gw,
                             "gap": None if placeholder else day_gap(gd["date"], gw["date"])})
@@ -340,6 +391,8 @@ def merge_sport(depauw: list, wabash: list, *, season_months=None, rules=None) -
             continue
         game = _base(gw, "wabash")
         game["_order"] = (1, wi)
+        if sessions := for_meet.get(("wabash", wi)):
+            game["sessions"] = sessions
         if wi in unknown_w:
             game["date_known"] = False
         merged.append(game)
@@ -350,9 +403,50 @@ def merge_sport(depauw: list, wabash: list, *, season_months=None, rules=None) -
     stats = {"both": len(pairs), "depauw_only": len(depauw_only), "wabash_only": len(wabash_only),
              "disputed": len(disputed), "date_differs": len(differs),
              "dates_not_recorded": sum(1 for g in merged if g.get("date_known") is False)}
-    result = MergeResult(merged, stats, depauw_only, wabash_only, disputed, differs, matches)
+    if set_aside:
+        stats["session_rows"] = len(set_aside)
+    result = MergeResult(merged, stats, depauw_only, wabash_only, disputed, differs, matches, set_aside)
     check(d, w, result)
     return result
+
+
+def _set_aside_sessions(depauw: list, wabash: list, rulings: list) -> tuple:
+    """Take the rows session_of rulings name out of the school's list. Returns (DePauw rows, Wabash rows,
+    the rows set aside, {(school, index of the meet in the remaining rows): [session summaries]}).
+    A ruling that no longer finds every row it names raises MergeError, like any other ruling."""
+    lists = {"depauw": list(depauw), "wabash": list(wabash)}
+    aside, named = [], []
+    for r in rulings:
+        rows = lists[r["school"]]
+        found = []
+        for want in r["sessions"]:
+            i = next((k for k, g in enumerate(rows) if _identity(g) == _ruled(want) and k not in found), None)
+            found.append(i)
+        meet = next((k for k, g in enumerate(rows) if _identity(g) == _ruled(r["meet"])), None)
+        if meet is None or None in found:
+            gone = ([f"the meet {r['meet']['date']} {r['meet']['score'][0]}-{r['meet']['score'][1]}"] if meet is None else []) \
+                + [f"the session {w['date']} {w['score'][0]}-{w['score'][1]}" for w, i in zip(r["sessions"], found) if i is None]
+            raise MergeError(f"overrides.json session_of ruling no longer finds {' and '.join(gone)} on "
+                             f"{r['school'].title()}'s page (a source page changed, or the ruling was mistyped)")
+        named.append((r, meet, found))
+    attach, drop = {}, {"depauw": set(), "wabash": set()}
+    for r, meet, found in named:
+        sessions = []
+        for i in found:
+            g = lists[r["school"]][i]
+            drop[r["school"]].add(i)
+            aside.append({**g, "school": r["school"].title()})
+            sessions.append({"date": g["date"], "depauw": g["depauw"], "wabash": g["wabash"],
+                             "school": r["school"].title()})
+        attach[(r["school"], meet)] = sorted(sessions, key=lambda x: x["date"])
+    # indexes in `attach` must point into the remaining rows, so renumber after the rows are removed
+    out, remap = {}, {}
+    for school, rows in lists.items():
+        keep = [k for k in range(len(rows)) if k not in drop[school]]
+        remap[school] = {old: new for new, old in enumerate(keep)}
+        out[school] = [rows[k] for k in keep]
+    attach = {(school, remap[school][i]): v for (school, i), v in attach.items()}
+    return out["depauw"], out["wabash"], aside, attach
 
 
 def _combine(game: dict, gd: dict, gw: dict, d_unknown: bool, w_unknown: bool) -> None:
@@ -369,9 +463,19 @@ def _combine(game: dict, gd: dict, gw: dict, d_unknown: bool, w_unknown: bool) -
     elif gw["date"] != gd["date"] and not (w_unknown and is_placeholder(gw)):
         game["date_differs"] = True                    # a placeholder says nothing about the date; anything else does
         game["wabash_date"] = gw["date"]
-    if (gd["depauw"], gd["wabash"], gd["result"]) != (gw["depauw"], gw["wabash"], gw["result"]):
+    if score_known(gd) and score_known(gw):
+        differ = (gd["depauw"], gd["wabash"], gd["result"]) != (gw["depauw"], gw["wabash"], gw["result"])
+    else:
+        # A school that lists no score for the meet cannot disagree about it: only the result can differ.
+        differ = gd["result"] != gw["result"]
+        if not score_known(gd) and score_known(gw):
+            game["depauw"], game["wabash"] = gw["depauw"], gw["wabash"]      # the other school has the score
+            game.pop("score_known", None)
+    if differ:
         game["disputed"] = True
         game["wabash_version"] = {"result": gw["result"], "depauw": gw["depauw"], "wabash": gw["wabash"]}
+    if gw.get("score_order_reversed"):
+        game["score_order_reversed"] = sorted(set(game.get("score_order_reversed", [])) | {"Wabash"})
 
 
 def _in_order(games: list) -> list:
@@ -401,6 +505,10 @@ def _base(g: dict, source: str) -> dict:
                                   "note", "boxscore")}
     game["season"] = normalize_season(g.get("season"), g["date"])
     game["source"] = source
+    if not score_known(g):
+        game["score_known"] = False
+    if g.get("score_order_reversed"):
+        game["score_order_reversed"] = ["DePauw" if source == "depauw" else "Wabash"]
     return game
 
 

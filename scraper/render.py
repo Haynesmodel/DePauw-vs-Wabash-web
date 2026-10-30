@@ -386,6 +386,17 @@ def preview_info(data: dict, label: str | None = None) -> dict:
             "holder": holder, "label": label}
 
 
+def alumni_preview_info(endowment: dict) -> dict:
+    """The alumni share card shows the endowment per student for each school (no overall alumni score). The
+    image URL carries a version that changes only when a drawn figure does."""
+    per = alumni_page.per_student(endowment)
+    values = [("DePauw", f"${per['depauw']:,}"), ("Wabash", f"${per['wabash']:,}")]
+    alt = (f"DePauw vs. Wabash alumni and endowment: endowment per student is {values[0][1]} at DePauw "
+           f"and {values[1][1]} at Wabash.")
+    return {"image": f"{SITE_URL}alumni-og-image.png?v={images.alumni_og_version(values)}", "alt": alt,
+            "values": values}
+
+
 def render_manifest() -> str:
     icons = [{"src": "icon-192.png", "sizes": "192x192", "type": "image/png"},
              {"src": "icon-512.png", "sizes": "512x512", "type": "image/png"},
@@ -1067,9 +1078,10 @@ def build(data_path: Path, out: Path, *, checked_at: str | None = None,
     # Validate all curated input and render every page before removing the previous output.
     alumni_data = alumni_page.validate_alumni(alumni_page.load_json(alumni_path or ALUMNI_DATA, "alumni"))
     endowment_data = alumni_page.validate_endowment(alumni_page.load_json(endowment_path or ENDOWMENT_DATA, "endowment"))
+    alumni_preview = alumni_preview_info(endowment_data)
     alumni_head = head("Alumni and Endowment | DePauw vs. Wabash",
                         "Verified named DePauw and Wabash graduates across achievement categories, plus dated endowment values.",
-                        prefix="../", canonical=SITE_URL + ALUMNI_PATH)
+                        prefix="../", canonical=SITE_URL + ALUMNI_PATH, preview=alumni_preview)
     alumni_html = alumni_page.render_page(alumni_data, endowment_data, head_html=alumni_head,
                                           copyright_year=(now or dt.datetime.now(dt.timezone.utc)).year)
     upcoming = meetings.load_upcoming(upcoming_path)
@@ -1099,6 +1111,7 @@ def build(data_path: Path, out: Path, *, checked_at: str | None = None,
     when = now or dt.datetime.now(dt.timezone.utc)
     info = preview_info(data, game_day_label(gameday.todays_games(when, upcoming, data["sports"])))
     (out / "og-image.png").write_bytes(images.og_image(data["totals"], info["holder"], info["label"]))
+    (out / "alumni-og-image.png").write_bytes(images.alumni_og_image(alumni_preview["values"]))
     (out / "apple-touch-icon.png").write_bytes(images.icon_png(180))
     (out / "favicon-32.png").write_bytes(images.icon_png(32))
     (out / "icon-192.png").write_bytes(images.icon_png(192))

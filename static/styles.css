@@ -184,7 +184,21 @@ main { padding-block: 1.5rem 2.5rem; display: grid; gap: 1.5rem; }
 
 /* Curated alumni and endowment page */
 .alumni-main { max-width: 62rem; }
-.category-nav { display: flex; flex-wrap: wrap; gap: 0.25rem 0.75rem; padding: 0.75rem 0; }
+.alumni-lede { margin: 0 0 1rem; }
+.sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+/* Scoreboard: one row per category, the larger count in its school's accent */
+.scoreboard { width: 100%; border-collapse: collapse; margin-bottom: 0.75rem; }
+.scoreboard caption { text-align: left; color: var(--color-text-muted); font-size: 0.875rem; padding-bottom: 0.5rem; }
+.scoreboard th, .scoreboard td { padding: 0.5rem 0.5rem; border-top: 1px solid var(--color-border); vertical-align: middle; }
+.scoreboard thead th { border-top: 0; border-bottom: 2px solid var(--color-border); color: var(--color-text-muted); font-size: 0.8125rem; text-align: right; }
+.scoreboard thead th:first-child, .scoreboard tbody th { text-align: left; }
+.scoreboard tbody th { font-weight: 600; overflow-wrap: anywhere; }
+.scoreboard .score { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; width: 5.5rem; }
+.scoreboard .lead { box-shadow: inset 0 -3px 0 currentColor; }
+.scoreboard .lead-depauw { color: var(--color-depauw-text); }
+.scoreboard .lead-wabash { color: var(--color-wabash-text); }
+.alumni-report { margin: 0.75rem 0 0; font-size: 0.9375rem; }
+.endowment:target { outline: 3px solid var(--color-focus); outline-offset: 2px; }
 .alumni-method, .alumni-download { color: var(--color-text-muted); margin: 0; }
 .alumni-method-details { color: var(--color-text-muted); margin: 0.75rem 0 1.25rem; }
 .alumni-method-details summary { cursor: pointer; font-weight: 650; padding: 0.4rem 0; }

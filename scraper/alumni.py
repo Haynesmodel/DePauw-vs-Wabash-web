@@ -8,10 +8,11 @@ import json
 import re
 from decimal import Decimal, ROUND_HALF_UP
 from pathlib import Path
-from urllib.parse import urlparse
+from urllib.parse import quote, urlparse
 
 
 SCHOOLS = {"depauw": "DePauw", "wabash": "Wabash"}
+SUBTITLE = "Notable graduates and endowments, side by side, with a source for every name."
 
 
 class AlumniError(ValueError):
@@ -73,6 +74,8 @@ def validate_alumni(data: dict) -> dict:
             _fail(f"invalid or duplicate alumni category id: {cid!r}")
         _text(category.get("name"), f"category {cid}.name")
         _text(category.get("definition"), f"category {cid}.definition")
+        if cid not in TILE_LABELS:
+            _fail(f"category {cid} has no count-tile label; add it to TILE_LABELS in alumni.py")
         reviews = category.get("review")
         if not isinstance(reviews, dict) or set(reviews) != set(SCHOOLS):
             _fail(f"category {cid}.review must document both schools")
@@ -288,10 +291,77 @@ def _source(source):
     return f'<a href="{_esc(source["url"])}">{_esc(source["label"])}</a>'
 
 
-def render_page(data: dict, endowment: dict, *, head_html: str, copyright_year: int = 2026) -> str:
+REPO_URL = "https://github.com/jacksonmote/DePauw-vs-Wabash-web"     # a test keeps this equal to render.REPO_URL
+
+# What a count tile calls one and many of each category's graduates. A new category must be added here.
+TILE_LABELS = {
+    "nobel": ("Nobel laureate", "Nobel laureates"),
+    "vice-presidents": ("vice president", "vice presidents"),
+    "senators": ("senator", "senators"),
+    "representatives": ("representative", "representatives"),
+    "governors": ("governor", "governors"),
+    "fortune-500-ceos": ("Fortune 500 CEO", "Fortune 500 CEOs"),
+    "pulitzer": ("Pulitzer winner", "Pulitzer winners"),
+    "rhodes-scholars": ("Rhodes Scholar", "Rhodes Scholars"),
+    "astronauts": ("astronaut", "astronauts"),
+    "academy-awards": ("Academy Award winner", "Academy Award winners"),
+}
+
+
+def tile_label(cid: str, count: int) -> str:
+    one, many = TILE_LABELS[cid]
+    return one if count == 1 else many
+
+
+def correction_url(category: str, repo_url: str = REPO_URL) -> str:
+    """Opens the alumni-correction issue form with the category filled in."""
+    return (f"{repo_url}/issues/new?template=alumni-correction.yml"
+            f"&title={quote('Alumni correction: ' + category)}&category={quote(category)}")
+
+
+def _tile(cls: str, name: str, number: str, label: str) -> str:
+    return (f'<div class="tile {cls}"><span class="tile-name">{_esc(name)}</span>'
+            f'<span class="tile-num">{_esc(number)}</span><span class="tile-label">{_esc(label)}</span></div>')
+
+
+def _heading(anchor: str, text: str) -> str:
+    """The heading text is the link to its own section, like the athletics cards."""
+    return f'<h2><a class="permalink" id="{_esc(anchor)}-h" href="#{_esc(anchor)}">{_esc(text)}</a></h2>'
+
+
+def _score_cell(school: str, text: str, lead: bool) -> str:
+    if lead:
+        return (f'<td class="score lead lead-{school}"><strong>{_esc(text)}</strong>'
+                f'<span class="sr-only"> (higher)</span></td>')
+    return f'<td class="score">{_esc(text)}</td>'
+
+
+def scoreboard(categories: list, counts_by_id: dict, per: dict) -> str:
+    """One row per category: the two counts, the larger one marked in its school's accent (and in bold, and
+    for screen readers), ties plain. The endowment per student comes first. There is deliberately no total."""
+    rows = []
+
+    def row(href, name, depauw, wabash, shown):
+        lead = "depauw" if depauw > wabash else "wabash" if wabash > depauw else None
+        rows.append(f'<tr><th scope="row"><a href="#{_esc(href)}">{_esc(name)}</a></th>'
+                    f'{_score_cell("depauw", shown[0], lead == "depauw")}'
+                    f'{_score_cell("wabash", shown[1], lead == "wabash")}</tr>')
+
+    row("endowment", "Endowment per student", per["depauw"], per["wabash"],
+        (f'${per["depauw"]:,}', f'${per["wabash"]:,}'))
+    for category in categories:
+        c = counts_by_id[category["id"]]
+        row(category["id"], category["name"], c["depauw"], c["wabash"], (str(c["depauw"]), str(c["wabash"])))
+    return ('<table class="scoreboard"><caption>Named graduates by category, and endowment per student</caption>'
+            '<thead><tr><th scope="col">Category</th><th scope="col">DePauw</th><th scope="col">Wabash</th></tr></thead>'
+            f'<tbody>{"".join(rows)}</tbody></table>')
+
+
+def render_page(data: dict, endowment: dict, *, head_html: str, copyright_year: int = 2026,
+                repo_url: str = REPO_URL) -> str:
     counts_by_id = counts(data)
     categories = visible_categories(data)
-    links = " · ".join(f'<a href="#{_esc(c["id"])}">{_esc(c["name"])}</a>' for c in categories)
+    per = per_student(endowment)
     cards = []
     for category in categories:
         cid = category["id"]
@@ -321,13 +391,14 @@ def render_page(data: dict, endowment: dict, *, head_html: str, copyright_year: 
             else:
                 details = '<p class="alumni-zero">No qualifying graduates found in the reviewed sources.</p>'
             schools_html.append(f'<div class="alumni-school alumni-school-{school}"><h3 class="alumni-school-name">{label}</h3>{details}</div>')
-            tiles_html.append(f'<div class="tile tile-{school}"><span class="tile-name">{label}</span>'
-                              f'<span class="tile-num">{count}</span></div>')
-        cards.append(f'<section class="sport alumni-card" id="{_esc(cid)}"><h2>{_esc(category["name"])}</h2>'
+            tiles_html.append(_tile(f"tile-{school}", label, str(count), tile_label(cid, count)))
+        cards.append(f'<section class="sport alumni-card" id="{_esc(cid)}" aria-labelledby="{_esc(cid)}-h">'
+                     f'{_heading(cid, category["name"])}'
                      f'<p>{_esc(category["definition"])}</p><div class="tiles">{"".join(tiles_html)}</div>'
-                     f'<div class="alumni-schools">{"".join(schools_html)}</div></section>')
+                     f'<div class="alumni-schools">{"".join(schools_html)}</div>'
+                     f'<p class="alumni-report"><a href="{_esc(correction_url(category["name"], repo_url))}">'
+                     f'Suggest a correction</a></p></section>')
     endow_cards = []
-    per = per_student(endowment)
     for key, label in SCHOOLS.items():
         item = endowment["schools"][key]
         enrolled = item["enrollment"]
@@ -345,15 +416,25 @@ def render_page(data: dict, endowment: dict, *, head_html: str, copyright_year: 
         head_html, '<body>',
         '<header class="site-header"><div class="wrap"><h1>DePauw vs. Wabash</h1>',
         '<nav class="site-nav" aria-label="Main navigation"><a href="../">Athletics</a> <a href="./" aria-current="page">Alumni</a></nav>',
-        '<p class="subtitle">Verified named graduates and endowment comparison</p></div></header>',
-        '<main class="wrap alumni-main"><nav class="category-nav" aria-label="Alumni categories"><a href="#endowment">Endowment</a> · ' + links + '</nav>',
-        f'<p class="alumni-method">Counts show named graduates verified in the reviewed sources. Verified {_esc(fmt_date(data["verified_at"]))}.</p>',
+        f'<p class="subtitle">{_esc(SUBTITLE)}</p></div></header>',
+        '<main class="wrap alumni-main">',
+        '<section class="overall alumni-overview" aria-labelledby="alumni-h">',
+        '<h2 id="alumni-h">Alumni and endowment</h2>',
+        '<p class="alumni-lede">Named graduates in award and public-service categories, and endowment per student, '
+        'for DePauw and Wabash.</p>',
+        scoreboard(categories, counts_by_id, per),
+        f'<p class="alumni-method">Counts show named graduates verified in the reviewed sources. '
+        f'Verified {_esc(fmt_date(data["verified_at"]))}. Endowment per student: audited '
+        f'{_esc(endowment["fiscal_year"])} endowment divided by {_esc(next(iter(endowment["schools"].values()))["enrollment"]["term"].lower())} '
+        f'headcount; the two schools’ endowment figures cover different scopes (see Endowment below).</p>',
         '<details class="alumni-method-details"><summary>Who counts and how sources were reviewed</summary>'
         f'<p>{_esc(data["methodology"])} A person may appear in more than one category; each person counts once per school and category. There is no overall alumni score.</p></details>',
-        f'<section class="overall endowment" id="endowment"><h2>Endowment</h2>'
+        '</section>',
+        f'<section class="overall endowment" id="endowment" aria-labelledby="endowment-h">{_heading("endowment", "Endowment")}'
         f'<p>Audited {_esc(endowment["fiscal_year"])} figures as of {_esc(fmt_date(endowment["as_of"]))}; reported accounting scopes differ.</p>'
         f'<div class="tiles endowment-values">{"".join(endow_cards)}</div>'
         f'<p class="endowment-caveat">{_esc(endowment["explanation"])} {_esc(per_student_note(endowment))}</p>'
+        f'<p class="alumni-report"><a href="{_esc(correction_url("Endowment", repo_url))}">Suggest a correction</a></p>'
         f'<p>Verified {_esc(fmt_date(endowment["verified_at"]))}.</p></section>',
         *cards,
         '<p class="alumni-download">Download the curated records: <a href="../data/alumni.json">alumni.json</a> · '

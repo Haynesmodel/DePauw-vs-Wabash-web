@@ -324,3 +324,131 @@ def test_name_lists_stack_below_600px_while_the_count_tiles_stay_side_by_side():
     page = committed_page()
     assert page.count('<div class="alumni-schools">') == len(alumni.visible_categories(read_data()))
     assert "money { overflow-wrap" not in css and "white-space: nowrap" in css
+
+
+def test_header_subtitle_and_page_heading_match_the_athletics_page_structure():
+    page = committed_page()
+    assert '<p class="subtitle">Notable graduates and endowments, side by side, with a source for every name.</p>' in page
+    assert "Verified named graduates and endowment comparison" not in page
+    main = page[page.index("<main"):]
+    assert main.index('<h2 id="alumni-h">Alumni and endowment</h2>') < main.index('class="scoreboard"')
+    assert 'class="category-nav"' not in page and "Alumni categories" not in page
+
+
+def scoreboard_table(page):
+    return page[page.index('<table class="scoreboard">'):page.index("</table>")]
+
+
+def test_scoreboard_is_a_real_table_with_one_linked_row_per_card_and_endowment_first():
+    page = committed_page()
+    table = scoreboard_table(page)
+    ids = re.findall(r'<tr><th scope="row"><a href="#([^"]+)">', table)
+    cards = re.findall(r'<section class="sport alumni-card" id="([^"]+)"', page)
+    assert ids[0] == "endowment" and ids[1:] == cards and len(cards) == 10
+    for target in ids:
+        assert f'id="{target}"' in page
+    assert "<caption>" in table and table.count('scope="col"') == 3 and table.count('scope="row"') == 11
+    first = re.findall(r"<tr>.*?</tr>", table)[1]
+    assert "$543,000" in first and "$511,000" in first
+
+
+def test_scoreboard_marks_the_larger_count_in_its_school_accent_and_leaves_ties_plain():
+    table = scoreboard_table(committed_page())
+    senators = re.search(r'<tr><th scope="row"><a href="#senators">.*?</tr>', table).group(0)
+    assert 'class="score lead lead-depauw"><strong>8</strong><span class="sr-only"> (higher)</span>' in senators
+    assert '<td class="score">3</td>' in senators
+    rhodes = re.search(r'<tr><th scope="row"><a href="#rhodes-scholars">.*?</tr>', table).group(0)
+    assert 'lead lead-wabash"><strong>9</strong>' in rhodes
+    endow = re.search(r'<tr><th scope="row"><a href="#endowment">.*?</tr>', table).group(0)
+    assert 'lead-depauw"><strong>$543,000' in endow
+    tie = read_data()
+    murad = next(p for p in tie["people"] if p["id"] == "ferid-murad")
+    tie["people"].append(dict(copy.deepcopy(murad), id="ferid-murad-2", school="wabash"))
+    tied = alumni.render_page(alumni.validate_alumni(tie), alumni.validate_endowment(read_endowment()),
+                              head_html="<head></head>")
+    row = re.search(r'<tr><th scope="row"><a href="#nobel">.*?</tr>', scoreboard_table(tied)).group(0)
+    assert "lead" not in row and row.count('<td class="score">1</td>') == 2
+
+
+def test_no_overall_alumni_score_or_leads_line_appears():
+    text = visible_text(committed_page())
+    assert "There is no overall alumni score." in text
+    assert not re.search(r"leads in \d+|overall (winner|leader|total)|total graduates|categories led", text, re.I)
+    assert "All head-to-head" not in text
+
+
+def test_count_tiles_use_the_athletics_tile_with_a_plural_aware_label():
+    page = committed_page()
+    assert ('<div class="tile tile-depauw"><span class="tile-name">DePauw</span><span class="tile-num">8</span>'
+            '<span class="tile-label">senators</span></div>') in page
+    assert '<span class="tile-num">1</span><span class="tile-label">Nobel laureate</span>' in page
+    assert '<span class="tile-num">0</span><span class="tile-label">Nobel laureates</span>' in page
+    zeros = sum(1 for c in alumni.counts(read_data()).values() for n in c.values() if n == 0)
+    assert zeros == 3 and page.count("No qualifying graduates found in the reviewed sources.") == zeros
+    assert "DePauw (" not in page and "Wabash (" not in page
+    assert set(alumni.TILE_LABELS) == {c["id"] for c in read_data()["categories"]}
+
+
+def test_a_category_without_a_tile_label_is_rejected_loudly():
+    data = read_data()
+    data["categories"][0]["id"] = "new-thing"
+    for person in data["people"]:
+        person["categories"] = ["new-thing" if c == "nobel" else c for c in person["categories"]]
+        person["qualifications"] = {("new-thing" if c == "nobel" else c): q
+                                    for c, q in person["qualifications"].items()}
+    with pytest.raises(alumni.AlumniError, match="no count-tile label"):
+        alumni.validate_alumni(data)
+
+
+def test_each_category_heading_links_to_its_own_existing_anchor():
+    page = committed_page()
+    assert '<section class="sport alumni-card" id="senators" aria-labelledby="senators-h">' in page
+    assert '<h2><a class="permalink" id="senators-h" href="#senators">U.S. senators</a></h2>' in page
+    assert '<h2><a class="permalink" id="endowment-h" href="#endowment">Endowment</a></h2>' in page
+    css = (ROOT / "static" / "styles.css").read_text(encoding="utf-8")
+    assert re.search(r"\.sport[^{]*\.overall[^{]*\{ scroll-margin-top: 1rem; \}", css)
+
+
+def test_every_card_and_the_endowment_card_offer_a_prefilled_correction_form():
+    page = committed_page()
+    base = "https://github.com/jacksonmote/DePauw-vs-Wabash-web/issues/new?template=alumni-correction.yml"
+    assert alumni.REPO_URL == render.REPO_URL
+    assert page.count("Suggest a correction</a>") == 11
+    assert f'href="{base}&amp;title=Alumni%20correction%3A%20U.S.%20senators&amp;category=U.S.%20senators"' in page
+    assert 'category=Endowment"' in page
+    assert alumni.correction_url("Rhodes Scholars") == (
+        f"{base}&title=Alumni%20correction%3A%20Rhodes%20Scholars&category=Rhodes%20Scholars")
+
+
+def test_the_alumni_issue_form_asks_for_the_right_fields_and_nothing_personal():
+    form = (ROOT / ".github" / "ISSUE_TEMPLATE" / "alumni-correction.yml").read_text(encoding="utf-8")
+    for field in ("id: school", "id: category", "id: person", "id: what_is_wrong", "id: source_link"):
+        assert field in form
+    assert re.search(r"- type: input\s+id: category", form)        # an input, so ?category= prefills it
+    assert "someone missing" in form and "This issue will be public" in form
+    config = (ROOT / ".github" / "ISSUE_TEMPLATE" / "config.yml").read_text(encoding="utf-8")
+    assert "blank_issues_enabled: false" in config
+
+
+def test_the_alumni_footer_is_unchanged_by_the_polish():
+    page = committed_page()
+    footer = page[page.index('<footer class="site-footer">'):]
+    assert footer == (
+        '<footer class="site-footer"><div class="wrap"><p class="footer-links"><a href="../">Athletics</a> · '
+        '<a href="./" aria-current="page">Alumni</a> · <a href="../how-it-works/">How the athletics numbers work</a> · '
+        '<a href="https://github.com/jacksonmote/DePauw-vs-Wabash-web">Code and data on GitHub</a></p>\n'
+        '<p>Alumni and endowment records use manually reviewed sources; athletic data has its own update record and scope.</p>\n'
+        '<p>Unofficial fan site, not affiliated with DePauw University or Wabash College.</p>'
+        '<p class="copyright">© 2026 Jackson Mote</p></div></footer>\n</body>\n</html>\n')
+
+
+def test_sitemap_lastmod_for_the_alumni_page_follows_the_newest_verified_date(tmp_path):
+    alumni_data, endowment = read_data(), read_endowment()
+    alumni_data["verified_at"], endowment["verified_at"] = "2026-11-02", "2026-11-09"
+    a, e = tmp_path / "alumni.json", tmp_path / "endowment.json"
+    a.write_text(json.dumps(alumni_data), encoding="utf-8")
+    e.write_text(json.dumps(endowment), encoding="utf-8")
+    out = tmp_path / "site"
+    render.build(render.DATA, out, alumni_path=a, endowment_path=e)
+    sitemap = (out / "sitemap.xml").read_text(encoding="utf-8")
+    assert "<loc>https://depauwvswabash.com/alumni/</loc><lastmod>2026-11-09</lastmod>" in sitemap

@@ -193,3 +193,36 @@ def test_the_csp_allows_the_manifest_and_nothing_extra(tmp_path):
     assert "manifest-src 'self'" in csp and "img-src 'self'" in csp and "default-src 'none'" in csp
     assert "script-src" not in csp and "unsafe" not in csp
     assert "style=" not in index                      # style-src 'self' would block inline styles
+
+
+ALUMNI_VALUES = [("DePauw", "$543,000"), ("Wabash", "$511,000")]
+
+
+def test_the_alumni_card_is_1200_by_630_deterministic_small_and_without_metadata():
+    a, b = images.alumni_og_image(ALUMNI_VALUES), images.alumni_og_image(ALUMNI_VALUES)
+    assert a == b and len(a) < 300_000
+    img = Image.open(io.BytesIO(a))
+    assert img.size == (1200, 630) and img.format == "PNG" and set(img.info) <= {"transparency"}
+    assert a != images.og_image(TOTALS, "DePauw")
+    changed = [("DePauw", "$544,000"), ("Wabash", "$511,000")]
+    assert images.alumni_og_image(changed) != a
+    assert images.alumni_og_version(ALUMNI_VALUES) == images.alumni_og_version(list(ALUMNI_VALUES))
+    assert images.alumni_og_version(ALUMNI_VALUES) != images.alumni_og_version(changed)
+
+
+def test_the_alumni_page_has_a_complete_large_share_card_that_exists_at_its_stated_size(tmp_path):
+    out, _ = build(tmp_path, {"football": football()})
+    page = (out / "alumni" / "index.html").read_text(encoding="utf-8")
+    p = tags(page)
+    og = meta(p, property="og:image")[0]["content"]
+    assert re.fullmatch(r"https://depauwvswabash\.com/alumni-og-image\.png\?v=[0-9a-f]{8}", og)
+    assert meta(p, name="twitter:card")[0]["content"] == "summary_large_image"
+    assert meta(p, name="twitter:image")[0]["content"] == og
+    assert meta(p, property="og:image:type")[0]["content"] == "image/png"
+    alt = meta(p, property="og:image:alt")[0]["content"]
+    assert "$543,000" in alt and "$511,000" in alt and "leads" not in alt.lower()
+    img = Image.open(site_path(out, og))
+    assert img.size == (int(meta(p, property="og:image:width")[0]["content"]),
+                        int(meta(p, property="og:image:height")[0]["content"])) == (1200, 630)
+    home = meta(tags((out / "index.html").read_text(encoding="utf-8")), property="og:image")[0]["content"]
+    assert home != og and "og-image.png" in home                # the athletics card is untouched

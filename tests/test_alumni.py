@@ -537,3 +537,33 @@ def test_invalid_comparable_basis_data_is_rejected(mutation, message):
 def test_the_adjusted_figure_is_calculated_not_stored():
     raw = json.dumps(read_endowment())
     assert "989973265" not in raw and "516000" not in raw and "516,000" not in raw
+
+
+# ---------------------------------------------------------------------------------------- the context note
+
+def test_the_context_note_sits_directly_under_the_scoreboard_and_says_what_counts_are_not_adjusted_for():
+    page = committed_page()
+    note = ("Wabash has always been a men’s college; DePauw has admitted women since 1867 and today enrolls about "
+            "twice as many students. Counts are of named graduates and aren’t adjusted for either difference.")
+    assert f'</table>\n<p class="alumni-context">{note}</p>\n<p class="alumni-method">' in page
+    assert page.count("alumni-context") == 1
+
+
+def test_about_twice_as_many_is_built_from_the_enrollment_figures():
+    endowment = read_endowment()
+    assert "about twice as many" in alumni.context_note(endowment)          # 1,917 against 866
+    endowment["schools"]["depauw"]["enrollment"]["count"] = 2600
+    assert "about 3 times as many" in alumni.context_note(endowment)
+    endowment["schools"]["depauw"]["enrollment"]["count"] = 1300
+    assert "about 1.5 times as many" in alumni.context_note(endowment)
+    endowment["schools"]["depauw"]["enrollment"]["count"] = 900
+    assert "about as many" in alumni.context_note(endowment)
+    endowment["schools"]["depauw"]["enrollment"]["count"] = 1732
+    assert "about twice as many" in alumni.context_note(endowment)
+
+
+def test_the_note_is_in_the_page_for_changed_data():
+    endowment = read_endowment()
+    endowment["schools"]["depauw"]["enrollment"]["count"] = 2600
+    page = page_for(alumni.validate_alumni(read_data()), alumni.validate_endowment(endowment))
+    assert "today enrolls about 3 times as many students" in page and "twice" not in page[:page.index("</table>") + 400]

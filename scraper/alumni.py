@@ -392,6 +392,29 @@ def _score_cell(school: str, text: str, lead: bool) -> str:
     return f'<td class="score">{_esc(text)}</td>'
 
 
+# DePauw's first women graduates came in 1867, and Wabash has always been all-male: history, not data that changes.
+WOMEN_ADMITTED_YEAR = 1867
+
+
+def size_phrase(depauw: int, wabash: int) -> str:
+    """How much larger DePauw's enrollment is, in words, from the two headcounts ("about twice as many")."""
+    ratio = depauw / wabash
+    whole = round(ratio)
+    if whole >= 2 and abs(ratio - whole) / whole <= 0.15:
+        return "about twice as many" if whole == 2 else f"about {whole} times as many"
+    if ratio >= 1.15:
+        return f"about {ratio:.1f} times as many"
+    return "about as many" if ratio >= 0.85 else "fewer"
+
+
+def context_note(endowment: dict) -> str:
+    """The sentence under the scoreboard: the two differences the counts do not adjust for."""
+    d, w = (endowment["schools"][k]["enrollment"]["count"] for k in ("depauw", "wabash"))
+    return (f"Wabash has always been a men’s college; DePauw has admitted women since {WOMEN_ADMITTED_YEAR} and "
+            f"today enrolls {size_phrase(d, w)} students. Counts are of named graduates and aren’t adjusted "
+            f"for either difference.")
+
+
 def scoreboard(categories: list, counts_by_id: dict, per: dict, even: bool = False) -> str:
     """One row per category: the two counts, the larger one marked in its school's accent (and in bold, and
     for screen readers), ties plain. The endowment per student comes first. There is deliberately no total."""
@@ -488,6 +511,7 @@ def render_page(data: dict, endowment: dict, *, head_html: str, footer_html: str
         '<p class="alumni-lede">Named graduates in award and public-service categories, and endowment per student, '
         'for DePauw and Wabash.</p>',
         scoreboard(categories, counts_by_id, per, even),
+        f'<p class="alumni-context">{_esc(context_note(endowment))}</p>',
         f'<p class="alumni-method">Counts show named graduates verified in the reviewed sources. '
         f'Endowment per student: audited '
         f'{_esc(endowment["fiscal_year"])} endowment divided by {_esc(next(iter(endowment["schools"].values()))["enrollment"]["term"].lower())} '

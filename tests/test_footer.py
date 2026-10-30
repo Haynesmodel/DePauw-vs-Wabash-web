@@ -64,9 +64,9 @@ def test_every_page_has_the_shared_lines_in_order_and_links_to_its_own_how_page(
 
 
 @pytest.mark.parametrize("name", PAGES)
-def test_the_mens_note_shows_on_every_page_except_the_alumni_pages(site, name):
+def test_the_mens_note_shows_on_the_athletics_pages_only(site, name):
     f = footer(site, name)
-    assert (MEN_ONLY in f) == (PAGES[name][2] != "alumni")
+    assert (MEN_ONLY in f) == (PAGES[name][2] == "athletics")
     assert "Only men’s sports are compared because" not in f
 
 
@@ -101,6 +101,19 @@ def test_the_alumni_footer_has_the_alumni_data_block_and_nothing_athletics_only(
     for athletics_only in ATHLETICS_ONLY:
         assert athletics_only not in f, athletics_only
     assert "Alumni and endowment records use manually reviewed sources" not in f
+
+
+@pytest.mark.parametrize("name", [n for n, p in PAGES.items() if p[2] == "neutral"])
+def test_the_neutral_footer_is_only_the_shared_lines(site, name):
+    f = footer(site, name)
+    assert f == ('<footer class="site-footer">\n<div class="wrap">\n<p class="footer-links">'
+                 f'<a href="{PAGES[name][0]}how-it-works/">How the numbers work</a> · '
+                 f'<a href="{render.REPO_URL}">Built in the open: code and data on GitHub</a></p>\n'
+                 f'<p>{render.DISCLAIMER}</p>\n<p class="copyright">© 2026 Jackson Mote</p>\n'
+                 '</div>\n</footer>\n</body>\n</html>\n')
+    for athletics_only in ATHLETICS_ONLY:
+        assert athletics_only not in f
+    assert "alumni.json" not in f and "Records last verified" not in f and 'class="sources"' not in f
 
 
 def test_the_records_verified_date_is_the_newest_of_the_two_curated_files_in_the_athletics_date_style():

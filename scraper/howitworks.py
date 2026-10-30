@@ -292,6 +292,7 @@ def alumni_content(data: dict, endowment: dict, *, repo_url: str) -> list:
         '<p>Only people who <strong>earned a degree</strong> from the school count. Honorary degrees, attending '
         'without graduating, nominees, finalists, and people who were part of a winning team or film without an '
         'individual prize or office do not. Graduates of any gender count, under the school’s historical names too.</p>',
+        f'<p>The two schools are not the same size or makeup. {esc(alumni_page.context_note(endowment))}</p>',
         '<p>A person counts <strong>once per school and category</strong>. Someone who was both a senator and a '
         'governor appears in both categories, once in each. There is <strong>no overall alumni score</strong>: '
         'the page never adds the categories together or says which school “wins”, because a bigger count in one '

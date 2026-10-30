@@ -200,6 +200,7 @@ main { padding-block: 1.5rem 2.5rem; display: grid; gap: 1.5rem; }
 .alumni-report { margin: 0.75rem 0 0; font-size: 0.9375rem; }
 .endowment:target { outline: 3px solid var(--color-focus); outline-offset: 2px; }
 .alumni-method, .alumni-download { color: var(--color-text-muted); margin: 0; }
+.alumni-context { color: var(--color-text-muted); margin: 0.75rem 0 0.5rem; }
 .alumni-method-details { color: var(--color-text-muted); margin: 0.75rem 0 1.25rem; }
 .alumni-method-details summary { cursor: pointer; font-weight: 650; padding: 0.4rem 0; }
 .alumni-card > p, .endowment > p { margin: 0 0 0.75rem; }

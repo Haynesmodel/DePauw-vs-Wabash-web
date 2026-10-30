@@ -73,8 +73,27 @@ def test_each_page_has_its_own_title_description_canonical_open_graph_and_nav(si
 
 def test_each_page_header_carries_its_halfs_subtitle(site):
     assert alumni.SUBTITLE in read(site, ALUMNI) and render.SUBTITLE not in read(site, ALUMNI)
-    for name in (LANDING, ATHLETICS):
-        assert render.SUBTITLE in read(site, name) and alumni.SUBTITLE not in read(site, name)
+    assert render.SUBTITLE in read(site, ATHLETICS) and alumni.SUBTITLE not in read(site, ATHLETICS)
+
+
+def test_the_neutral_pages_share_a_neutral_subtitle(site):
+    assert render.NEUTRAL_SUBTITLE == ("DePauw and Wabash, side by side: head-to-head athletics, notable graduates "
+                                       "and endowments.")
+    for name in (LANDING, "404.html"):
+        page = read(site, name)
+        assert f'<p class="subtitle">{render.NEUTRAL_SUBTITLE}</p>' in page
+        assert render.SUBTITLE not in page and alumni.SUBTITLE not in page and "men’s sports" not in page
+
+
+def test_the_landing_and_404_pages_link_back_to_both_halves(site):
+    landing = read(site, LANDING)
+    assert ('<p class="back"><a href="../">← Back to the head-to-head records</a> · '
+            '<a href="../alumni/">Back to the alumni and endowment page</a></p>') in landing
+    page = read(site, "404.html")
+    assert 'href="/">Back to the head-to-head records</a>' in page
+    assert 'href="/alumni/">Back to the alumni and endowment page</a>' in page
+    assert ATHLETICS and 'class="back"><a href="../../">← Back to the head-to-head records</a></p>' in read(site, ATHLETICS)
+    assert 'class="back"><a href="../../alumni/">← Back to the alumni and endowment page</a></p>' in read(site, ALUMNI)
 
 
 def test_titles_are_different_on_all_three_pages(site):
@@ -120,6 +139,14 @@ def test_the_alumni_how_page_takes_every_number_from_the_data_files(site):
     assert "Oct 29, 2026" in page and "Jun 30, 2025" in page and "fall 2024" in page
     for item in e["schools"].values():
         assert f'href="{item["enrollment"]["source_url"]}"' in read(site, ALUMNI)
+
+
+def test_the_alumni_how_page_carries_the_size_and_history_context_under_who_counts(site):
+    page = read(site, ALUMNI)
+    _, e = data()
+    note = alumni.context_note(e)
+    who = page[page.index("<h3>Who counts</h3>"):page.index("<h3>The categories</h3>")]
+    assert htmllib.escape(note, quote=False) in who and "about twice as many" in note
 
 
 def test_the_alumni_how_page_changes_when_the_data_changes(tmp_path):

@@ -1,9 +1,14 @@
 """
-The "How the numbers work" pages (/how-it-works/athletics/ and /how-it-works/alumni/, plus the landing page at /how-it-works/): the same facts as the README's merge section, written for
-fans. Every number comes from the data (or from the constants in merge.py and gameday.py that the merge
-actually uses), never from this file, so the page cannot go out of date when the data changes.
+The "How the numbers work" pages, written for fans. Three pages share render.py's how_page() shell:
+  /how-it-works/            landing_content():       one line and a link for each of the two pages below
+  /how-it-works/athletics/  content():               the same facts as the README's merge section
+  /how-it-works/alumni/     alumni_content():        who counts, sourcing, the endowment basis, enrollment,
+                                                     rounding, the "about even" rule, the size and history note
+Every number comes from the data (alumni.json and endowment.json through the alumni.py functions, series.json,
+overrides.json, or the constants in merge.py and gameday.py that the code actually uses), never from this file,
+so a page cannot go out of date when the data changes.
 
-Standard library only; render.py supplies the page shell and footer.
+render.py supplies the page shell and footer.
 """
 
 from __future__ import annotations

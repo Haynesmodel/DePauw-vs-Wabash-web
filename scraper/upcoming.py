@@ -1,5 +1,6 @@
 """
-Parser for DePauw's Sidearm schedule pages (https://depauwtigers.com/sports/<sport>/schedule).
+Parser for the Sidearm schedule pages of both schools (https://depauwtigers.com/sports/<sport>/schedule and
+https://sports.wabash.edu/sports/<slug>/schedule, which share one layout), and the cross-check of the two.
 
 Finds the games against one opponent (matched by the opponent id Sidearm puts on each game, never
 by name) that have not been played yet, and returns them as plain dicts for data/upcoming.json.
@@ -8,7 +9,11 @@ The yearless schedule URL always serves the current season, so sources.json need
 The page's embedded JSON is a widget feed cut off after 20 games, so it is not used; everything
 comes from the visible game list.
 
-A game is kept when it has no result and is not canceled. Whether it is "upcoming" or
+A game is kept when it has no result, is not canceled and its opponent name is not a multi-team event
+(is_multi_team: invitationals, relays, championships and the like, in every sport; swimming counts dual meets
+only). merge_schedules compares the two schools' lists (a game on both shows as DePauw lists it, any difference
+only logs a warning; a game only Wabash lists is marked as such), and carry_over keeps a game dated today or
+yesterday that has just left a schedule until the history has its result, so the game-day window stays open. Whether a game is "upcoming" or
 "result pending" is decided when the page is rendered, against today's date, not here.
 """
 

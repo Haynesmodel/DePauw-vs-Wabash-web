@@ -1,10 +1,16 @@
 """
 Static site generator for the DePauw vs. Wabash page.
 
-Reads data/series.json (and, if present, data/upcoming.json and the uncommitted .checked-at)
-and writes a finished site to site/: index.html, 404.html, styles.css, the icons and og-image.png
-(drawn by images.py), site.webmanifest, games.csv, data/series.json, robots.txt, sitemap.xml,
-.nojekyll. No client-side JavaScript; Pillow is needed only for the images.
+Reads data/series.json (and, if present, data/upcoming.json and the uncommitted .checked-at) plus the
+hand-curated data/alumni.json and data/endowment.json, and writes a finished site to site/:
+  index.html                      the athletics home page
+  alumni/index.html               the alumni and endowment page (alumni.py)
+  how-it-works/index.html         landing page; how-it-works/athletics/ and how-it-works/alumni/ (howitworks.py)
+  404.html                        root-relative URLs, noindex
+  styles.css, the icons, og-image.png and alumni-og-image.png (drawn by images.py), site.webmanifest,
+  games.csv, data/series.json, data/alumni.json, data/endowment.json, robots.txt, sitemap.xml, .nojekyll
+Every page gets its header and nav (site_nav), head tags and footer (site_footer: a page-specific data block,
+then the shared lines) from the functions here. No client-side JavaScript; Pillow is needed only for the images.
 
 Every figure on the page comes from the data file. Anything missing or inconsistent
 raises DataError and the script exits non-zero, so a bad data file can never produce

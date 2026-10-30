@@ -1,5 +1,6 @@
 """
-Generated images: the 1200x630 link-preview card and the home-screen and browser icons.
+Generated images: the two 1200x630 link-preview cards (og_image for the athletics pages, alumni_og_image for
+the alumni pages, each with a version hash for its ?v= query) and the home-screen and browser icons.
 
 Everything is drawn with Pillow from the bundled Barlow Condensed font (SIL Open Font License, see
 static/fonts/OFL.txt), never from whatever fonts the machine happens to have, so the same data gives the

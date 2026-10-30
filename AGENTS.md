@@ -14,7 +14,7 @@ Commands are in README "Run it locally". Run them from the repo root.
 
 1. `python -m pytest -q tests`
 2. `python scraper/render.py`
-3. html-validate on all six built pages (the command in README and `.github/workflows/checks.yml`).
+3. `node --check static/easter-eggs.js`, then html-validate on all seven built pages (the commands in README and `.github/workflows/checks.yml`).
 4. The Mermaid diagram check (same two places). GitHub draws with a newer Mermaid than the CLI, so after a diagram change also look at the README on GitHub.
 5. Visible change: look at the result at 375px wide and at desktop width, in light and dark mode, and show it.
 6. Update the README in the same PR. A change to the pipeline, data files, workflows, triggers or game-day behavior also updates the matching README diagram (and the workflow table). Keep the how-it-works text, module docstrings, workflow comments, issue templates and `scraper/sources.json` `_comment` in step with the code.
@@ -43,9 +43,9 @@ Pipeline
 - `render.py --now` is for previews and tests; no workflow may use it.
 
 Site
-- No client-side JavaScript, no inline styles, no third-party requests. Keep the strict CSP (`default-src 'none'`) in `render.py`. No diagrams on the public site.
+- No inline JavaScript or styles and no third-party requests. The one currently approved client-side exception is the deferred, same-origin `static/easter-eggs.js` title entrance on `/`; it opts into `script-src 'self'` only on that page. All six other generated pages remain script-free under the base CSP (`default-src 'none'`). Do not add other client-side code without a maintainer decision. No diagrams on the public site.
 - Every number on a page comes from the data or a named constant. Never hardcode a count, year or size word ("twice").
-- No school logos, wordmarks, seals or mascot art, on pages or in generated images. Keep the site non-commercial (no ads, affiliate links, donations or sales) and not official-looking. Every page keeps the "unofficial fan site, not affiliated" note.
+- No school logos, wordmarks, seals or official mascot art, on pages or in generated images. The one approved original generic tiger drawing is a small easter egg in `static/easter-tiger.svg`; it is not official mascot art and does not appear in generated images. Keep the site non-commercial (no ads, affiliate links, donations or sales) and not official-looking. Every page keeps the "unofficial fan site, not affiliated" note.
 - Text rules: curly apostrophe (’) in visible text, serial comma in lists of three or more, AP-style locations (display only), dates like "Oct 29, 2026". Each page's footer comes from `site_footer()`; add footer content as a block there, never as page HTML.
 - Alumni and endowment data is hand-curated, validated on every build and reviewed in PRs. No overall alumni score. Endowment per student uses one basis (pooled endowment net assets) and the 5% "about even" rule. Do not return to the unadjusted totals without a maintainer decision.
 

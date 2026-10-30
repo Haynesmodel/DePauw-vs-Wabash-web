@@ -71,6 +71,12 @@ def test_each_page_has_its_own_title_description_canonical_open_graph_and_nav(si
     assert f"<loc>{SITE_URL}{path}</loc>" in read(site, "sitemap.xml")
 
 
+def test_each_page_header_carries_its_halfs_subtitle(site):
+    assert alumni.SUBTITLE in read(site, ALUMNI) and render.SUBTITLE not in read(site, ALUMNI)
+    for name in (LANDING, ATHLETICS):
+        assert render.SUBTITLE in read(site, name) and alumni.SUBTITLE not in read(site, name)
+
+
 def test_titles_are_different_on_all_three_pages(site):
     titles = {re.search(r"<title>(.*?)</title>", read(site, n)).group(1) for n in (LANDING, ATHLETICS, ALUMNI)}
     assert len(titles) == 3

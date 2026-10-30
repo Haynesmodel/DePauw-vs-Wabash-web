@@ -1008,7 +1008,7 @@ def athletics_preview(data: dict, now: dt.datetime, upcoming: dict) -> dict:
 
 
 def how_page(title: str, description: str, *, prefix: str, path: str, current: str, preview: dict,
-             back: tuple, body: list, footer: list) -> str:
+             back: tuple, body: list, footer: list, subtitle: str = SUBTITLE) -> str:
     """The shell the three how-it-works pages share: header, nav, back link, the body, a footer."""
     return "\n".join([
         head(title, description, prefix=prefix, canonical=SITE_URL + path, preview=preview),
@@ -1017,7 +1017,7 @@ def how_page(title: str, description: str, *, prefix: str, path: str, current: s
         '<div class="wrap">',
         '<h1>DePauw vs. Wabash</h1>',
         site_nav(prefix, current),
-        f'<p class="subtitle">{esc(SUBTITLE)}</p>',
+        f'<p class="subtitle">{esc(subtitle)}</p>',
         '</div>',
         '</header>',
         '<main class="wrap">',
@@ -1059,7 +1059,7 @@ def render_how_alumni(alumni_data: dict, endowment: dict, now: dt.datetime | Non
         howitworks.ALUMNI_TITLE, description, prefix="../../", path=HOW_ALUMNI_PATH, current="alumni",
         preview=alumni_preview_info(endowment), back=("../../alumni/", "← Back to the alumni and endowment page"),
         body=howitworks.alumni_content(alumni_data, endowment, repo_url=REPO_URL),
-        footer=site_footer(now, prefix="../../", alumni=(alumni_data, endowment)))
+        footer=site_footer(now, prefix="../../", alumni=(alumni_data, endowment)), subtitle=alumni_page.SUBTITLE)
 
 
 def render_how_landing(data: dict, now: dt.datetime | None = None, upcoming: dict | None = None) -> str:

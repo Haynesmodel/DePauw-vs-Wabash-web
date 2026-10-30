@@ -332,7 +332,7 @@ def printed_total(games: list):
 
 def total_warning(games: list, summary: Summary, school: str, sport: str):
     """A warning (a dict) when the page's own total disagrees with its parsed games, otherwise None. Only a
-    warning for now: the page's data is kept and the run stays green (see the backlog in CLAUDE.md)."""
+    warning for now: the page's data is kept and the run stays green (see "How the data updates" in the README)."""
     if summary.total is None:
         return None
     parsed = printed_total(games)

@@ -5,6 +5,8 @@ from __future__ import annotations
 import datetime as dt
 import html
 import json
+import re
+from decimal import Decimal, ROUND_HALF_UP
 from pathlib import Path
 from urllib.parse import urlparse
 
@@ -143,6 +145,11 @@ def validate_alumni(data: dict) -> dict:
                 intervals[i][0] <= intervals[i - 1][1] for i in range(1, len(intervals))
             ):
                 _fail(f"person {pid}.qualifications.{cid}.years must use ordered, non-overlapping ranges")
+            present = qualification.get("present", False)
+            if not isinstance(present, bool):
+                _fail(f"person {pid}.qualifications.{cid}.present must be true or false")
+            if present and (len(years) > 1 and len(years) % 2):
+                _fail(f"person {pid}.qualifications.{cid}.present needs a start year or ordered year ranges")
             source = qualification.get("source")
             if not isinstance(source, dict):
                 _fail(f"person {pid}.qualifications.{cid}.source must have label and url")
@@ -210,6 +217,37 @@ def visible_categories(data: dict) -> list:
     return [c for c in data["categories"] if any(counts_by_id[c["id"]].values())]
 
 
+MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"]
+
+
+def fmt_date(iso: str) -> str:
+    """"Oct 29, 2026": the same style as the athletics page (render.fmt_date; a test keeps them equal).
+    The JSON keeps ISO dates; they never show in the page text."""
+    d = dt.date.fromisoformat(iso)
+    return f"{MONTHS[d.month - 1]} {d.day}, {d.year}"
+
+
+def compact_usd(amount: int) -> tuple[str, str]:
+    """("$1.04", "billion") or ("$443", "million"): billions to two decimals, millions to whole numbers,
+    always from the exact integer (half up), so two figures are rounded the same way."""
+    if amount >= 1_000_000_000:
+        return f"${(Decimal(amount) / 1_000_000_000).quantize(Decimal('0.01'), ROUND_HALF_UP)}", "billion"
+    if amount >= 1_000_000:
+        return f"${(Decimal(amount) / 1_000_000).quantize(Decimal('1'), ROUND_HALF_UP):,}", "million"
+    return f"${amount:,}", ""
+
+
+def degree_label(person: dict) -> str:
+    """"B.A., 1969" when the degree is recorded, "Class of 1885" when only the year is known. A degree
+    text that already names its years ("Literary department (1853), law department (1855)") is not repeated."""
+    degree, year = person["degree"].strip(), person["degree_year"]
+    if degree.lower() == "graduate":
+        return f"Class of {year}"
+    if re.search(r"\b(1[7-9]|20)\d\d\b", degree):
+        return degree
+    return f"{degree}, {year}"
+
+
 def _esc(value):
     return html.escape(str(value), quote=True)
 
@@ -226,7 +264,7 @@ def render_page(data: dict, endowment: dict, *, head_html: str, copyright_year: 
     for category in categories:
         cid = category["id"]
         members = [p for p in data["people"] if cid in p["categories"]]
-        schools_html = []
+        schools_html, tiles_html = [], []
         for school, label in SCHOOLS.items():
             people = [p for p in members if p["school"] == school]
             count = counts_by_id[cid][school]
@@ -234,27 +272,36 @@ def render_page(data: dict, endowment: dict, *, head_html: str, copyright_year: 
                 rows = []
                 for p in people:
                     q = p["qualifications"][cid]
-                    years = (", ".join(str(year) for year in q["years"]) if cid == "astronauts"
-                             else _format_years(q["years"]))
                     evidence = _source(q["source"])
                     if cid == "fortune-500-ceos":
-                        evidence += (f' · {_esc(q["company"])} ranked #{q["rank"]} in the U.S. Fortune 500 '
-                                     f'{q["rank_year"]} ({_source(q["ranking_source"])})')
+                        # the year is the Fortune ranking year, not a tenure, so say so
+                        what = f'{_esc(q["achievement"])} · ranked #{q["rank"]} in the {q["rank_year"]} Fortune 500'
+                        evidence += f' · {_source(q["ranking_source"])}'
+                    else:
+                        years = (", ".join(str(year) for year in q["years"]) if cid == "astronauts"
+                                 else _format_years(q["years"], q.get("present", False)))
+                        what = f'{_esc(q["achievement"])} ({years})'
                     rows.append(
-                        f'<li><strong>{_esc(p["name"])}</strong> · {_esc(p["degree"])} ({p["degree_year"]})'
-                        f'<br>{_esc(q["achievement"])} ({years})'
+                        f'<li><strong>{_esc(p["name"])}</strong> · {_esc(degree_label(p))}'
+                        f'<br>{what}'
                         f'<br>Sources: {_source(p["school_source"])} · {evidence}</li>')
                 details = f'<details><summary>Names and sources</summary><ul>{"".join(rows)}</ul></details>'
             else:
                 details = '<p class="alumni-zero">No qualifying graduates found in the reviewed sources.</p>'
-            schools_html.append(f'<div class="tile tile-{school} alumni-school"><h3 class="tile-name">{label} <span>({count})</span></h3>{details}</div>')
+            schools_html.append(f'<div class="alumni-school alumni-school-{school}"><h3 class="alumni-school-name">{label}</h3>{details}</div>')
+            tiles_html.append(f'<div class="tile tile-{school}"><span class="tile-name">{label}</span>'
+                              f'<span class="tile-num">{count}</span></div>')
         cards.append(f'<section class="sport alumni-card" id="{_esc(cid)}"><h2>{_esc(category["name"])}</h2>'
-                     f'<p>{_esc(category["definition"])}</p><div class="tiles alumni-schools">{"".join(schools_html)}</div></section>')
+                     f'<p>{_esc(category["definition"])}</p><div class="tiles">{"".join(tiles_html)}</div>'
+                     f'<div class="alumni-schools">{"".join(schools_html)}</div></section>')
     endow_cards = []
     for key, label in SCHOOLS.items():
         item = endowment["schools"][key]
+        figure, unit = compact_usd(item["amount_usd"])
         endow_cards.append(f'<div class="tile tile-{key} endowment-value"><h3 class="tile-name">{label}</h3>'
-                           f'<p class="tile-num money">${item["amount_usd"]:,}</p>'
+                           f'<p class="tile-num money">{figure}</p>'
+                           + (f'<p class="money-unit">{unit}</p>' if unit else '') +
+                           f'<p class="money-exact">${item["amount_usd"]:,}</p>'
                            f'<p><a href="{_esc(item["source_url"])}">Source</a></p></div>')
     return "\n".join([
         head_html, '<body>',
@@ -262,12 +309,12 @@ def render_page(data: dict, endowment: dict, *, head_html: str, copyright_year: 
         '<nav class="site-nav" aria-label="Main navigation"><a href="../">Athletics</a> <a href="./" aria-current="page">Alumni</a></nav>',
         '<p class="subtitle">Verified named graduates and endowment comparison</p></div></header>',
         '<main class="wrap alumni-main"><nav class="category-nav" aria-label="Alumni categories"><a href="#endowment">Endowment</a> · ' + links + '</nav>',
-        f'<p class="alumni-method">Counts show named graduates verified in the reviewed sources. Verified {_esc(data["verified_at"])}.</p>',
+        f'<p class="alumni-method">Counts show named graduates verified in the reviewed sources. Verified {_esc(fmt_date(data["verified_at"]))}.</p>',
         '<details class="alumni-method-details"><summary>Who counts and how sources were reviewed</summary>'
         f'<p>{_esc(data["methodology"])} A person may appear in more than one category; each person counts once per school and category. There is no overall alumni score.</p></details>',
         f'<section class="overall endowment" id="endowment"><h2>Endowment</h2>'
-        f'<p>Audited {_esc(endowment["fiscal_year"])} figures as of {_esc(endowment["as_of"])}; reported accounting scopes differ.</p>'
-        f'<div class="tiles endowment-values">{"".join(endow_cards)}</div><p>Verified { _esc(endowment["verified_at"]) }.</p></section>',
+        f'<p>Audited {_esc(endowment["fiscal_year"])} figures as of {_esc(fmt_date(endowment["as_of"]))}; reported accounting scopes differ.</p>'
+        f'<div class="tiles endowment-values">{"".join(endow_cards)}</div><p>Verified {_esc(fmt_date(endowment["verified_at"]))}.</p></section>',
         *cards,
         '<p class="alumni-download">Download the curated records: <a href="../data/alumni.json">alumni.json</a> · '
         '<a href="../data/endowment.json">endowment.json</a> · <a href="../how-it-works/">How the athletics numbers work</a></p>',
@@ -280,9 +327,11 @@ def render_page(data: dict, endowment: dict, *, head_html: str, copyright_year: 
         '</body>', '</html>', ''])
 
 
-def _format_years(years: list[int]) -> str:
+def _format_years(years: list[int], present: bool = False) -> str:
+    """"2025", "1989–1993", "1981–1989, 1993–1995"; with present, the open term reads "2025–present"."""
     if len(years) == 1:
-        return str(years[0])
-    if len(years) == 2:
-        return f"{years[0]}–{years[1]}"
-    return ", ".join(f"{years[i]}–{years[i + 1]}" for i in range(0, len(years), 2))
+        return f"{years[0]}–present" if present else str(years[0])
+    pairs = [f"{years[i]}–{years[i + 1]}" for i in range(0, len(years), 2)]
+    if present:
+        pairs[-1] = f"{years[-2]}–present"
+    return ", ".join(pairs)

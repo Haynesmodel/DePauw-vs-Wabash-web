@@ -1,5 +1,7 @@
 """Curated alumni validation, count derivation, and generated-page integration."""
 import copy
+import html
+import re
 import datetime as dt
 import json
 import sys
@@ -166,9 +168,9 @@ def test_build_emits_navigation_alumni_and_auditable_json(tmp_path):
     assert 'id="endowment"' in page and "$1,041,801,089" in page and "$442,957,416" in page
     assert "reported accounting scopes differ" in page
     assert page.count(">Source</a>") == 2
-    assert "FY2025" in page and "2025-06-30" in page
+    assert "FY2025" in page and "Jun 30, 2025" in page
     assert "<script" not in page
-    assert "Fortune 500 2008" in page and "#340" in page
+    assert "ranked #340 in the 2008 Fortune 500" in page
     assert "https://depauwvswabash.com/alumni/" in sitemap
     assert "© 2026 Jackson Mote" in page
     assert page.count("<!DOCTYPE html>") == 1
@@ -184,3 +186,81 @@ def test_render_escapes_curated_text_and_source_attributes():
                               head_html="<head><title>Test</title></head>")
     assert "<img" not in page
     assert "&lt;img src=x onerror=&quot;alert(1)&quot;&gt;" in page
+
+
+def visible_text(page):
+    return re.sub(r"\s+", " ", html.unescape(re.sub(r"<[^>]+>", " ", page)))
+
+
+def committed_page():
+    return alumni.render_page(alumni.validate_alumni(read_data()), alumni.validate_endowment(read_endowment()),
+                              head_html="<head><title>Test</title></head>")
+
+
+def test_no_iso_date_shows_in_visible_text_and_dates_match_the_athletics_style():
+    text = visible_text(committed_page())
+    assert not re.search(r"\d{4}-\d{2}-\d{2}", text)
+    assert "Verified Oct 29, 2026" in text and "as of Jun 30, 2025" in text
+    for iso in ("2025-06-30", "2026-10-29", "2026-01-05", "1999-12-31"):
+        assert alumni.fmt_date(iso) == render.fmt_date(iso)
+
+
+@pytest.mark.parametrize("amount, expected", [
+    (1_041_801_089, ("$1.04", "billion")), (442_957_416, ("$443", "million")),
+    (1_005_000_000, ("$1.01", "billion")), (999_500_000, ("$1,000", "million")),
+    (442_500_000, ("$443", "million")), (442_499_999, ("$442", "million")), (950_000, ("$950,000", "")),
+])
+def test_compact_endowment_rounds_half_up_from_the_exact_amount(amount, expected):
+    assert alumni.compact_usd(amount) == expected
+
+
+def test_endowment_tiles_show_a_compact_figure_with_the_exact_amount_beneath():
+    page = committed_page()
+    assert '<p class="tile-num money">$1.04</p><p class="money-unit">billion</p><p class="money-exact">$1,041,801,089</p>' in page
+    assert '<p class="tile-num money">$443</p><p class="money-unit">million</p><p class="money-exact">$442,957,416</p>' in page
+
+
+def test_degree_labels_say_what_is_recorded_and_never_the_vague_graduate():
+    people = {p["id"]: p for p in read_data()["people"]}
+    assert alumni.degree_label({"degree": "B.A.", "degree_year": 1969}) == "B.A., 1969"
+    assert alumni.degree_label({"degree": "Graduate", "degree_year": 1885}) == "Class of 1885"
+    assert alumni.degree_label({"degree": "Law department graduate", "degree_year": 1866}) == "Law department graduate, 1866"
+    assert alumni.degree_label(people["mike-braun"]) == "Class of 1976"
+    demotte = next(p for p in people.values() if p["degree"].startswith("Literary department"))
+    assert alumni.degree_label(demotte) == demotte["degree"]          # already names its years
+    page = committed_page()
+    assert "Graduate (" not in page and "Class of 1976" in page and "B.A., 1955" in page
+
+
+def test_open_terms_read_present_and_only_braun_has_one():
+    data = read_data()
+    open_terms = [(p["id"], c) for p in data["people"] for c, q in p["qualifications"].items() if q.get("present")]
+    assert open_terms == [("mike-braun", "governors")]
+    page = committed_page()
+    assert "Governor of Indiana (2025–present)" in page and "U.S. senator from Indiana (2019–2025)" in page
+    assert alumni._format_years([2025], True) == "2025–present"
+    assert alumni._format_years([1981, 1989, 1993, 2001], True) == "1981–1989, 1993–present"
+    assert alumni._format_years([1989, 1993]) == "1989–1993"
+
+
+def test_present_must_be_a_boolean_on_a_start_year_or_ranges():
+    data = read_data()
+    braun = next(p for p in data["people"] if p["id"] == "mike-braun")
+    braun["qualifications"]["governors"]["present"] = "yes"
+    with pytest.raises(alumni.AlumniError, match="present must be true or false"):
+        alumni.validate_alumni(data)
+
+
+def test_fortune_entries_show_the_ranking_year_as_a_ranking_not_a_tenure():
+    page = committed_page()
+    assert "CEO of Lincoln National Corporation · ranked #199 in the 1996 Fortune 500" in page
+    assert "Lincoln National Corporation (1996)" not in page
+
+
+def test_name_lists_stack_below_600px_while_the_count_tiles_stay_side_by_side():
+    css = (ROOT / "static" / "styles.css").read_text(encoding="utf-8")
+    assert re.search(r"\.alumni-schools \{[^}]*grid-template-columns: minmax\(0, 1fr\);", css)
+    assert re.search(r"@media \(min-width: 37\.5rem\) \{\s*\.alumni-schools \{ grid-template-columns: repeat\(2", css)
+    page = committed_page()
+    assert page.count('<div class="alumni-schools">') == len(alumni.visible_categories(read_data()))
+    assert "money { overflow-wrap" not in css and "white-space: nowrap" in css

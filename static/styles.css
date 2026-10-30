@@ -189,13 +189,26 @@ main { padding-block: 1.5rem 2.5rem; display: grid; gap: 1.5rem; }
 .alumni-method-details { color: var(--color-text-muted); margin: 0.75rem 0 1.25rem; }
 .alumni-method-details summary { cursor: pointer; font-weight: 650; padding: 0.4rem 0; }
 .alumni-card > p, .endowment > p { margin: 0 0 0.75rem; }
-.alumni-school, .endowment-value { min-width: 0; }
-.alumni-school .tile-name, .endowment-value .tile-name { margin: 0; }
+.endowment-value { min-width: 0; }
+.endowment-value .tile-name { margin: 0; }
+.endowment-value p { margin: 0.25rem 0; }
+.endowment-values .tile-num { font-size: clamp(1.375rem, 7vw, 2.25rem); }
+.money, .money-unit, .money-exact { white-space: nowrap; }
+.money-unit { font-weight: 600; }
+.money-exact, .money-unit + .money-exact { color: var(--color-text-muted); font-size: 0.875rem; }
+/* Name lists: side by side from 600px, stacked at full width below it */
+.alumni-schools { display: grid; grid-template-columns: minmax(0, 1fr); gap: 0.5rem 0.75rem; margin-top: 0.75rem; }
+.alumni-school { min-width: 0; }
+.alumni-school-name { font-size: 1rem; margin: 0; }
+.alumni-school-depauw .alumni-school-name { color: var(--color-depauw-text); }
+.alumni-school-wabash .alumni-school-name { color: var(--color-wabash-text); }
 .alumni-school details summary { cursor: pointer; font-weight: 600; padding: 0.4rem 0; }
 .alumni-school ul { margin: 0.5rem 0 0; padding-left: 1.25rem; }
 .alumni-school li { margin-bottom: 0.75rem; overflow-wrap: anywhere; }
-.alumni-zero, .endowment-value p { margin: 0.25rem 0; overflow-wrap: anywhere; }
-.money { overflow-wrap: anywhere; }
+.alumni-zero { margin: 0.25rem 0; color: var(--color-text-muted); }
+@media (min-width: 37.5rem) {
+  .alumni-schools { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
 
 @media (forced-colors: active) {
   .site-nav a[aria-current="page"] { outline: 1px solid currentColor; outline-offset: 3px; }

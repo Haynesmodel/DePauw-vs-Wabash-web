@@ -21,7 +21,8 @@ import gameday
 import merge
 
 TITLE = "How the athletics numbers work | DePauw vs. Wabash"
-H1 = "How the numbers work"
+H1 = "How the numbers work"                         # the landing page
+H1_ATHLETICS = "How the athletics numbers work"     # the same words as TITLE and the landing-page link
 
 MONTH_ABBR = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"]
 
@@ -127,7 +128,7 @@ def content(data: dict, rules: dict, kept: int, *, sources_html: str, not_includ
     overrides_url = f"{repo_url}/blob/main/data/overrides.json"
     out = [
         '<section class="prose" aria-labelledby="how-h">',
-        f'<h2 id="how-h">{esc(H1)}</h2>',
+        f'<h2 id="how-h">{esc(H1_ATHLETICS)}</h2>',
         '<p>This site adds up every game DePauw and Wabash have played against each other. Here is where '
         'the numbers come from and what the site does when the two schools’ records do not line up.</p>',
 

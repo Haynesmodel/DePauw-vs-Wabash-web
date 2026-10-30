@@ -112,7 +112,7 @@ def test_athletics_pages_use_the_athletics_share_image_and_alumni_pages_the_alum
 def test_the_athletics_how_page_is_the_old_page_with_new_links(site):
     page = read(site, ATHLETICS)
     assert howitworks.TITLE in htmllib.unescape(page)
-    assert '<h2 id="how-h">How the numbers work</h2>' in page
+    assert '<h2 id="how-h">How the athletics numbers work</h2>' in page
     assert 'href="../../">← Back to the head-to-head records</a>' in page
     assert "Disputed games right now:" in text_of(page) and "Rulings made so far:" in text_of(page)
 
@@ -230,7 +230,8 @@ def test_the_landing_page_footer_does_not_link_to_itself_and_every_other_page_ke
     landing = read(site, LANDING)
     footer = landing[landing.index('<footer class="site-footer">'):]
     assert "How the numbers work" not in footer and "Built in the open" in footer
-    assert "How the numbers work" in read(site, "404.html")[read(site, "404.html").index('<footer'):]
+    notfound = read(site, "404.html")
+    assert "How the numbers work" in notfound[notfound.index('<footer'):] and notfound.count("How the numbers work") == 1
     for name in ("index.html", "alumni/index.html", ATHLETICS, ALUMNI):
         page = read(site, name)
         assert "How the numbers work</a> · " in page[page.index('<footer class="site-footer">'):], name
@@ -248,3 +249,23 @@ def test_every_back_link_on_the_site_has_the_arrow_and_one_of_the_two_wordings(s
                 seen += 1
         assert not re.search(r">\s*Back to the ", text), page      # no back link without the arrow, wherever it sits
     assert seen == 6          # the athletics and alumni how pages 1 each, the landing page 2, 404 2
+
+
+def test_each_how_page_heading_matches_its_title_and_the_landing_link(site):
+    """The heading, the <title> and the landing-page link say the same thing: 'How the athletics numbers work' and
+    'How the alumni numbers work'; the landing page itself is 'How the numbers work'."""
+    landing = read(site, LANDING)
+    for name, words, href in ((ATHLETICS, "athletics", "athletics/"), (ALUMNI, "alumni", "alumni/")):
+        page = read(site, name)
+        heading = f"How the {words} numbers work"
+        assert f'<h2 id="how-h">{heading}</h2>' in page
+        assert re.search(r"<title>(.*?)</title>", page).group(1).startswith(heading)
+        assert f'<a href="{href}">{heading}</a>' in landing
+    assert '<h2 id="how-h">How the numbers work</h2>' in landing
+
+
+def test_the_404_page_has_no_body_link_to_how_the_numbers_work_only_the_footer_one(site):
+    page = read(site, "404.html")
+    main = page[page.index("<main"):page.index("</main>")]
+    assert "How the numbers work" not in main and main.count("← Back to") == 2
+    assert page.count('>How the numbers work</a>') == 1

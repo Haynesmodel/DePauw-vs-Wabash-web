@@ -82,8 +82,8 @@ def test_each_card_reports_with_its_own_sport_prefilled(tmp_path):
     url = urlparse(link)
     assert (url.scheme, url.netloc, url.path) == ("https", "github.com", "/jacksonmote/DePauw-vs-Wabash-web/issues/new")
     q = parse_qs(url.query)
-    assert q["template"] == ["data-correction.yml"] and q["sport"] == ["Men's Basketball"]
-    assert q["title"] == ["Data correction: Men's Basketball"]
+    assert q["template"] == ["data-correction.yml"] and q["sport"] == ["Men’s Basketball"]
+    assert q["title"] == ["Data correction: Men’s Basketball"]
     assert html.count("Report a data error</a>") == 3   # two cards and the footer
 
 
@@ -107,7 +107,7 @@ def test_the_issue_form_asks_for_sport_date_school_problem_and_source_only():
 def test_the_issue_form_asks_which_schools_record_looks_wrong():
     which = next(b for b in form()["body"] if b.get("id") == "which_record")
     assert which["type"] == "dropdown"
-    assert which["attributes"]["options"] == ["DePauw's record", "Wabash's record", "Both", "Not sure"]
+    assert which["attributes"]["options"] == ["DePauw’s record", "Wabash’s record", "Both", "Not sure"]
 
 
 def test_the_issue_form_asks_for_nothing_personal_and_says_it_is_public():

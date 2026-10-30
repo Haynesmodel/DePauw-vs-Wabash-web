@@ -1,10 +1,16 @@
 """
 Static site generator for the DePauw vs. Wabash page.
 
-Reads data/series.json (and, if present, data/upcoming.json and the uncommitted .checked-at)
-and writes a finished site to site/: index.html, 404.html, styles.css, the icons and og-image.png
-(drawn by images.py), site.webmanifest, games.csv, data/series.json, robots.txt, sitemap.xml,
-.nojekyll. No client-side JavaScript; Pillow is needed only for the images.
+Reads data/series.json (and, if present, data/upcoming.json and the uncommitted .checked-at) plus the
+hand-curated data/alumni.json and data/endowment.json, and writes a finished site to site/:
+  index.html                      the athletics home page
+  alumni/index.html               the alumni and endowment page (alumni.py)
+  how-it-works/index.html         landing page; how-it-works/athletics/ and how-it-works/alumni/ (howitworks.py)
+  404.html                        root-relative URLs, noindex
+  styles.css, the icons, og-image.png and alumni-og-image.png (drawn by images.py), site.webmanifest,
+  games.csv, data/series.json, data/alumni.json, data/endowment.json, robots.txt, sitemap.xml, .nojekyll
+Every page gets its header and nav (site_nav), head tags and footer (site_footer: a page-specific data block,
+then the shared lines) from the functions here. No client-side JavaScript; Pillow is needed only for the images.
 
 Every figure on the page comes from the data file. Anything missing or inconsistent
 raises DataError and the script exits non-zero, so a bad data file can never produce
@@ -67,6 +73,9 @@ AWAY_SITE = "Crawfordsville, Ind."
 
 TITLE = "DePauw University vs. Wabash College: All-Time Head-to-Head Records"
 SUBTITLE = "DePauw University vs. Wabash College: all-time head-to-head records in men’s sports."
+# The two "back" links of the how-it-works pages and 404, one wording style (arrow first) everywhere.
+BACK_ATHLETICS = "← Back to the head-to-head records"
+BACK_ALUMNI = "← Back to the alumni and endowment page"
 # The header line of the pages that serve both halves of the site (the how-it-works landing page and 404).
 NEUTRAL_SUBTITLE = ("DePauw and Wabash, side by side: head-to-head athletics, notable graduates and endowments.")
 NOT_INCLUDED = ("cross country, track and field, and golf, which are multi-team events rather than "
@@ -120,11 +129,43 @@ def safe_url(url) -> str | None:
     return url
 
 
+# Visible text uses the curly apostrophe (’) everywhere; the data files, sources.json, URLs, ids and games.csv
+# keep the sources' straight one. The conversion happens once, when each page is written (curly_html), so
+# every renderer can keep working with the sources' own spelling.
+APOSTROPHE = re.compile(r"&#x27;|&#39;|'")
+READ_ATTR = re.compile(r'(?<![\w-])(alt|aria-label|title|placeholder)="([^"]*)"')
+# Meta tags whose content a reader sees (a link preview card, a search result), by name or property.
+READ_META = {"description", "twitter:title", "twitter:description", "twitter:image:alt",
+             "og:title", "og:description", "og:image:alt", "og:site_name"}
+
+
+def curly(text: str) -> str:
+    """The text with every straight apostrophe, plain or HTML-escaped, written as a curly one."""
+    return APOSTROPHE.sub("\u2019", text)
+
+
+def curly_html(page: str) -> str:
+    """A finished page with the curly apostrophe in everything a reader sees or hears: text, the <title>, the
+    description and share-card meta tags, and alt, aria-label, title and placeholder attributes. Links, ids,
+    classes and every other attribute are left exactly as they were."""
+    parts = re.split(r"(<[^>]*>)", page)
+    for i, part in enumerate(parts):
+        if not part.startswith("<") or part.startswith("<!"):
+            parts[i] = curly(part) if not part.startswith("<!") else part
+            continue
+        if part.startswith("<meta"):
+            label = re.search(r'(?<![\w-])(?:name|property)="([^"]*)"', part)
+            if label and label.group(1) in READ_META:
+                part = re.sub(r'(?<![\w-])content="([^"]*)"', lambda m: f'content="{curly(m.group(1))}"', part)
+        parts[i] = READ_ATTR.sub(lambda m: f'{m.group(1)}="{curly(m.group(2))}"', part)
+    return "".join(parts)
+
+
 def report_url(sport_name: str | None = None) -> str:
     """Opens the data-correction issue form, with the sport filled in when the link comes from a card."""
     query = "template=data-correction.yml"
     if sport_name:
-        query += f"&title={quote('Data correction: ' + sport_name)}&sport={quote(sport_name)}"
+        query += f"&title={quote(curly('Data correction: ' + sport_name))}&sport={quote(curly(sport_name))}"
     return f"{REPO_URL}/issues/new?{query}"
 
 
@@ -402,12 +443,25 @@ def alumni_preview_info(endowment: dict) -> dict:
             "values": values, "even": even}
 
 
+MANIFEST_DESCRIPTION = ("DePauw vs. Wabash, side by side: head-to-head athletics records, notable graduates and "
+                        "endowments.")
+NUMBER_WORDS = {2: "two", 3: "three", 4: "four", 5: "five", 6: "six", 7: "seven", 8: "eight", 9: "nine",
+                10: "ten", 11: "eleven", 12: "twelve"}
+
+
+def alumni_description(data: dict) -> str:
+    """The alumni page's meta description; the category count is read from the data."""
+    n = len(data["categories"])
+    return (f"Notable DePauw and Wabash graduates in {NUMBER_WORDS.get(n, str(n))} award and public-service "
+            f"categories, plus endowment per student, with a source for every name.")
+
+
 def render_manifest() -> str:
     icons = [{"src": "icon-192.png", "sizes": "192x192", "type": "image/png"},
              {"src": "icon-512.png", "sizes": "512x512", "type": "image/png"},
              {"src": "icon-maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable"}]
     return json.dumps({"name": "DePauw vs. Wabash", "short_name": "DePauw v Wabash",
-                       "description": SUBTITLE, "start_url": BASE_PATH, "scope": BASE_PATH,
+                       "description": MANIFEST_DESCRIPTION, "start_url": BASE_PATH, "scope": BASE_PATH,
                        "display": "browser", "theme_color": THEME_LIGHT, "background_color": BACKGROUND,
                        "icons": icons}, indent=2) + "\n"
 
@@ -919,13 +973,14 @@ def alumni_footer_block(prefix: str, alumni_data: dict, endowment: dict) -> list
 
 
 def site_footer(now: dt.datetime, *, prefix: str = "", data: dict | None = None, checked: str | None = None,
-                upcoming: dict | None = None, alumni: tuple | None = None) -> list:
+                upcoming: dict | None = None, alumni: tuple | None = None, link_how: bool = True) -> list:
     """The footer of every page: one function with a page-specific data block and the same structure and
     lines after it. `prefix` reaches the site root from the page ("" on the home page, "../" one folder
     down, the root path on 404.html). With `data` the block is the athletics one, with `alumni` (the alumni
     and endowment data) the alumni one; with neither (404 and the how-it-works landing page) only the shared
     lines show. "How the numbers work" links to the matching page, and the men's head-to-head note shows
-    only on the athletics pages (it is about athletics, so the alumni and the neutral pages leave it out)."""
+    only on the athletics pages (it is about athletics, so the alumni and the neutral pages leave it out). The
+    how-it-works landing page passes link_how=False: a link from that page to itself would go nowhere."""
     block, how, men_note = [], HOW_PATH, False
     if alumni:
         block, how = alumni_footer_block(prefix, *alumni), HOW_ALUMNI_PATH
@@ -934,7 +989,7 @@ def site_footer(now: dt.datetime, *, prefix: str = "", data: dict | None = None,
     return [
         '<footer class="site-footer">', '<div class="wrap">',
         *block,
-        f'<p class="footer-links"><a href="{esc(prefix + how)}">How the numbers work</a> · '
+        '<p class="footer-links">' + (f'<a href="{esc(prefix + how)}">How the numbers work</a> · ' if link_how else "") +
         f'<a href="{esc(REPO_URL)}">Built in the open: code and data on GitHub</a></p>',
         *([f'<p>{esc(MEN_ONLY)}</p>'] if men_note else []),
         f'<p>{esc(DISCLAIMER)}</p>',
@@ -1043,12 +1098,11 @@ def render_how_athletics(data: dict, rules: dict, kept: int, checked: str | None
     sports = data["sports"]
     sources = "\n".join(footer_source(k, s, upcoming.get(k)) for k, s in sports.items())
     t = data["totals"]
-    description = (f"Where the DePauw vs. Wabash numbers come from and how the two schools’ records are "
-                   f"combined: {t['games_played']:,} games in {plural(len(sports), 'sport')}, with disputed "
-                   f"games and hand-made rulings shown openly.")
+    description = (f"How the DePauw vs. Wabash records are built: {plural(t['games_played'], 'game')} in "
+                   f"{plural(len(sports), 'sport')} from both schools’ records, with disputes and rulings shown openly.")
     return how_page(
         howitworks.TITLE, description, prefix="../../", path=HOW_ATHLETICS_PATH, current="athletics",
-        preview=athletics_preview(data, now, upcoming), back=("../../", "← Back to the head-to-head records"),
+        preview=athletics_preview(data, now, upcoming), back=("../../", BACK_ATHLETICS),
         body=howitworks.content(data, rules, kept, sources_html=sources, not_included=NOT_INCLUDED, repo_url=REPO_URL),
         footer=site_footer(now, prefix="../../", data=data, checked=checked, upcoming=upcoming))
 
@@ -1060,7 +1114,7 @@ def render_how_alumni(alumni_data: dict, endowment: dict, now: dt.datetime | Non
                    "how endowment per student is worked out on one common basis.")
     return how_page(
         howitworks.ALUMNI_TITLE, description, prefix="../../", path=HOW_ALUMNI_PATH, current="alumni",
-        preview=alumni_preview_info(endowment), back=("../../alumni/", "← Back to the alumni and endowment page"),
+        preview=alumni_preview_info(endowment), back=("../../alumni/", BACK_ALUMNI),
         body=howitworks.alumni_content(alumni_data, endowment, repo_url=REPO_URL),
         footer=site_footer(now, prefix="../../", alumni=(alumni_data, endowment)), subtitle=alumni_page.SUBTITLE)
 
@@ -1071,8 +1125,8 @@ def render_how_landing(data: dict, now: dt.datetime | None = None, upcoming: dic
     return how_page(
         howitworks.LANDING_TITLE, howitworks.LANDING_DESCRIPTION, prefix="../", path=HOW_PATH, current="",
         preview=athletics_preview(data, now, upcoming or {}),
-        back=[("../", "← Back to the head-to-head records"), ("../alumni/", "Back to the alumni and endowment page")],
-        body=howitworks.landing_content(), footer=site_footer(now, prefix="../"), subtitle=NEUTRAL_SUBTITLE)
+        back=[("../", BACK_ATHLETICS), ("../alumni/", BACK_ALUMNI)],
+        body=howitworks.landing_content(), footer=site_footer(now, prefix="../", link_how=False), subtitle=NEUTRAL_SUBTITLE)
 
 
 def render_404(now: dt.datetime | None = None) -> str:
@@ -1087,9 +1141,8 @@ def render_404(now: dt.datetime | None = None) -> str:
         f'<p class="subtitle">{esc(NEUTRAL_SUBTITLE)}</p></div></header>',
         '<main class="wrap">',
         '<h2>Page not found</h2>',
-        f'<p><a href="{esc(BASE_PATH)}">Back to the head-to-head records</a> · '
-        f'<a href="{esc(BASE_PATH + ALUMNI_PATH)}">Back to the alumni and endowment page</a></p>',
-        f'<p><a href="{esc(BASE_PATH + HOW_PATH)}">How the numbers work</a></p>',
+        f'<p class="back"><a href="{esc(BASE_PATH)}">{esc(BACK_ATHLETICS)}</a> · '
+        f'<a href="{esc(BASE_PATH + ALUMNI_PATH)}">{esc(BACK_ALUMNI)}</a></p>',
         '</main>',
         *site_footer(now or dt.datetime.now(dt.timezone.utc), prefix=BASE_PATH),
         '</body>',
@@ -1163,7 +1216,7 @@ def build(data_path: Path, out: Path, *, checked_at: str | None = None,
     endowment_data = alumni_page.validate_endowment(alumni_page.load_json(endowment_path or ENDOWMENT_DATA, "endowment"))
     alumni_preview = alumni_preview_info(endowment_data)
     alumni_head = head("Alumni and Endowment | DePauw vs. Wabash",
-                        "Verified named DePauw and Wabash graduates across achievement categories, plus dated endowment values.",
+                        alumni_description(alumni_data),
                         prefix="../", canonical=SITE_URL + ALUMNI_PATH, preview=alumni_preview)
     when = now or dt.datetime.now(dt.timezone.utc)
     alumni_html = alumni_page.render_page(
@@ -1191,7 +1244,7 @@ def build(data_path: Path, out: Path, *, checked_at: str | None = None,
     out.mkdir(parents=True)
     for name, text in pages.items():
         (out / name).parent.mkdir(parents=True, exist_ok=True)
-        (out / name).write_text(text, encoding="utf-8", newline="\n")
+        (out / name).write_text(curly_html(text) if name.endswith(".html") else text, encoding="utf-8", newline="\n")
     for asset in ("styles.css", "favicon.svg"):
         shutil.copyfile(STATIC / asset, out / asset)
     # Images are drawn at build time from the bundled font, so every deploy has a card that matches the data.

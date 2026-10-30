@@ -1,5 +1,6 @@
 """
-Numbers worked out from a sport's game list: the Monon Bell standings and (later) the per-sport fun facts.
+Numbers worked out from a sport's game list: the Monon Bell standings and the per-sport fun facts
+(biggest wins, streaks, one-score games, highest-scoring games, overtime, season-by-season).
 
 Pure functions over the games in data/series.json (dicts with date, result, depauw, wabash, ...).
 Results are from DePauw's side: "W" is a DePauw win, "L" a Wabash win, "T" a tie.

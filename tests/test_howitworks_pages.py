@@ -88,10 +88,10 @@ def test_the_neutral_pages_share_a_neutral_subtitle(site):
 def test_the_landing_and_404_pages_link_back_to_both_halves(site):
     landing = read(site, LANDING)
     assert ('<p class="back"><a href="../">← Back to the head-to-head records</a> · '
-            '<a href="../alumni/">Back to the alumni and endowment page</a></p>') in landing
+            '<a href="../alumni/">← Back to the alumni and endowment page</a></p>') in landing
     page = read(site, "404.html")
-    assert 'href="/">Back to the head-to-head records</a>' in page
-    assert 'href="/alumni/">Back to the alumni and endowment page</a>' in page
+    assert ('<p class="back"><a href="/">← Back to the head-to-head records</a> · '
+            '<a href="/alumni/">← Back to the alumni and endowment page</a></p>') in page
     assert ATHLETICS and 'class="back"><a href="../../">← Back to the head-to-head records</a></p>' in read(site, ATHLETICS)
     assert 'class="back"><a href="../../alumni/">← Back to the alumni and endowment page</a></p>' in read(site, ALUMNI)
 
@@ -112,7 +112,7 @@ def test_athletics_pages_use_the_athletics_share_image_and_alumni_pages_the_alum
 def test_the_athletics_how_page_is_the_old_page_with_new_links(site):
     page = read(site, ATHLETICS)
     assert howitworks.TITLE in htmllib.unescape(page)
-    assert '<h2 id="how-h">How the numbers work</h2>' in page
+    assert '<h2 id="how-h">How the athletics numbers work</h2>' in page
     assert 'href="../../">← Back to the head-to-head records</a>' in page
     assert "Disputed games right now:" in text_of(page) and "Rulings made so far:" in text_of(page)
 
@@ -224,3 +224,48 @@ def test_html_validate_covers_every_page_in_checks_yml():
     for name in ("site/index.html", "site/404.html", "site/how-it-works/index.html", "site/how-it-works/athletics/index.html",
                  "site/how-it-works/alumni/index.html", "site/alumni/index.html"):
         assert name in yml, name
+
+
+def test_the_landing_page_footer_does_not_link_to_itself_and_every_other_page_keeps_the_link(site):
+    landing = read(site, LANDING)
+    footer = landing[landing.index('<footer class="site-footer">'):]
+    assert "How the numbers work" not in footer and "Built in the open" in footer
+    notfound = read(site, "404.html")
+    assert "How the numbers work" in notfound[notfound.index('<footer'):] and notfound.count("How the numbers work") == 1
+    for name in ("index.html", "alumni/index.html", ATHLETICS, ALUMNI):
+        page = read(site, name)
+        assert "How the numbers work</a> · " in page[page.index('<footer class="site-footer">'):], name
+
+
+def test_every_back_link_on_the_site_has_the_arrow_and_one_of_the_two_wordings(site):
+    """Back links share one style: arrow first, then one of two fixed phrases."""
+    seen = 0
+    for page in site.rglob("*.html"):
+        text = page.read_text(encoding="utf-8")
+        for block in re.findall(r'<p class="back">(.*?)</p>', text):
+            for label in re.findall(r'<a href="[^"]*">([^<]*)</a>', block):
+                assert label in (render.BACK_ATHLETICS, render.BACK_ALUMNI), (page.name, label)
+                assert label.startswith("← Back to the ")
+                seen += 1
+        assert not re.search(r">\s*Back to the ", text), page      # no back link without the arrow, wherever it sits
+    assert seen == 6          # the athletics and alumni how pages 1 each, the landing page 2, 404 2
+
+
+def test_each_how_page_heading_matches_its_title_and_the_landing_link(site):
+    """The heading, the <title> and the landing-page link say the same thing: 'How the athletics numbers work' and
+    'How the alumni numbers work'; the landing page itself is 'How the numbers work'."""
+    landing = read(site, LANDING)
+    for name, words, href in ((ATHLETICS, "athletics", "athletics/"), (ALUMNI, "alumni", "alumni/")):
+        page = read(site, name)
+        heading = f"How the {words} numbers work"
+        assert f'<h2 id="how-h">{heading}</h2>' in page
+        assert re.search(r"<title>(.*?)</title>", page).group(1).startswith(heading)
+        assert f'<a href="{href}">{heading}</a>' in landing
+    assert '<h2 id="how-h">How the numbers work</h2>' in landing
+
+
+def test_the_404_page_has_no_body_link_to_how_the_numbers_work_only_the_footer_one(site):
+    page = read(site, "404.html")
+    main = page[page.index("<main"):page.index("</main>")]
+    assert "How the numbers work" not in main and main.count("← Back to") == 2
+    assert page.count('>How the numbers work</a>') == 1

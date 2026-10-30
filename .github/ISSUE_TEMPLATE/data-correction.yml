@@ -6,12 +6,12 @@ body:
   - type: markdown
     attributes:
       value: |
-        Thanks for helping keep the records right. **This issue will be public**, so please don't include personal details (no phone numbers, email addresses or home addresses). A link to the correct result is all that's needed.
+        Thanks for helping keep the records right. **This issue will be public**, so please don’t include personal details (no phone numbers, email addresses or home addresses). A link to the correct result is all that’s needed.
   - type: input
     id: sport
     attributes:
       label: Sport
-      description: For example Football, Men's Basketball or Men's Swimming and Diving.
+      description: For example Football, Men’s Basketball or Men’s Swimming and Diving.
       placeholder: Football
     validations:
       required: true
@@ -26,11 +26,11 @@ body:
   - type: dropdown
     id: which_record
     attributes:
-      label: Which school's record looks wrong?
-      description: The site combines DePauw's and Wabash's records. Pick the one that has the mistake.
+      label: Which school’s record looks wrong?
+      description: The site combines DePauw’s and Wabash’s records. Pick the one that has the mistake.
       options:
-        - DePauw's record
-        - Wabash's record
+        - DePauw’s record
+        - Wabash’s record
         - Both
         - Not sure
     validations:
@@ -38,7 +38,7 @@ body:
   - type: textarea
     id: what_is_wrong
     attributes:
-      label: What's wrong?
+      label: What’s wrong?
       description: Tell us what the site shows and what you think it should show.
       placeholder: The site shows DePauw 41, Wabash 20, but the final score was ...
     validations:

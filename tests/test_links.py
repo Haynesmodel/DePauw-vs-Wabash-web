@@ -24,7 +24,7 @@ def test_every_card_and_section_has_an_id_from_its_key(tmp_path):
 def test_each_heading_text_is_the_link_to_its_own_section(tmp_path):
     html = full_page(tmp_path)
     assert '<h2><a class="permalink" id="football-h" href="#football">Football</a></h2>' in html
-    assert '<a class="permalink" id="mens-basketball-h" href="#mens-basketball">Men&#x27;s Basketball</a>' in html
+    assert '<a class="permalink" id="mens-basketball-h" href="#mens-basketball">Men’s Basketball</a>' in html
     assert '<h3><a class="permalink" id="monon-bell-h" href="#monon-bell">The Monon Bell</a></h3>' in html
     assert '<a class="permalink" id="next-meeting-h" href="#next-meeting">Next meeting</a>' in html
     assert "aria-label=\"Link to" not in html and ">#</a>" not in html   # no separate '#' marker

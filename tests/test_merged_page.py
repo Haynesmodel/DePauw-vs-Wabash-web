@@ -244,8 +244,8 @@ def test_games_csv_carries_source_dispute_and_date_columns(tmp_path):
 def test_the_error_form_asks_which_schools_record_looks_wrong():
     form = yaml.safe_load((ROOT / ".github" / "ISSUE_TEMPLATE" / "data-correction.yml").read_text(encoding="utf-8"))
     which = next(b for b in form["body"] if b.get("id") == "which_record")
-    assert which["attributes"]["label"] == "Which school's record looks wrong?"
-    assert which["attributes"]["options"] == ["DePauw's record", "Wabash's record", "Both", "Not sure"]
+    assert which["attributes"]["label"] == "Which school’s record looks wrong?"
+    assert which["attributes"]["options"] == ["DePauw’s record", "Wabash’s record", "Both", "Not sure"]
 
 
 # ---- the real data files ---------------------------------------------------------------------- #

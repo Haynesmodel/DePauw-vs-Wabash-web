@@ -15,6 +15,8 @@ Safety rules, so a bad night never wipes good data:
     --allow-shrink is passed.
   * Files are only rewritten when their content actually changed, so the scheduled job doesn't make
     empty commits.
+  * A page whose own total ("Total Points/Goals/Runs") disagrees with its parsed games only gets a warning
+    (total_warning): its games are kept and the exit code is unchanged.
   * Exit code is non-zero if any page failed, so the GitHub Action shows red.
   * The "last checked" time (.checked-at, uncommitted) is written only after a live run in which
     at least one page loaded and validated. A run where every page failed leaves it alone.
@@ -35,6 +37,7 @@ from __future__ import annotations
 import argparse
 import datetime as dt
 import json
+import os
 import re
 import sys
 import time
@@ -319,6 +322,44 @@ def validate(games: list, summary: Summary) -> list:
     return problems
 
 
+def printed_total(games: list):
+    """What the page's own "Total Points/Goals/Runs" box should equal: the sum of the first score printed on
+    each row that has a score, from the page's own side, before any flipping or merging (so disputes between
+    the schools do not matter). A result with no score ("L -") adds nothing. A row whose two scores were
+    read in swapped order (score_order_reversed) is counted as it was printed, not as it was swapped."""
+    return merge.norm_num(sum(g.wabash if g.score_order_reversed else g.depauw for g in games if g.score_known))
+
+
+def total_warning(games: list, summary: Summary, school: str, sport: str):
+    """A warning (a dict) when the page's own total disagrees with its parsed games, otherwise None. Only a
+    warning for now: the page's data is kept and the run stays green (see the backlog in CLAUDE.md)."""
+    if summary.total is None:
+        return None
+    parsed = printed_total(games)
+    if parsed == summary.total:
+        return None
+    return {"school": school, "sport": sport, "label": summary.total_label or "points", "page": summary.total,
+            "parsed": parsed, "difference": merge.norm_num(summary.total - parsed)}
+
+
+def report_total_warnings(found: list) -> None:
+    """Log every total-points mismatch again together at the end of the run and, on GitHub Actions, list them
+    in the run's summary page."""
+    if not found:
+        return
+    lines = [f"{w['sport']}, {w['school']}'s page: total {w['label']} {w['page']}, parsed games add up to "
+             f"{w['parsed']} (page minus parsed {w['difference']:+})" for w in found]
+    print(f"WARN {len(found)} page(s) whose own total does not match the parsed games (data kept, run not failed):",
+          file=sys.stderr)
+    for line in lines:
+        print(f"WARN   {line}", file=sys.stderr)
+    target = os.environ.get("GITHUB_STEP_SUMMARY")
+    if target:
+        with open(target, "a", encoding="utf-8") as fh:
+            fh.write("### Total points check (warning only)\n\n"
+                     + "".join(f"- {line}\n" for line in lines) + "\n")
+
+
 # --------------------------------------------------------------------------- #
 # Fetching and output
 # --------------------------------------------------------------------------- #
@@ -403,7 +444,7 @@ def legacy_depauw(previous_sports: dict) -> dict:
 
 
 def scrape_one(sc: dict, sport: dict, school: str, fixtures: Optional[Path], pacer: Pacer,
-               previous: dict, allow_shrink: bool):
+               previous: dict, allow_shrink: bool, total_warnings: Optional[list] = None):
     """One school's history page for one sport: fetched, parsed and checked against that page's own
     summary. Returns the raw payload, or None when a fixture run has no page for this school.
     Raises on anything wrong, and the caller keeps the last good copy."""
@@ -421,6 +462,12 @@ def scrape_one(sc: dict, sport: dict, school: str, fixtures: Optional[Path], pac
     problems = validate(games, summary)
     if problems:
         raise ParseError("; ".join(problems))
+    mismatch = total_warning(games, summary, sc["name"], sport["name"])
+    if mismatch:
+        print(f"WARN {sport['name']:<16} {sc['name']:<7} total {mismatch['label']}: page says {mismatch['page']}, "
+              f"parsed games add up to {mismatch['parsed']} (difference {mismatch['difference']:+})", file=sys.stderr)
+        if total_warnings is not None:
+            total_warnings.append(mismatch)
     old_count = previous.get(key, {}).get("games_played", 0)
     if len(games) < old_count and not allow_shrink:
         raise ParseError(f"game count fell from {old_count} to {len(games)}; "
@@ -652,6 +699,7 @@ def main(argv=None) -> int:
     pacer = Pacer()
     new_raw: dict = {school: dict(prev_raw[school]) for school in raw_paths}   # last good copy until replaced
     failures = []
+    total_warnings: list = []               # pages whose own total disagrees with their parsed games (warning only)
     loaded = 0
     parsed: dict = {}                       # (school, sport key) -> a page that passed its own checks
     for sport in cfg["sports"]:
@@ -659,7 +707,8 @@ def main(argv=None) -> int:
         for school in ("depauw", "wabash"):
             sc = school_cfg(cfg, school)
             try:
-                raw = scrape_one(sc, sport, school, args.fixtures, pacer, prev_raw[school], args.allow_shrink)
+                raw = scrape_one(sc, sport, school, args.fixtures, pacer, prev_raw[school], args.allow_shrink,
+                                 total_warnings)
                 if raw is None:
                     continue
                 parsed[(school, key)] = raw
@@ -672,6 +721,7 @@ def main(argv=None) -> int:
                 failures.append((school, key))
                 print(f"FAIL {sport['name']:<16} {sc['name']:<7} {exc}", file=sys.stderr)
 
+    report_total_warnings(total_warnings)
     new_pending = hold_changes(cfg, parsed, prev_raw, new_raw, pending, keep_rules, overrides,
                                args.apply_reviewed, now_utc().isoformat())
 

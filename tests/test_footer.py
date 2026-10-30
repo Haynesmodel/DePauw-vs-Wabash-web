@@ -40,7 +40,7 @@ PAGES = {
     "how-it-works/athletics/index.html": ("../../", "how-it-works/athletics/", "athletics"),
     "alumni/index.html": ("../", "how-it-works/alumni/", "alumni"),
     "how-it-works/alumni/index.html": ("../../", "how-it-works/alumni/", "alumni"),
-    "how-it-works/index.html": ("../", "how-it-works/", "neutral"),
+    "how-it-works/index.html": ("../", None, "neutral"),          # the landing page does not link to itself
     "404.html": ("/", "how-it-works/", "neutral"),
 }
 
@@ -54,10 +54,13 @@ def shared_tail(f):
 def test_every_page_has_the_shared_lines_in_order_and_links_to_its_own_how_page(site, name):
     prefix, how, kind = PAGES[name]
     f = footer(site, name)
-    assert f.count("How the numbers work") == 1 and f.count('class="footer-links"') == 1
-    assert f'<a href="{prefix}{how}">How the numbers work</a>' in f
+    assert f.count("How the numbers work") == (0 if how is None else 1) and f.count('class="footer-links"') == 1
+    if how:
+        assert f'<a href="{prefix}{how}">How the numbers work</a>' in f
     assert f'<a href="{render.REPO_URL}">Built in the open: code and data on GitHub</a>' in f
-    assert f.index("How the numbers work") < f.index("Built in the open") < f.index(render.DISCLAIMER) < f.index("© 2026")
+    assert f.index("Built in the open") < f.index(render.DISCLAIMER) < f.index("© 2026")
+    if how:
+        assert f.index("How the numbers work") < f.index("Built in the open")
     assert 'class="copyright"' in f[-200:]                       # the copyright is still the last line
     assert f.count(render.DISCLAIMER) == 1
     assert "Code and data on GitHub" not in f.replace("Built in the open: code and data on GitHub", "")
@@ -106,8 +109,8 @@ def test_the_alumni_footer_has_the_alumni_data_block_and_nothing_athletics_only(
 @pytest.mark.parametrize("name", [n for n, p in PAGES.items() if p[2] == "neutral"])
 def test_the_neutral_footer_is_only_the_shared_lines(site, name):
     f = footer(site, name)
-    assert f == ('<footer class="site-footer">\n<div class="wrap">\n<p class="footer-links">'
-                 f'<a href="{PAGES[name][0]}how-it-works/">How the numbers work</a> · '
+    how_link = "" if PAGES[name][1] is None else f'<a href="{PAGES[name][0]}how-it-works/">How the numbers work</a> · '
+    assert f == ('<footer class="site-footer">\n<div class="wrap">\n<p class="footer-links">' + how_link +
                  f'<a href="{render.REPO_URL}">Built in the open: code and data on GitHub</a></p>\n'
                  f'<p>{render.DISCLAIMER}</p>\n<p class="copyright">© 2026 Jackson Mote</p>\n'
                  '</div>\n</footer>\n</body>\n</html>\n')
@@ -128,9 +131,12 @@ def test_the_records_verified_date_is_the_newest_of_the_two_curated_files_in_the
 @pytest.mark.parametrize("name", PAGES)
 def test_the_shared_lines_are_the_same_on_every_page_apart_from_the_how_link_and_the_mens_note(site, name):
     prefix, how, kind = PAGES[name]
-    tail = shared_tail(footer(site, name)).replace(f'href="{prefix}{how}"', 'href="HOW"')
+    tail = shared_tail(footer(site, name))
+    if how:
+        tail = tail.replace(f'href="{prefix}{how}"', 'href="HOW"')
     tail = tail.replace(f"<p>{MEN_ONLY}</p>\n", "")
-    assert tail == ('<p class="footer-links"><a href="HOW">How the numbers work</a> · '
+    link = '<a href="HOW">How the numbers work</a> · ' if how else ""
+    assert tail == ('<p class="footer-links">' + link +
                     f'<a href="{render.REPO_URL}">Built in the open: code and data on GitHub</a></p>\n'
                     f'<p>{render.DISCLAIMER}</p>\n<p class="copyright">© 2026 Jackson Mote</p>\n'
                     '</div>\n</footer>\n</body>\n</html>\n')

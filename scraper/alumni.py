@@ -1,4 +1,21 @@
-"""Validation and rendering for the manually researched Alumni page."""
+"""
+The alumni and endowment page (/alumni/): validation of the hand-curated data/alumni.json and
+data/endowment.json, the numbers worked out from them, and the page itself.
+
+Nothing here is scraped. The two JSON files are edited by hand and reviewed through pull requests;
+render.build validates them on every build (a bad file fails the render instead of publishing half a page).
+
+  validate_alumni / validate_endowment   refuse missing or inconsistent data (ten categories, a source for
+                                         every person and award, enrollment for the fall before the fiscal year)
+  counts, visible_categories             named graduates per school and category (once per school and category)
+  comparable_amount, per_student,        endowment per student on one basis (pooled endowment net assets),
+  about_even, per_student_note           from the exact integers; "about even" within EVEN_PERCENT; none of
+                                         these figures is stored in the JSON
+  scoreboard, context_note, render_page  the scoreboard table, the size and history note under it, and the page
+                                         (render.py supplies the head and the shared footer)
+  correction_url                         the prefilled link to .github/ISSUE_TEMPLATE/alumni-correction.yml
+  howitworks.alumni_content              /how-it-works/alumni/ reads the same functions, so its numbers cannot drift
+"""
 
 from __future__ import annotations
 

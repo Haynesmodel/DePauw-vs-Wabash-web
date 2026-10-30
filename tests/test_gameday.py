@@ -6,6 +6,7 @@ import json
 import os
 import re
 import shlex
+import shutil
 import subprocess
 import sys
 from pathlib import Path
@@ -446,6 +447,12 @@ def test_scraper_failure_remains_tolerated_and_the_summary_takes_only_scrape_and
     assert set(outputs) == {"problems", "scrape", "validation"}
 
 
+# The workflow's shell steps run under bash on the Linux runner. A Windows machine without bash on PATH skips
+# these tests; CI on Linux always has bash, so they run there.
+needs_bash = pytest.mark.skipif(shutil.which("bash") is None, reason="needs bash on PATH (the workflow's shell steps run under bash)")
+
+
+@needs_bash
 @pytest.mark.parametrize(
     ("scrape_result", "node_result", "validate_result", "expected"),
     [
@@ -476,6 +483,35 @@ def test_summary_shell_reports_the_scrape_and_validation_outcomes(
     )
     assert result.returncode == 0, result.stderr
     assert output.read_text(encoding="utf-8").splitlines() == expected
+
+
+def test_bash_is_never_missing_where_ci_runs():
+    # Only a Windows machine may skip the bash tests; a skip on Linux (where CI runs) would hide them.
+    assert sys.platform == "win32" or shutil.which("bash")
+
+
+@needs_bash
+@pytest.mark.parametrize(
+    ("node_result", "expected"),
+    [
+        ("failure", "HTML validation was skipped because Node could not be set up"),
+        ("success", "The HTML validator found a problem"),
+    ],
+)
+def test_validation_warning_shell_names_what_happened_in_the_annotation_and_the_summary(tmp_path, node_result, expected):
+    summary = tmp_path / "step-summary"
+    result = subprocess.run(
+        ["bash", "-e", "-c", named_step("Report HTML validation problem")["run"]],
+        env={"PATH": os.environ["PATH"], "SETUP_NODE": node_result, "GITHUB_STEP_SUMMARY": str(summary)},
+        stdin=subprocess.DEVNULL,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    assert result.returncode == 0, result.stderr
+    assert result.stdout.startswith("::warning title=HTML validation::")
+    assert expected in result.stdout
+    assert expected in summary.read_text(encoding="utf-8")
 
 
 def test_report_names_the_problem_and_still_fails_the_run_after_the_deploy():

@@ -184,14 +184,19 @@ flowchart TD
   B -- "tests fail" --> TF["build stops:<br/>no scrape or publication"]
   B -- "tests pass" --> S["Scrape<br/>(failure tolerated)"]
   S --> R["render site/"]
-  R --> V["validate all six generated<br/>HTML pages (warning only)"]
-  V --> C{"data/ changed?"}
+  R -- "render fails" --> RF["build stops:<br/>no commit, no deploy"]
+  R -- "render succeeds" --> N["set up Node<br/>(failure tolerated)"]
+  N -- "Node ready" --> V["validate all six generated<br/>HTML pages (failure tolerated)"]
+  N -- "setup fails:<br/>validation skipped" --> W
+  V -- "passes" --> C
+  V -- "fails" --> W["warning annotation and<br/>run-summary note"]
+  W --> C{"data/ changed?"}
   C -- "yes" --> CM["github-actions bot<br/>commits data to main"]
   C -- "no" --> U
-  CM --> U["upload validated site artifact"]
-  U --> D["deploy to GitHub Pages"]
+  CM --> U["upload site artifact"]
+  U --> D["deploy to GitHub Pages<br/>(the site still publishes)"]
   U --> IS["issues: open, update or close<br/>the data-review issue"]
-  D -- "scraper failed" --> RP["report: run shows red<br/>check logs and deployment result"]
+  D -- "scraper failed, or validation<br/>failed or skipped" --> RP["report: run turns red<br/>names the problem, check the logs"]
 ```
 
 The schedule times are written in UTC in the workflow, so they shift by an hour with daylight saving time (the times above are for Eastern daylight time; in winter the daily runs are about 5:19 AM and 10:47 PM). GitHub can delay a scheduled run or skip it altogether, and it switches scheduled workflows off after 60 days with no repository activity; if a day's update is missing, run the workflow by hand as described above.

@@ -580,7 +580,16 @@ def test_readme_documents_render_and_html_validation_before_data_commit():
     assert "html validation problems are reported as warnings and do not stop publishing" in operator_text
     workflow_section = readme.split("what each run of `update-and-deploy.yml` does:", 1)[1].split("### why the merge works", 1)[0]
     assert "render" in workflow_section and "validate" in workflow_section and "commit" in workflow_section
-    assert workflow_section.index("render site") < workflow_section.index("warning only") < workflow_section.index("data/ changed?") < workflow_section.index("commits data")
+    assert (
+        workflow_section.index("render site")
+        < workflow_section.index("set up node")
+        < workflow_section.index("validate all six")
+        < workflow_section.index("data/ changed?")
+        < workflow_section.index("commits data")
+    )
+    assert "render fails" in workflow_section and "no commit, no deploy" in workflow_section
+    assert "validation skipped" in workflow_section and "run turns red" in workflow_section
+    assert "the site still publishes" in workflow_section
 
 
 def test_a_skipped_build_means_no_commit_no_deploy_and_no_new_check_time():

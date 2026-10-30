@@ -88,10 +88,10 @@ def test_the_neutral_pages_share_a_neutral_subtitle(site):
 def test_the_landing_and_404_pages_link_back_to_both_halves(site):
     landing = read(site, LANDING)
     assert ('<p class="back"><a href="../">← Back to the head-to-head records</a> · '
-            '<a href="../alumni/">Back to the alumni and endowment page</a></p>') in landing
+            '<a href="../alumni/">← Back to the alumni and endowment page</a></p>') in landing
     page = read(site, "404.html")
-    assert 'href="/">Back to the head-to-head records</a>' in page
-    assert 'href="/alumni/">Back to the alumni and endowment page</a>' in page
+    assert ('<p class="back"><a href="/">← Back to the head-to-head records</a> · '
+            '<a href="/alumni/">← Back to the alumni and endowment page</a></p>') in page
     assert ATHLETICS and 'class="back"><a href="../../">← Back to the head-to-head records</a></p>' in read(site, ATHLETICS)
     assert 'class="back"><a href="../../alumni/">← Back to the alumni and endowment page</a></p>' in read(site, ALUMNI)
 
@@ -224,3 +224,27 @@ def test_html_validate_covers_every_page_in_checks_yml():
     for name in ("site/index.html", "site/404.html", "site/how-it-works/index.html", "site/how-it-works/athletics/index.html",
                  "site/how-it-works/alumni/index.html", "site/alumni/index.html"):
         assert name in yml, name
+
+
+def test_the_landing_page_footer_does_not_link_to_itself_and_every_other_page_keeps_the_link(site):
+    landing = read(site, LANDING)
+    footer = landing[landing.index('<footer class="site-footer">'):]
+    assert "How the numbers work" not in footer and "Built in the open" in footer
+    assert "How the numbers work" in read(site, "404.html")[read(site, "404.html").index('<footer'):]
+    for name in ("index.html", "alumni/index.html", ATHLETICS, ALUMNI):
+        page = read(site, name)
+        assert "How the numbers work</a> · " in page[page.index('<footer class="site-footer">'):], name
+
+
+def test_every_back_link_on_the_site_has_the_arrow_and_one_of_the_two_wordings(site):
+    """Back links share one style: arrow first, then one of two fixed phrases."""
+    seen = 0
+    for page in site.rglob("*.html"):
+        text = page.read_text(encoding="utf-8")
+        for block in re.findall(r'<p class="back">(.*?)</p>', text):
+            for label in re.findall(r'<a href="[^"]*">([^<]*)</a>', block):
+                assert label in (render.BACK_ATHLETICS, render.BACK_ALUMNI), (page.name, label)
+                assert label.startswith("← Back to the ")
+                seen += 1
+        assert not re.search(r">\s*Back to the ", text), page      # no back link without the arrow, wherever it sits
+    assert seen == 6          # the athletics and alumni how pages 1 each, the landing page 2, 404 2

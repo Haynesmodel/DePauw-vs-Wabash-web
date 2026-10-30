@@ -67,6 +67,9 @@ AWAY_SITE = "Crawfordsville, Ind."
 
 TITLE = "DePauw University vs. Wabash College: All-Time Head-to-Head Records"
 SUBTITLE = "DePauw University vs. Wabash College: all-time head-to-head records in men’s sports."
+# The two "back" links of the how-it-works pages and 404, one wording style (arrow first) everywhere.
+BACK_ATHLETICS = "← Back to the head-to-head records"
+BACK_ALUMNI = "← Back to the alumni and endowment page"
 # The header line of the pages that serve both halves of the site (the how-it-works landing page and 404).
 NEUTRAL_SUBTITLE = ("DePauw and Wabash, side by side: head-to-head athletics, notable graduates and endowments.")
 NOT_INCLUDED = ("cross country, track and field, and golf, which are multi-team events rather than "
@@ -919,13 +922,14 @@ def alumni_footer_block(prefix: str, alumni_data: dict, endowment: dict) -> list
 
 
 def site_footer(now: dt.datetime, *, prefix: str = "", data: dict | None = None, checked: str | None = None,
-                upcoming: dict | None = None, alumni: tuple | None = None) -> list:
+                upcoming: dict | None = None, alumni: tuple | None = None, link_how: bool = True) -> list:
     """The footer of every page: one function with a page-specific data block and the same structure and
     lines after it. `prefix` reaches the site root from the page ("" on the home page, "../" one folder
     down, the root path on 404.html). With `data` the block is the athletics one, with `alumni` (the alumni
     and endowment data) the alumni one; with neither (404 and the how-it-works landing page) only the shared
     lines show. "How the numbers work" links to the matching page, and the men's head-to-head note shows
-    only on the athletics pages (it is about athletics, so the alumni and the neutral pages leave it out)."""
+    only on the athletics pages (it is about athletics, so the alumni and the neutral pages leave it out). The
+    how-it-works landing page passes link_how=False: a link from that page to itself would go nowhere."""
     block, how, men_note = [], HOW_PATH, False
     if alumni:
         block, how = alumni_footer_block(prefix, *alumni), HOW_ALUMNI_PATH
@@ -934,7 +938,7 @@ def site_footer(now: dt.datetime, *, prefix: str = "", data: dict | None = None,
     return [
         '<footer class="site-footer">', '<div class="wrap">',
         *block,
-        f'<p class="footer-links"><a href="{esc(prefix + how)}">How the numbers work</a> · '
+        '<p class="footer-links">' + (f'<a href="{esc(prefix + how)}">How the numbers work</a> · ' if link_how else "") +
         f'<a href="{esc(REPO_URL)}">Built in the open: code and data on GitHub</a></p>',
         *([f'<p>{esc(MEN_ONLY)}</p>'] if men_note else []),
         f'<p>{esc(DISCLAIMER)}</p>',
@@ -1048,7 +1052,7 @@ def render_how_athletics(data: dict, rules: dict, kept: int, checked: str | None
                    f"games and hand-made rulings shown openly.")
     return how_page(
         howitworks.TITLE, description, prefix="../../", path=HOW_ATHLETICS_PATH, current="athletics",
-        preview=athletics_preview(data, now, upcoming), back=("../../", "← Back to the head-to-head records"),
+        preview=athletics_preview(data, now, upcoming), back=("../../", BACK_ATHLETICS),
         body=howitworks.content(data, rules, kept, sources_html=sources, not_included=NOT_INCLUDED, repo_url=REPO_URL),
         footer=site_footer(now, prefix="../../", data=data, checked=checked, upcoming=upcoming))
 
@@ -1060,7 +1064,7 @@ def render_how_alumni(alumni_data: dict, endowment: dict, now: dt.datetime | Non
                    "how endowment per student is worked out on one common basis.")
     return how_page(
         howitworks.ALUMNI_TITLE, description, prefix="../../", path=HOW_ALUMNI_PATH, current="alumni",
-        preview=alumni_preview_info(endowment), back=("../../alumni/", "← Back to the alumni and endowment page"),
+        preview=alumni_preview_info(endowment), back=("../../alumni/", BACK_ALUMNI),
         body=howitworks.alumni_content(alumni_data, endowment, repo_url=REPO_URL),
         footer=site_footer(now, prefix="../../", alumni=(alumni_data, endowment)), subtitle=alumni_page.SUBTITLE)
 
@@ -1071,8 +1075,8 @@ def render_how_landing(data: dict, now: dt.datetime | None = None, upcoming: dic
     return how_page(
         howitworks.LANDING_TITLE, howitworks.LANDING_DESCRIPTION, prefix="../", path=HOW_PATH, current="",
         preview=athletics_preview(data, now, upcoming or {}),
-        back=[("../", "← Back to the head-to-head records"), ("../alumni/", "Back to the alumni and endowment page")],
-        body=howitworks.landing_content(), footer=site_footer(now, prefix="../"), subtitle=NEUTRAL_SUBTITLE)
+        back=[("../", BACK_ATHLETICS), ("../alumni/", BACK_ALUMNI)],
+        body=howitworks.landing_content(), footer=site_footer(now, prefix="../", link_how=False), subtitle=NEUTRAL_SUBTITLE)
 
 
 def render_404(now: dt.datetime | None = None) -> str:
@@ -1087,8 +1091,8 @@ def render_404(now: dt.datetime | None = None) -> str:
         f'<p class="subtitle">{esc(NEUTRAL_SUBTITLE)}</p></div></header>',
         '<main class="wrap">',
         '<h2>Page not found</h2>',
-        f'<p><a href="{esc(BASE_PATH)}">Back to the head-to-head records</a> · '
-        f'<a href="{esc(BASE_PATH + ALUMNI_PATH)}">Back to the alumni and endowment page</a></p>',
+        f'<p class="back"><a href="{esc(BASE_PATH)}">{esc(BACK_ATHLETICS)}</a> · '
+        f'<a href="{esc(BASE_PATH + ALUMNI_PATH)}">{esc(BACK_ALUMNI)}</a></p>',
         f'<p><a href="{esc(BASE_PATH + HOW_PATH)}">How the numbers work</a></p>',
         '</main>',
         *site_footer(now or dt.datetime.now(dt.timezone.utc), prefix=BASE_PATH),

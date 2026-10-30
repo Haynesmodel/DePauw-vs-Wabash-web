@@ -72,7 +72,7 @@ def swimming_lines(sports: dict) -> list:
     return [
         '<h3>Swimming and diving</h3>',
         '<p>Only dual meets, where DePauw’s team swims Wabash’s team head to head, are counted. Invitationals, '
-        'relays and conference championships have many teams in the pool at once, so there is no head-to-head '
+        'relays, and conference championships have many teams in the pool at once, so there is no head-to-head '
         'result to add up, and they are left out of the records and out of “Next meeting”. '
         'The site tells a dual meet from a multi-team event by the name the school gives it and by how many '
         'opponents are listed.</p>',
@@ -113,7 +113,8 @@ def content(data: dict, rules: dict, kept: int, *, sources_html: str, not_includ
     n = totals(sports)
     same, diff, days_of_one = ruling_counts(rules)
     names = [s["name"] for s in sports.values()]
-    names_text = ", ".join(names[:-1]) + f" and {names[-1]}" if len(names) > 1 else "".join(names)
+    names_text = (" and ".join(names) if len(names) <= 2        # a serial comma from three items on
+                  else ", ".join(names[:-1]) + f", and {names[-1]}")
     both_listed = n["both"]
     one_school = n["depauw_only"] + n["wabash_only"]
     overrides_url = f"{repo_url}/blob/main/data/overrides.json"

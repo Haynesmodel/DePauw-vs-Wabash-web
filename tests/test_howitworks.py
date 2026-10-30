@@ -65,7 +65,7 @@ def test_the_swimming_section_explains_dual_meets_and_takes_its_numbers_from_the
     half = sum(1 for g in swim["games"] if any(isinstance(g.get(f), float) for f in ("depauw", "wabash")))
     unscored = sum(1 for g in swim["games"] if g.get("score_known") is False)
     assert "Only dual meets, where DePauw’s team swims Wabash’s team head to head, are counted." in t
-    assert "Invitationals, relays and conference championships have many teams in the pool at once" in t
+    assert "Invitationals, relays, and conference championships have many teams in the pool at once" in t
     assert f"meets with a half point right now: {half}" in t and half > 0
     assert f"(right now: {unscored})" in t and unscored > 0
     assert f"rows set aside right now: {swim['sources']['session_rows']}" in t

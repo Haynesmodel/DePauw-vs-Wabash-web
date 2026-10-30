@@ -264,8 +264,10 @@ def meeting_site(g: dict) -> str:
 
 
 def join_and(items: list) -> str:
-    """'a', 'a and b', 'a, b and c' (no serial comma, like the rest of the page)."""
-    return items[0] if len(items) == 1 else ", ".join(items[:-1]) + " and " + items[-1]
+    """'a', 'a and b', 'a, b, and c': a serial comma whenever there are three or more items."""
+    if len(items) <= 2:
+        return " and ".join(items)
+    return ", ".join(items[:-1]) + ", and " + items[-1]
 
 
 def fmt_when_group(games: list, today: dt.date) -> str:

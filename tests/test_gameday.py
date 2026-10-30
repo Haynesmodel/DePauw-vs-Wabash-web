@@ -434,33 +434,72 @@ def test_a_test_failure_blocks_later_build_steps_and_downstream_writes():
     assert "github.ref == 'refs/heads/main'" in job("issues")
 
 
-def test_scraper_failure_remains_tolerated_and_is_the_only_summary_input():
+def test_scraper_failure_remains_tolerated_and_the_summary_takes_only_scrape_and_validation_outcomes():
     assert named_step("Scrape")["continue-on-error"] is True
     summary = named_step("Summarize")
-    assert summary["env"] == {"SCRAPE": "${{ steps.scrape.outcome }}"}
+    assert summary["env"] == {
+        "SCRAPE": "${{ steps.scrape.outcome }}",
+        "SETUP_NODE": "${{ steps.setup_node.outcome }}",
+        "VALIDATE": "${{ steps.validate_html.outcome }}",
+    }
+    outputs = workflow_jobs()["build"]["outputs"]
+    assert set(outputs) == {"problems", "scrape", "validation"}
 
 
-@pytest.mark.parametrize(("scrape_result", "expected"), [("success", "false"), ("failure", "true")])
-def test_summary_shell_reports_only_the_scrape_outcome(tmp_path, scrape_result, expected):
+@pytest.mark.parametrize(
+    ("scrape_result", "node_result", "validate_result", "expected"),
+    [
+        ("success", "success", "success", ["problems=false", "scrape=ok", "validation=ok"]),
+        ("failure", "success", "success", ["problems=true", "scrape=failed", "validation=ok"]),
+        ("success", "success", "failure", ["problems=true", "scrape=ok", "validation=failed"]),
+        ("success", "failure", "skipped", ["problems=true", "scrape=ok", "validation=skipped"]),
+        ("failure", "failure", "skipped", ["problems=true", "scrape=failed", "validation=skipped"]),
+    ],
+)
+def test_summary_shell_reports_the_scrape_and_validation_outcomes(
+    tmp_path, scrape_result, node_result, validate_result, expected
+):
     output = tmp_path / "github-output"
     result = subprocess.run(
         ["bash", "-e", "-c", named_step("Summarize")["run"]],
-        env={"PATH": os.environ["PATH"], "SCRAPE": scrape_result, "GITHUB_OUTPUT": str(output)},
+        env={
+            "PATH": os.environ["PATH"],
+            "SCRAPE": scrape_result,
+            "SETUP_NODE": node_result,
+            "VALIDATE": validate_result,
+            "GITHUB_OUTPUT": str(output),
+        },
+        stdin=subprocess.DEVNULL,
         capture_output=True,
         text=True,
         check=False,
     )
     assert result.returncode == 0, result.stderr
-    assert output.read_text(encoding="utf-8").splitlines() == [f"problems={expected}"]
+    assert output.read_text(encoding="utf-8").splitlines() == expected
 
 
-def test_report_only_describes_scraper_failure_and_still_fails_the_run():
+def test_report_names_the_problem_and_still_fails_the_run_after_the_deploy():
     report = workflow_jobs()["report"]
     report_text = "\n".join(step.get("run", "") for step in report["steps"])
     assert "needs.build.outputs.problems == 'true'" in report["if"]
+    assert set(report["needs"]) == {"build", "deploy"}
+    env = report["steps"][0]["env"]
+    assert env == {
+        "SCRAPE": "${{ needs.build.outputs.scrape }}",
+        "VALIDATION": "${{ needs.build.outputs.validation }}",
+    }
     assert "exit 1" in report_text
-    assert "scraper" in report_text.lower()
+    assert "The scraper reported a failure" in report_text
+    assert "HTML validation failed" in report_text
+    assert "HTML validation was skipped because Node could not be set up" in report_text
     assert "site was still deployed" not in report_text.lower()
+
+
+def test_a_validation_problem_is_a_warning_annotation_and_a_summary_note():
+    report = named_step("Report HTML validation problem")["run"]
+    assert '::warning title=HTML validation::$message' in report
+    assert '>> "$GITHUB_STEP_SUMMARY"' in report
+    assert "review the" in report and "step logs" in report              # where to look
 
 
 def test_readme_documents_distinct_test_and_scraper_failure_paths():

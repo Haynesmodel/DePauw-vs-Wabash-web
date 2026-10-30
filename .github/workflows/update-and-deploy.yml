@@ -72,6 +72,8 @@ jobs:
       contents: write
     outputs:
       problems: ${{ steps.summary.outputs.problems }}
+      scrape: ${{ steps.summary.outputs.scrape }}
+      validation: ${{ steps.summary.outputs.validation }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -138,6 +140,7 @@ jobs:
             echo
             echo "$message"
           } >> "$GITHUB_STEP_SUMMARY"
+          echo "::warning title=HTML validation::$message"
 
       - name: Commit if data changed
         if: ${{ github.ref == 'refs/heads/main' }}
@@ -161,12 +164,23 @@ jobs:
         id: summary
         env:
           SCRAPE: ${{ steps.scrape.outcome }}
+          SETUP_NODE: ${{ steps.setup_node.outcome }}
+          VALIDATE: ${{ steps.validate_html.outcome }}
         run: |
-          if [ "$SCRAPE" != "success" ]; then
-            echo "problems=true" >> "$GITHUB_OUTPUT"
+          if [ "$SCRAPE" = "success" ]; then scrape=ok; else scrape=failed; fi
+          if [ "$SETUP_NODE" != "success" ]; then
+            validation=skipped
+          elif [ "$VALIDATE" = "success" ]; then
+            validation=ok
           else
-            echo "problems=false" >> "$GITHUB_OUTPUT"
+            validation=failed
           fi
+          if [ "$scrape" = "ok" ] && [ "$validation" = "ok" ]; then problems=false; else problems=true; fi
+          {
+            echo "problems=$problems"
+            echo "scrape=$scrape"
+            echo "validation=$validation"
+          } >> "$GITHUB_OUTPUT"
 
   deploy:
     needs: build
@@ -222,12 +236,23 @@ jobs:
           python3 scraper/review_issue.py $args --run-url "$RUN_URL"
 
   report:
-    # Tests fail the build directly; this reports scraper failures after the deployment attempt.
+    # A failed test or render stops the build directly. This turns the run red after the deployment attempt for
+    # the problems that do not stop publishing: a scraper failure, or HTML validation that failed or was skipped.
     needs: [build, deploy]
     if: ${{ !cancelled() && needs.build.outputs.problems == 'true' }}
     runs-on: ubuntu-latest
     timeout-minutes: 2
     steps:
-      - run: |
-          echo "The scraper reported a failure. Check the build logs and deployment result."
+      - env:
+          SCRAPE: ${{ needs.build.outputs.scrape }}
+          VALIDATION: ${{ needs.build.outputs.validation }}
+        run: |
+          if [ "$SCRAPE" != "ok" ]; then
+            echo "The scraper reported a failure. Check the Scrape step logs and the deployment result."
+          fi
+          if [ "$VALIDATION" = "failed" ]; then
+            echo "HTML validation failed. It does not block publishing. Check the Validate generated HTML step logs and the deployment result."
+          elif [ "$VALIDATION" = "skipped" ]; then
+            echo "HTML validation was skipped because Node could not be set up. It does not block publishing. Check the Set up Node for HTML validation step logs and the deployment result."
+          fi
           exit 1

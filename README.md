@@ -155,6 +155,8 @@ Three GitHub Actions workflows live in `.github/workflows/`:
 | `checks.yml` | On every pull request to `main` | Runs the tests, renders the site, validates the generated HTML and renders every Mermaid diagram in this README |
 | `snapshot.yml` | July 1 and January 2, and by hand | Saves a GitHub Release with copies of the data files (skipped when nothing changed), then, as a last job that can never fail the run, asks the Wayback Machine to save the source pages |
 
+In `update-and-deploy.yml`, the build runs tests before it scrapes. If tests fail, the build stops and no scrape, data commit, render, artifact upload, deploy, or issue sync runs. If tests pass, a scraper failure is tolerated so validated fallback data can continue through publication; the report job then marks the run red and points to the build logs and deployment result.
+
 What each run of `update-and-deploy.yml` does:
 
 ```mermaid
@@ -165,14 +167,16 @@ flowchart TD
   T4["Manual run<br/>(options: allow shrink,<br/>apply reviewed changes)"] --> G
   G{"gate job<br/>30-minute run with no<br/>game-day window open?"}
   G -- "yes" --> X["Stop here:<br/>no scrape, no commit, no deploy"]
-  G -- "no" --> B["build: run tests and scrape<br/>(each can fail without<br/>stopping the other)"]
-  B --> C{"data/ changed?"}
+  G -- "no" --> B["build: run required tests"]
+  B -- "tests fail" --> TF["build stops:<br/>no scrape or publication"]
+  B -- "tests pass" --> S["Scrape<br/>(failure tolerated)"]
+  S --> C{"data/ changed?"}
   C -- "yes" --> CM["github-actions bot<br/>commits data to main"]
   C -- "no" --> RD
   CM --> RD["render site/"]
   RD --> D["deploy to GitHub Pages"]
   B --> IS["issues: open, update or close<br/>the data-review issue"]
-  B -- "a test or sport failed" --> RP["report: run shows red<br/>(site still deployed<br/>with last good data)"]
+  D -- "scraper failed" --> RP["report: run shows red<br/>check logs and deployment result"]
 ```
 
 The schedule times are written in UTC in the workflow, so they shift by an hour with daylight saving time (the times above are for Eastern daylight time; in winter the daily runs are about 5:19 AM and 10:47 PM). GitHub can also delay or drop scheduled runs.

@@ -84,11 +84,10 @@ jobs:
 
       - run: pip install -r requirements.txt
 
-      # A failing test or sport must not stop the site from deploying the latest good data, so the
-      # steps below record their outcome and the "report" job turns the run red at the end.
+      # Tests must pass before any source or publication step runs. Scraper failures remain tolerated
+      # so validated fallback data can be published; the "report" job marks those runs red afterward.
       - name: Run tests
         id: tests
-        continue-on-error: true
         run: python -m pytest -q tests
 
       - name: Scrape
@@ -127,10 +126,9 @@ jobs:
       - name: Summarize
         id: summary
         env:
-          TESTS: ${{ steps.tests.outcome }}
           SCRAPE: ${{ steps.scrape.outcome }}
         run: |
-          if [ "$TESTS" != "success" ] || [ "$SCRAPE" != "success" ]; then
+          if [ "$SCRAPE" != "success" ]; then
             echo "problems=true" >> "$GITHUB_OUTPUT"
           else
             echo "problems=false" >> "$GITHUB_OUTPUT"
@@ -190,12 +188,12 @@ jobs:
           python3 scraper/review_issue.py $args --run-url "$RUN_URL"
 
   report:
-    # The deploy above still ran; this only turns the run red so a failed sport or test gets noticed.
+    # Tests fail the build directly; this reports scraper failures after the deployment attempt.
     needs: [build, deploy]
     if: ${{ !cancelled() && needs.build.outputs.problems == 'true' }}
     runs-on: ubuntu-latest
     timeout-minutes: 2
     steps:
       - run: |
-          echo "A test or a sport failed in this run. The site was still deployed with the last good data."
+          echo "The scraper reported a failure. Check the build logs and deployment result."
           exit 1

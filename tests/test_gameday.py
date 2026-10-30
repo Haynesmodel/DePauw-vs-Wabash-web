@@ -608,12 +608,18 @@ def test_production_html_validation_matches_pull_request_checks():
 def test_readme_documents_render_and_html_validation_before_data_commit():
     readme = (ROOT / "README.md").read_text(encoding="utf-8").lower()
     workflow_table = next(line for line in readme.splitlines() if "`update-and-deploy.yml`" in line)
-    assert "reports six-page html validation problems as warnings" in workflow_table
-    assert "render failures stop the build" in workflow_table
+    assert "renders the candidate site, which must succeed" in workflow_table
+    assert "with `html-validate`, which only warns" in workflow_table
+    assert "turns the run red after the deploy" in workflow_table and "validation failed or was skipped" in workflow_table
+    assert "test and render failures stop the build" in workflow_table
     assert "commits changed `data/`" in workflow_table
     operator_text = readme.split("what each run of `update-and-deploy.yml` does:", 1)[0]
     assert "render failure stops the build before the data commit" in operator_text
-    assert "html validation problems are reported as warnings and do not stop publishing" in operator_text
+    assert "html validation problems" in operator_text and "do not stop publishing" in operator_text
+    assert "html validation never stops the build" in operator_text
+    assert "if node cannot be set up the validation is skipped" in operator_text
+    assert "a warning annotation and a run-summary note" in operator_text
+    assert "turns the run red for a scraper failure, a failed validation or a skipped validation" in operator_text
     workflow_section = readme.split("what each run of `update-and-deploy.yml` does:", 1)[1].split("### why the merge works", 1)[0]
     assert "render" in workflow_section and "validate" in workflow_section and "commit" in workflow_section
     assert (

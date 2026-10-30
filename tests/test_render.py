@@ -129,7 +129,8 @@ def test_scraped_text_is_escaped_and_unsafe_links_dropped(tmp_path):
     evil["games"][3]["boxscore"] = "http://depauwtigers.com/insecure"
     evil["games"][4]["boxscore"] = "https://evil.example/depauwtigers.com"
     _, page = build(tmp_path, {"football": evil})
-    assert "<script" not in page and "<img" not in page and "<b>" not in page
+    assert page.count('<script src="easter-eggs.js" defer></script>') == 1
+    assert "<img src=x onerror" not in page and "<b>Bold</b>" not in page
     assert "&lt;script&gt;alert(1)&lt;/script&gt;" in page
     assert "&lt;b&gt;Bold&lt;/b&gt; &amp; co" in page
     assert "javascript:" not in page and "evil.example" not in page and "http://" not in page
@@ -150,7 +151,8 @@ def test_no_inline_script_or_style_and_security_meta(tmp_path):
     out, page = build(tmp_path, {"football": football()})
     for name in ("index.html", "404.html"):
         p = (out / name).read_text(encoding="utf-8")
-        assert "<script" not in p and "style=" not in p and "<style" not in p
+        assert (p.count('<script src="easter-eggs.js" defer></script>') == 1) == (name == "index.html")
+        assert "style=" not in p and "<style" not in p
         assert "default-src &#x27;none&#x27;" in p and "base-uri &#x27;none&#x27;" in p
         assert 'name="referrer" content="strict-origin-when-cross-origin"' in p
     assert 'href="styles.css"' in page and 'href="favicon.svg"' in page
@@ -362,7 +364,7 @@ def test_full_school_names_are_in_the_tab_title_and_subtitle_but_the_headline_st
     out, page = build(tmp_path, {"football": football()})
     assert "<title>DePauw University vs. Wabash College: All-Time Head-to-Head Records</title>" in page
     assert 'class="subtitle">DePauw University vs. Wabash College: all-time' in page
-    assert "<h1>DePauw vs. Wabash</h1>" in page
+    assert 'id="entrance-fallback">DePauw vs. Wabash</span>' in page
     assert json.loads((out / "site.webmanifest").read_text())["name"] == "DePauw vs. Wabash"
 
 

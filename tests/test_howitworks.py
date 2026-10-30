@@ -120,7 +120,7 @@ def test_it_links_to_both_schools_pages_the_rulings_and_the_readme(site):
 def test_it_has_the_same_shell_as_the_home_page(site):
     page, home = how(site), (site / "index.html").read_text(encoding="utf-8")
     csp = re.search(r'http-equiv="Content-Security-Policy" content="([^"]+)"', page).group(1)
-    assert csp == re.search(r'http-equiv="Content-Security-Policy" content="([^"]+)"', home).group(1)
+    assert "script-src" not in csp and "script-src &#x27;self&#x27;" in home
     assert '<link rel="canonical" href="https://depauwvswabash.com/how-it-works/athletics/">' in page
     for prop in ("og:title", "og:description", "og:url", "og:image", "og:image:alt", "twitter:card"):
         assert f'"{prop}"' in page, prop

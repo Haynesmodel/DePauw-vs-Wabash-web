@@ -268,7 +268,7 @@ def test_a_game_already_in_the_history_is_not_also_shown_as_the_next_meeting(tmp
 
 def test_the_banner_is_static_html_with_no_script_or_inline_style(tmp_path):
     _, html, _ = banner(tmp_path, "2026-11-14 17:00", {"football": [sched()]})
-    assert "<script" not in html and "style=" not in html
+    assert html.count('<script src="easter-eggs.js" defer></script>') == 1 and "style=" not in html
 
 
 # ---- the share image ----------------------------------------------------- #
@@ -514,6 +514,7 @@ def test_production_html_validation_matches_pull_request_checks():
     assert set(production_command[3:]) == {
         "site/index.html",
         "site/404.html",
+        "site/bell-heist/index.html",
         "site/how-it-works/index.html",
         "site/how-it-works/athletics/index.html",
         "site/how-it-works/alumni/index.html",
@@ -524,12 +525,15 @@ def test_production_html_validation_matches_pull_request_checks():
     pr_node = next(step for step in production_checks if step.get("uses", "").startswith("actions/setup-node@"))
     assert production_node["uses"] == pr_node["uses"]
     assert production_node["with"] == pr_node["with"] == {"node-version": "22"}
+    for steps in (build_steps(), production_checks):
+        node_index = step_index(steps, lambda step: step.get("uses", "").startswith("actions/setup-node@"))
+        assert steps[node_index + 1]["run"] == "node --check static/easter-eggs.js"
 
 
 def test_readme_documents_render_and_html_validation_before_data_commit():
     readme = (ROOT / "README.md").read_text(encoding="utf-8").lower()
     workflow_table = next(line for line in readme.splitlines() if "`update-and-deploy.yml`" in line)
-    assert "reports six-page html validation problems as warnings" in workflow_table
+    assert "reports seven-page html validation problems as warnings" in workflow_table
     assert "render failures stop the build" in workflow_table
     assert "commits changed `data/`" in workflow_table
     operator_text = readme.split("what each run of `update-and-deploy.yml` does:", 1)[0]

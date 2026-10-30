@@ -175,7 +175,7 @@ flowchart TD
   C -- "no" --> RD
   CM --> RD["render site/"]
   RD --> D["deploy to GitHub Pages"]
-  B --> IS["issues: open, update or close<br/>the data-review issue"]
+  RD --> IS["issues: open, update or close<br/>the data-review issue"]
   D -- "scraper failed" --> RP["report: run shows red<br/>check logs and deployment result"]
 ```
 

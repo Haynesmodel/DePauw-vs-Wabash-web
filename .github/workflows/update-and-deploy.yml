@@ -102,6 +102,17 @@ jobs:
           if [ "$APPLY_REVIEWED" = "true" ]; then args="$args --apply-reviewed"; fi
           python scraper/scrape.py $args
 
+      # Validate the candidate data and rendered site before the commit step can publish the data.
+      - name: Render site
+        run: python scraper/render.py
+
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: "22"
+
+      - name: Validate generated HTML
+        run: npx --yes html-validate@11.17.0 site/index.html site/404.html site/how-it-works/index.html site/how-it-works/athletics/index.html site/how-it-works/alumni/index.html site/alumni/index.html
+
       - name: Commit if data changed
         if: ${{ github.ref == 'refs/heads/main' }}
         run: |
@@ -115,9 +126,6 @@ jobs:
           git add data/
           git commit -m "Update DePauw vs. Wabash series data"
           git push origin HEAD:main
-
-      - name: Render site
-        run: python scraper/render.py
 
       - uses: actions/upload-pages-artifact@fc324d3547104276b827a68afc52ff2a11cc49c9 # v5.0.0
         with:

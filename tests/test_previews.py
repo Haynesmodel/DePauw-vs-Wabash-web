@@ -195,7 +195,7 @@ def test_the_csp_allows_the_manifest_and_nothing_extra(tmp_path):
     assert "style=" not in index                      # style-src 'self' would block inline styles
 
 
-ALUMNI_VALUES = [("DePauw", "$543,000"), ("Wabash", "$511,000")]
+ALUMNI_VALUES = [("DePauw", "$516,000"), ("Wabash", "$511,000")]
 
 
 def test_the_alumni_card_is_1200_by_630_deterministic_small_and_without_metadata():
@@ -206,6 +206,8 @@ def test_the_alumni_card_is_1200_by_630_deterministic_small_and_without_metadata
     assert a != images.og_image(TOTALS, "DePauw")
     changed = [("DePauw", "$544,000"), ("Wabash", "$511,000")]
     assert images.alumni_og_image(changed) != a
+    assert images.alumni_og_image(ALUMNI_VALUES, even=True) != a             # the caption says "about even"
+    assert images.alumni_og_version(ALUMNI_VALUES, True) != images.alumni_og_version(ALUMNI_VALUES)
     assert images.alumni_og_version(ALUMNI_VALUES) == images.alumni_og_version(list(ALUMNI_VALUES))
     assert images.alumni_og_version(ALUMNI_VALUES) != images.alumni_og_version(changed)
 
@@ -220,7 +222,7 @@ def test_the_alumni_page_has_a_complete_large_share_card_that_exists_at_its_stat
     assert meta(p, name="twitter:image")[0]["content"] == og
     assert meta(p, property="og:image:type")[0]["content"] == "image/png"
     alt = meta(p, property="og:image:alt")[0]["content"]
-    assert "$543,000" in alt and "$511,000" in alt and "leads" not in alt.lower()
+    assert "$516,000" in alt and "$511,000" in alt and "about even" in alt and "leads" not in alt.lower()
     img = Image.open(site_path(out, og))
     assert img.size == (int(meta(p, property="og:image:width")[0]["content"]),
                         int(meta(p, property="og:image:height")[0]["content"])) == (1200, 630)

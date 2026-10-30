@@ -390,11 +390,12 @@ def alumni_preview_info(endowment: dict) -> dict:
     """The alumni share card shows the endowment per student for each school (no overall alumni score). The
     image URL carries a version that changes only when a drawn figure does."""
     per = alumni_page.per_student(endowment)
+    even = alumni_page.about_even(endowment)
     values = [("DePauw", f"${per['depauw']:,}"), ("Wabash", f"${per['wabash']:,}")]
     alt = (f"DePauw vs. Wabash alumni and endowment: endowment per student is {values[0][1]} at DePauw "
-           f"and {values[1][1]} at Wabash.")
-    return {"image": f"{SITE_URL}alumni-og-image.png?v={images.alumni_og_version(values)}", "alt": alt,
-            "values": values}
+           f"and {values[1][1]} at Wabash on the same basis" + (", about even." if even else "."))
+    return {"image": f"{SITE_URL}alumni-og-image.png?v={images.alumni_og_version(values, even)}", "alt": alt,
+            "values": values, "even": even}
 
 
 def render_manifest() -> str:
@@ -1111,7 +1112,7 @@ def build(data_path: Path, out: Path, *, checked_at: str | None = None,
     when = now or dt.datetime.now(dt.timezone.utc)
     info = preview_info(data, game_day_label(gameday.todays_games(when, upcoming, data["sports"])))
     (out / "og-image.png").write_bytes(images.og_image(data["totals"], info["holder"], info["label"]))
-    (out / "alumni-og-image.png").write_bytes(images.alumni_og_image(alumni_preview["values"]))
+    (out / "alumni-og-image.png").write_bytes(images.alumni_og_image(alumni_preview["values"], alumni_preview["even"]))
     (out / "apple-touch-icon.png").write_bytes(images.icon_png(180))
     (out / "favicon-32.png").write_bytes(images.icon_png(32))
     (out / "icon-192.png").write_bytes(images.icon_png(192))

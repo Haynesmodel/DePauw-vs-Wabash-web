@@ -16,7 +16,18 @@ Cross country, track and field, and golf are left out because they are multi-tea
 
 **Live site: https://depauwvswabash.com/**
 
-The site also has a sourced **[Alumni and endowment comparison](https://depauwvswabash.com/alumni/)**. Athletics remains the home page at `/`; the new page is a separate destination.
+The site has two halves, joined by a navigation bar at the top of every page (**Athletics** | **Alumni**). The bar marks the half you are in; the how-it-works landing page and the 404 page serve both halves and mark neither.
+
+| Address | What it is |
+|---|---|
+| `/` | **Athletics.** The head-to-head records: totals, a card per sport, next meeting, game-day banner, Monon Bell block, data downloads |
+| `/alumni/` | **Alumni and endowment.** Named graduates in ten award and public-service categories and endowment per student, with a source for every entry |
+| `/how-it-works/` | A short landing page with a link to each of the two explanations below (the address was shared before there were two) |
+| `/how-it-works/athletics/` | How the athletics numbers work: sources, what is counted, how the two schools' records are combined, disputes, rulings, update times |
+| `/how-it-works/alumni/` | How the alumni numbers work: who counts, how names were sourced, the endowment basis, enrollment, rounding, the "about even" rule |
+| any missing address | `404.html`: root-relative links (GitHub Pages serves it at any depth), not indexed |
+
+The site also publishes `data/series.json`, `data/alumni.json`, `data/endowment.json` and `games.csv` (the downloads linked in the footers), `sitemap.xml`, `robots.txt` and `site.webmanifest`.
 
 Unofficial fan site, not affiliated with DePauw University or Wabash College. Only men's head-to-head competition is compared: Wabash is an all-male college, and multi-team events (cross country, track and field, golf, and swimming invitationals and championships) aren't head-to-head.
 
@@ -38,7 +49,7 @@ Unofficial fan site, not affiliated with DePauw University or Wabash College. On
 - **Footer.** Every page (home, alumni, the three how-it-works pages, 404) gets its footer from one function (`site_footer()` in `render.py`) with a page-specific data block in front of the same shared lines. The athletics block has the update and check times, the `series.json` and `games.csv` downloads, "Report a data error", "Data from depauwtigers.com and sports.wabash.edu" with the source pages, and, after the shared lines, the men's head-to-head note. The alumni block has "Records last verified" (the newer `verified_at` of the two curated files), the `alumni.json` and `endowment.json` downloads, "Suggest a correction", and "Data from: DePauw and Wabash audited FY2025 financial statements, the U.S. Department of Education's College Navigator (IPEDS), and the sources listed with each name" with links to the two statements and two College Navigator pages; it has no men's note, and the landing and 404 pages have just the shared lines. Every footer then has "How the numbers work" (athletics pages link to `/how-it-works/athletics/`, alumni pages to `/how-it-works/alumni/`, the 404 and landing pages to `/how-it-works/`), "Built in the open: code and data on GitHub", the unofficial-fan-site note and the copyright.
 - **Link previews.** Texting or sharing the link shows a card with the current totals and the Monon Bell holder, plus a "Game day" or "Final" label on game day (see "Preview image" below).
 
-Every number on the page comes from the scraped data or is calculated from it.
+Every number on the athletics pages comes from the scraped data or is calculated from it, and every number on the alumni pages comes from the two hand-curated data files.
 
 ## Alumni and endowment records
 
@@ -85,7 +96,7 @@ flowchart LR
   WS --> U
   U --> UJ[("upcoming.json")]
   SJ --> RN["render.py<br/>with facts, meetings, gameday,<br/>howitworks, images"]
-  AL["alumni.json<br/>curated names and sources"] --> RN
+  AL["alumni.json<br/>hand-curated, reviewed in PRs"] --> RN
   EN["endowment.json<br/>matched fiscal date, fall<br/>enrollment, common basis"] --> RN
   UJ --> RN
   OV --> RN
@@ -95,7 +106,7 @@ flowchart LR
   SN -.-> WB["then, best effort:<br/>source pages go to the<br/>Wayback Machine"]
 ```
 
-Each school's page for a sport is accepted only when its parsed wins, losses, ties, home/away records and current streak match that page's own summary, the page is for the right opponent, and its game count has not shrunk against that school's saved copy. Doubleheaders count as two games. If any check fails, that school keeps its last good games for that sport, the merge is redone from the two saved copies, and the run turns red; everything that passed still updates. A page that passes is then checked for changes to old games, which are held for review (see "Review hold" below). Three things are read specially, in every sport: a score may have a half point (`172.5`; a whole score stays a whole number, so `153`, never `153.0`); a row that lists a result but no score (`L -`, Wabash's 1934 swimming meets) counts in the record, is stored with `score_known: false` and no scores, and is left out of point totals, biggest wins and every score-based fact; and a row whose result letter and two scores disagree (`L 153 - 141`, the score is bigger for the side that lost) is read by trusting the letter, with the scores swapped to match it and `score_order_reversed` recorded, so the other school's matching game is not called a dispute. Requests identify the project in the User-Agent and are spaced a few seconds apart.
+Each school's page for a sport is accepted only when its parsed wins, losses, ties, home/away records and current streak match that page's own summary, no row is repeated (the same box score on two rows, or three identical games on one date), the page is for the right opponent, and its game count has not shrunk against that school's saved copy. Doubleheaders count as two games. If any check fails, that school keeps its last good games for that sport, the merge is redone from the two saved copies, and the run turns red; everything that passed still updates. A page that passes is then checked for changes to old games, which are held for review (see "Review hold" below). Three things are read specially, in every sport: a score may have a half point (`172.5`; a whole score stays a whole number, so `153`, never `153.0`); a row that lists a result but no score (`L -`, Wabash's 1934 swimming meets) counts in the record, is stored with `score_known: false` and no scores, and is left out of point totals, biggest wins and every score-based fact; and a row whose result letter and two scores disagree (`L 153 - 141`, the score is bigger for the side that lost) is read by trusting the letter, with the scores swapped to match it and `score_order_reversed` recorded, so the other school's matching game is not called a dispute. Requests identify the project in the User-Agent and are spaced a few seconds apart.
 
 **How the two lists are merged** (`scraper/merge.py`). Games are matched per sport, in passes, and a row is never used twice:
 
@@ -149,11 +160,13 @@ The same file also holds `keep_previous` rulings, which reject a school's edit t
 
 Three GitHub Actions workflows live in `.github/workflows/`:
 
-| Workflow | Runs when | What it does |
+| Workflow | Runs when | Jobs and permissions |
 |---|---|---|
-| `update-and-deploy.yml` | Twice a day, every 30 minutes (ended at once by the gate unless a game is being played), on every push to `main`, and by hand | Scrapes both schools' pages, applies the review hold, merges, commits `data/` changes, renders the site, deploys it to GitHub Pages and keeps the `data-review` issue in step |
-| `checks.yml` | On every pull request to `main` | Runs the tests, renders the site, validates the generated HTML and renders every Mermaid diagram in this README |
-| `snapshot.yml` | July 1 and January 2, and by hand | Saves a GitHub Release with copies of the data files (skipped when nothing changed), then, as a last job that can never fail the run, asks the Wayback Machine to save the source pages |
+| `update-and-deploy.yml` ("Update data and deploy site") | Twice a day, every 30 minutes (ended at once by the gate unless a game is being played), on every push to `main`, and by hand | `gate` (read-only; decides whether a 30-minute run does anything), `build` (`contents: write`; runs the tests and the scrape, applies the review hold, merges, commits `data/` changes as the Actions bot, renders the site), `deploy` (`pages: write`, `id-token: write`; publishes to GitHub Pages), `issues` (`issues: write`; keeps the `data-review` issue in step), `report` (turns the run red if a test or sport failed) |
+| `checks.yml` ("Checks") | On every pull request to `main` | One read-only job: the tests, the render, `html-validate` on all six pages and every Mermaid diagram in this README |
+| `snapshot.yml` ("Data snapshot") | July 1 and January 2, and by hand | `prepare` (read-only; the change check and the release files), `release` (`contents: write`; the GitHub Release), `archive` (`contents: write`; asks the Wayback Machine to save the source pages, last, and can never fail the run) |
+
+To run the update by hand: Actions, "Update data and deploy site", Run workflow, on `main`. The two optional inputs are "Accept a sport whose game count went down" (`allow_shrink`) and "Apply the changes to old games waiting for review" (`apply_reviewed_changes`, see "Review hold"). Every run that gets past the gate scrapes first, so every deploy carries a fresh "Last checked". "Data last changed" is different: it is when `series.json` last changed (`updated_at`), which can be weeks ago because nothing changes between games.
 
 What each run of `update-and-deploy.yml` does:
 
@@ -175,7 +188,7 @@ flowchart TD
   B -- "a test or sport failed" --> RP["report: run shows red<br/>(site still deployed<br/>with last good data)"]
 ```
 
-The schedule times are written in UTC in the workflow, so they shift by an hour with daylight saving time (the times above are for Eastern daylight time; in winter the daily runs are about 5:19 AM and 10:47 PM). GitHub can also delay or drop scheduled runs.
+The schedule times are written in UTC in the workflow, so they shift by an hour with daylight saving time (the times above are for Eastern daylight time; in winter the daily runs are about 5:19 AM and 10:47 PM). GitHub can delay a scheduled run or skip it altogether, and it switches scheduled workflows off after 60 days with no repository activity; if a day's update is missing, run the workflow by hand as described above.
 
 ### Why the merge works this way
 
@@ -322,17 +335,30 @@ Tests are in `tests/test_review.py`; the logic is in `scraper/review.py` and `sc
 - **Job order.** Three jobs, one after the other: `prepare` (checks for changes and builds the release files, with no calls to the Internet Archive), `release` (creates the GitHub Release; its notes say "Wayback Machine copies: being saved") and `archive`. A slow Internet Archive can therefore never delay or block the data release.
 - **Internet Archive.** The `archive` job sends each of the 14 source history pages (7 DePauw, 7 Wabash) to the Wayback Machine's Save Page Now (`https://web.archive.org/save/<url>`), about 6 seconds apart, then edits the release notes in place (`gh release edit`) to list the archive links and any pages it could not save ("Wayback Machine copies: none could be saved this time." if there were none). It is best effort and never fails the run: every error is caught and logged as a warning, the script always exits 0, and the job is also `continue-on-error`. Limits, named constants in `scraper/snapshot.py`: `SAVE_BUDGET` (30 minutes for the whole step; pages not reached are listed as not saved), `SAVE_TIMEOUT` (180 seconds per page; Save Page Now often needs a minute or more) and `SAVE_PAUSE` (6 seconds between requests), plus a 40-minute job `timeout-minutes` as a backstop. The per-page limit is a socket timeout, so the budget and the job timeout are the real bounds.
 - **Manual runs.** Actions, "Data snapshot", Run workflow has two inputs. `archive` (default on): turn it off to make a snapshot without archiving; the notes then say the copies were not requested. `archive_release_tag`: to retry archiving for a release that already exists, for example after some pages were not saved, enter its tag (such as `data-2026-10-29`). That run makes no new snapshot. It only tries the pages that do not already have an archive link in the release notes, adds any new links to the archive section and never removes an existing one; "Not saved" lists only the pages still missing. The rest of the notes is left alone, and a retry that saves nothing changes nothing (a release with a link for every page is not touched at all).
-- **Permissions.** The `prepare` job is read-only; the `release` and `archive` jobs are the only ones with `contents: write`. Every action is pinned to a full commit SHA. The first snapshot has to be made by hand once after this workflow is merged.
+- **Permissions.** The `prepare` job is read-only; the `release` and `archive` jobs are the only ones with `contents: write`. Every action is pinned to a full commit SHA.
 
 The logic is in `scraper/snapshot.py` and the tests in `tests/test_snapshot.py`.
 
+## Shared pieces of every page
+
+- **One header, one footer.** `render.py` builds every page's header (title, the Athletics | Alumni bar, the subtitle) and footer from the same functions: `site_nav` and `site_footer`, whose page-specific data block comes first and whose shared lines come after (see "Footer" above). The subtitle is the athletics one on the athletics pages, the alumni one ("Notable graduates and endowments, side by side, with a source for every name.") on the alumni pages, and a neutral one ("DePauw and Wabash, side by side: head-to-head athletics, notable graduates and endowments.") on the landing and 404 pages. A new footer item is added as a block in `site_footer`, never as HTML on one page.
+- **Back links** on the how-it-works pages and the 404 page read "← Back to the head-to-head records" and "← Back to the alumni and endowment page" (`BACK_ATHLETICS` and `BACK_ALUMNI`); the landing page does not link to itself in its footer.
+- **Plain HTML, no JavaScript, strict security policy.** Every page carries `Content-Security-Policy: default-src 'none'; style-src 'self'; img-src 'self'; manifest-src 'self'; base-uri 'none'; form-action 'none'; object-src 'none'`, so there are no scripts, no inline styles and no third-party requests. Styling is one file, `static/styles.css`.
+- **Light and dark mode** follow the visitor's system setting (`prefers-color-scheme` in the stylesheet, a `color-scheme` meta tag and separate light and dark `theme-color` tags). There is no toggle and no script.
+- **Writing rules the generated text follows.** Locations are AP style ("Ind.", "Ohio"); dates read "Oct 29, 2026"; every generated list of three or more items has a serial comma (`render.join_and`: "lacrosse, tennis, and swimming and diving"); numbers on the pages are read from the data and never typed in.
+- **Link previews and icons** are drawn at every build (see "Preview image and icons").
+- **`sitemap.xml`** lists the five pages above. Its `lastmod` for the athletics pages is the Eastern date of the newest time those pages state (when the data last changed or was last checked); for the alumni page and its explanation it is the newer `verified_at` of `alumni.json` and `endowment.json`.
+- **Custom domain.** The site is served by GitHub Pages at depauwvswabash.com (the domain is set in the repository's Pages settings, so there is no `CNAME` file in `site/`).
+
 ## Preview image and icons
 
-`scraper/images.py` draws `og-image.png` (1200x630, the current totals and Monon Bell holder), `apple-touch-icon.png`, `favicon-32.png` and the manifest icons at every build, with Pillow and the bundled Barlow Condensed font (`static/fonts/`, SIL Open Font License, license included), so the result is the same on a laptop and in GitHub Actions. Pillow is pinned to an exact version in `requirements.txt` for that reason. On game day it also carries a small "GAME DAY" or "FINAL" label at the right of the Bell line, while the banner shows. The image URL in the page carries a `?v=` value built from the totals, holder and label, so chat apps fetch the new picture when any of them change. No school logos, wordmarks, seals or mascot art are used.
+`scraper/images.py` draws `og-image.png` (1200x630, the current totals and Monon Bell holder), `apple-touch-icon.png`, `favicon-32.png` and the manifest icons at every build, with Pillow and the bundled Barlow Condensed font (`static/fonts/`, SIL Open Font License, license included), so the result is the same on a laptop and in GitHub Actions. Pillow is pinned to an exact version in `requirements.txt` for that reason. The alumni pages have their own card, `alumni-og-image.png` (endowment per student for each school, with "about even" when the figures are within 5%, no overall score), whose `?v=` is a hash of the figures it draws. On game day the athletics card also carries a small "GAME DAY" or "FINAL" label at the right of the Bell line, while the banner shows. The image URL in the page carries a `?v=` value built from the totals, holder and label, so chat apps fetch the new picture when any of them change. No school logos, wordmarks, seals or mascot art are used.
 
 After the first deploy of a change to the preview, test it by texting yourself the link. iMessage caches previews, so use a URL like `https://depauwvswabash.com/?v=1` the first time.
 
 ## Run it locally
+
+Python 3.12 or newer (the workflows use 3.12) and, for the HTML and diagram checks only, Node 22.
 
 ```bash
 pip install -r requirements.txt
@@ -344,10 +370,51 @@ python scraper/render.py             # build the site into site/ (including the 
 python scraper/render.py --now 2026-11-14T13:30   # preview game-day mode as if it were this Eastern time
 python scraper/gameday.py gate --schedule "7,37 * * * *" --now 2026-11-14T14:00:00-05:00   # what the game-day gate would decide
 python -m http.server 8000 -d site   # preview at http://localhost:8000
+npx --yes html-validate@11.17.0 site/index.html site/404.html site/how-it-works/index.html site/how-it-works/athletics/index.html site/how-it-works/alumni/index.html site/alumni/index.html   # validate every page (what the PR check does)
 npx --yes -p @mermaid-js/mermaid-cli@11.17.0 mmdc -i README.md -o <temp folder>/readme-diagrams.md   # draw the README diagrams (what the PR check does); keep the output outside the repo
+# if Chrome's sandbox fails in the diagram step, add: -p <a file containing {"args": ["--no-sandbox"]}>
 ```
 
-`site/` is build output and is not committed.
+`site/` is build output and is not committed. Stop the preview server before rebuilding on Windows, which locks the folder it serves.
+
+## Where things are
+
+```
+README.md, LICENSE, requirements.txt      this file, the MIT license, the Python packages (Pillow is pinned exactly)
+data/
+  series.json        the merged records the athletics pages read (always the merge of the next three)
+  depauw.json        DePauw's page for each sport as read, in DePauw's point of view
+  wabash.json        Wabash's page for each sport as read, flipped into DePauw's point of view
+  overrides.json     hand rulings: same_game, different_games, session_of, keep_previous
+  pending-changes.json  changes to old games waiting for review ({"changes": []} when none)
+  upcoming.json      the other school's games not yet played, from both schedules
+  alumni.json        hand-curated graduates, categories and sources (alumni page)
+  endowment.json     hand-curated endowment amounts, enrollment and common basis (alumni page)
+scraper/
+  sources.json       one entry per sport: both schools' history and schedule paths, season months, labels
+  scrape.py          fetch, parse and validate each page, keep last good data, run the merge, write data/
+  merge.py           match the two schools' games (passes 0-6), disputes, rulings, flip Wabash's page
+  review.py          the review hold: hold changes to old games; review_issue.py keeps the data-review issue
+  upcoming.py        schedule parser, multi-team filter, cross-check of the two schedules, carry-over
+  gameday.py         the game-day gate and banner phases; timeutil.py is Eastern time without extra packages
+  meetings.py        which games are ahead or "result pending"
+  facts.py           Monon Bell standings and the per-card fun facts
+  places.py          AP-style state names for display
+  alumni.py          validation, counts, per-student endowment, scoreboard and page for /alumni/
+  howitworks.py      the text of the three how-it-works pages
+  render.py          builds site/ (pages, footer, nav, sitemap, downloads); images.py draws the PNGs
+  snapshot.py        data snapshots and Wayback archiving
+static/              styles.css, favicon.svg, fonts/ (Barlow Condensed, SIL OFL)
+tests/               one test file per area (scraper, merge, overrides, review, snapshot, game day, render,
+                     footer, how-it-works pages, alumni, swimming ...); fixtures/ holds page markup captured
+                     from both schools' sites and the expected parse of each
+.github/workflows/   update-and-deploy.yml, checks.yml, snapshot.yml
+.github/ISSUE_TEMPLATE/  data-correction.yml, alumni-correction.yml, config.yml (blank issues off)
+.github/dependabot.yml   weekly updates of the pinned GitHub Actions
+docs/                the plan the alumni page was built from (alumni-endowment-implementation-plan.md)
+site/                build output, never committed
+```
+
 
 ## Adding a sport
 
@@ -358,7 +425,7 @@ Add an entry to `scraper/sources.json`. DePauw's opponent id for Wabash is `215`
 Only meets where DePauw's team swims Wabash's team head to head count toward the record. Both schools' opponent-history pages for the sport list dual meets only, so the records are those pages merged as for any sport. Invitationals, relays and conference championships are not head-to-head, so they are kept out of the records and out of "Next meeting".
 
 - **Schedule filter** (`upcoming.is_multi_team`, every sport). A schedule row counts as a meeting only when its opponent id is the other school's and its opponent name is not a multi-team event. A name containing the whole word Invitational, Relays, Championship(s), Classic, Open, Tri, Quad or Triangular, or listing more than one opponent (`,` `/` `&` or " and "), is skipped, even when the row carries the other school's id (a Wabash-hosted invitational on DePauw's page does). Whole words only, so "Opener" is not "Open". The live 2026-27 swimming schedules list one Wabash meeting each (Dec 4, Crawfordsville) and every invitational and championship under another school's id, so the filter removed nothing there. Known gap: a three-team meet that a school lists as separate rows per opponent (Wabash's schedule shows Centre and Franklin as two rows on Nov 7) cannot be told from two dual meets; a three-team meet that includes the other school would show as a dual meet. Tournaments in team sports are the other risk: a conference-tournament game against the other school with "Championship" in the name would be skipped.
-- **Half points.** Scores like 172.5 are parsed, validated against the page's own total (DePauw's page says `Total Points 4459.5`), summed, shown and written to `games.csv` as 172.5. A whole score or total stays an integer.
+- **Half points.** Scores like 172.5 are parsed (the parser reads the page's own total, DePauw's `Total Points 4459.5`, and a test checks that the parsed meets add up to it; the live check is the summary tally above), summed, shown and written to `games.csv` as 172.5. A whole score or total stays an integer.
 - **Meets with no score.** Wabash's page lists two 1934 meets as `L -` with "No Score Listed (Wabash Loss)". They count as DePauw wins, show "DePauw won · score not recorded", and add nothing to point totals, biggest-win, close-meet or highest-scoring facts.
 - **The March 2021 three-day meet.** Wabash lists Mar 19 (59-32), Mar 20 (163-76) and Mar 21 (231-120) as three wins; DePauw lists one meet on Mar 21 (120-231). Wabash's own recaps describe the first two as the running score after each day of one meet, so a `session_of` ruling sets them aside: the series is 39 meets, DePauw 26, Wabash 13, not Wabash's 41 rows.
 - **A score written the wrong way around.** Wabash's Nov 12, 2008 row reads `L 153 - 141` (Wabash lost, yet the first score is bigger). The letter is trusted, and the meet matches DePauw's 153-141 without being called a dispute. The same check is applied to every sport; it also found 11 old Wabash-only rows in baseball and tennis, whose displayed scores were corrected through the review hold (3 baseball, 8 tennis: no record changed, only the displayed scores and the point totals).
@@ -370,11 +437,22 @@ Only meets where DePauw's team swims Wabash's team head to head count toward the
 
 `data/depauw.json` and `data/wabash.json` hold each school's games for each sport as they were read, both in DePauw's point of view (Wabash's page is flipped: wins and losses, scores, and home and away swap). `series.json` is always the merge of these two files, so a run can re-merge without fetching.
 
+`data/alumni.json` holds `schema_version`, `verified_at`, a `methodology` text, the ten `categories` (`id`, `name`, `definition`, and per school a `review` with notes and sources) and the `people` (`id`, `name`, `school`, `degree`, `degree_year`, `school_source`, `categories` and one `qualifications` entry per category: `achievement`, `years`, `source`, optionally `present`, and for Fortune 500 CEOs `company`, `rank_year`, `rank` and `ranking_source`). `data/endowment.json` holds `schema_version`, `verified_at`, `fiscal_year`, `as_of`, the `basis` and `explanation` texts, `comparable_basis` and, per school, the audited `amount_usd` with its source, the `comparable` components taken out (`excluded`, `source_note`) and the `enrollment` (`count`, `term`, `measure`, source, `verified_at`). Both are validated (`scraper/alumni.py`) on every build, and neither the scraper nor the review hold touches them.
+
 `data/overrides.json` holds the rulings described above (`same_game`, `different_games`, `session_of` for days of one meet, and `keep_previous` for rejected edits to old games), each with a short reason.
 
 `data/pending-changes.json` holds the changes to old games waiting for review (`id`, `school`, `sport`, `kind`: `edited`, `added` or `removed`, `old` and `new` game versions, `source_url`, `first_seen`, and `touches_ruling` when it affects a row a ruling names). It is empty (`"changes": []`) when nothing waits, and is rewritten only when its content changes.
 
 `data/upcoming.json` holds, per sport, the two schedule URLs and the Wabash games not yet played (`date`, `time`, `time_note`, `location`, `site`, `status`, `doubleheader`, `source`), plus a game dated today or yesterday that has just finished and is not in the history yet. It has no timestamp, so it changes only when the schedule does.
+
+## Contributing
+
+- **Suggest a correction.** Every sport card and the footer link to the data-error form (`data-correction.yml`); every alumni card and the alumni footer link to the alumni form (`alumni-correction.yml`). Both open a public issue, so they ask for nothing personal, only what looks wrong and a link to a source.
+- **Fix a game the schools disagree on or one only one school lists.** Add a ruling to `data/overrides.json` with a reason (see "Rulings"), then run `python scraper/scrape.py --dry-run` and the tests. Prefer a ruling to changing a merge rule.
+- **Add a sport.** See "Adding a sport" below. Only head-to-head sports qualify.
+- **Add or edit an alumni entry.** Edit `data/alumni.json`: a person needs an `id`, `name`, `school` (`depauw` or `wabash`), `degree` and `degree_year` (an earned degree), a `school_source` (label and URL), the `categories` they belong to, and a `qualifications` entry for each category with the `achievement`, `years` (one year, or start and end years; `"present": true` for an office still held) and a `source`. Fortune 500 CEOs also need `company`, `rank_year`, `rank` and a `ranking_source`. Update `verified_at` and the category's review notes, then run the tests and `python scraper/render.py`: validation refuses a missing source, an unknown category or a duplicate. The ten categories are fixed in the validation and in `TILE_LABELS`; adding an eleventh means changing both.
+- **Update the endowment.** Edit `data/endowment.json`: each school's audited amount and source, the components taken out to reach the common basis (`comparable.excluded`, with a source note), and the fall enrollment that matches the fiscal year (validation refuses any other term). The per-student figures and the "about even" call are calculated at build time and are never stored.
+- **Pull requests.** The scraper commits data to `main` on a schedule and the repository can have more than one contributor, so `git fetch origin` and bring your branch up to date with `main` before you push. Run the tests, the render, `html-validate` and the diagram check (see "Run it locally"). Any change to the pipeline, data files, workflows, triggers or game-day behavior also updates the matching diagram in this README.
 
 ## License
 

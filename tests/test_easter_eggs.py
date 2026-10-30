@@ -143,6 +143,33 @@ def test_title_entrance_is_progressive_and_uses_one_native_click_handler(site):
     assert re.search(r"\.admissions-note summary\s*\{[^}]*min-height:\s*44px", css)
 
 
+def test_title_button_focus_outline_contrasts_with_header_in_light_and_dark_modes():
+    css = (ROOT / "static/styles.css").read_text(encoding="utf-8")
+    selector = r"\.site-header \.entrance-button:focus-visible\s*\{([^}]*)\}"
+    rules = re.findall(selector, css)
+    assert len(rules) == 2
+    assert re.search(r"outline-color:\s*var\(--color-header-text\)", rules[0])
+    assert re.search(r"outline-color:\s*ButtonText", rules[1])
+
+    light = css.split("@media (prefers-color-scheme: dark)", 1)[0]
+    dark = css.split("@media (prefers-color-scheme: dark)", 1)[1].split("\n}", 1)[0]
+
+    def token(source, name):
+        match = re.search(rf"{re.escape(name)}:\s*(#[0-9a-fA-F]{{6}})", source)
+        assert match, f"missing CSS token {name}"
+        return tuple(int(match.group(1)[i:i + 2], 16) / 255 for i in (1, 3, 5))
+
+    def luminance(rgb):
+        channels = [value / 12.92 if value <= 0.04045 else ((value + 0.055) / 1.055) ** 2.4
+                    for value in rgb]
+        return sum(weight * value for weight, value in zip((0.2126, 0.7152, 0.0722), channels))
+
+    outline = luminance(token(light, "--color-header-text"))
+    for source in (light, dark):
+        background = luminance(token(source, "--color-header"))
+        assert (max(outline, background) + 0.05) / (min(outline, background) + 0.05) >= 3
+
+
 def test_shared_footer_comment_and_disclosure_are_exactly_once_on_all_seven_pages(site):
     for name in PAGES:
         source = page(site, name)

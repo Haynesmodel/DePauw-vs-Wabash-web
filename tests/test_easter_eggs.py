@@ -170,7 +170,7 @@ def test_original_art_is_safe_well_formed_svg():
         root = ET.parse(ROOT / "static" / name).getroot()
         assert root.tag.endswith("svg")
         for node in root.iter():
-            assert node.tag.rsplit("}", 1)[-1].lower() not in {"script", "foreignobject"}
+            assert node.tag.rsplit("}", 1)[-1].lower() not in {"script", "style", "foreignobject"}
             for attr, value in node.attrib.items():
                 attr = attr.rsplit("}", 1)[-1].lower()
                 assert not attr.startswith("on") and attr != "style"
@@ -234,6 +234,16 @@ def test_published_inputs_are_unchanged_and_two_fixed_time_builds_match(tmp_path
     source_files = {path: path.read_bytes() for path in (ROOT / "data").glob("*.json")}
     data = render.load(ROOT / "data" / "series.json")
     before = copy.deepcopy(data)
+    render.render_index(data, now=NOW, upcoming={})
+    assert data == before
+
+    alumni = render.alumni_page.validate_alumni(
+        render.alumni_page.load_json(ROOT / "data" / "alumni.json", "alumni"))
+    endowment = render.alumni_page.validate_endowment(
+        render.alumni_page.load_json(ROOT / "data" / "endowment.json", "endowment"))
+    alumni_before, endowment_before = copy.deepcopy(alumni), copy.deepcopy(endowment)
+    render.alumni_page.render_page(alumni, endowment, head_html="", footer_html="")
+    assert alumni == alumni_before and endowment == endowment_before
     outputs = []
     for name in ("first", "second"):
         out = tmp_path / name
@@ -242,7 +252,6 @@ def test_published_inputs_are_unchanged_and_two_fixed_time_builds_match(tmp_path
         for filename in ("series.json", "alumni.json", "endowment.json"):
             assert (out / "data" / filename).read_bytes() == source_files[ROOT / "data" / filename]
         assert (out / "games.csv").read_bytes() == render.render_csv(data).encode()
-    assert data == before
     assert outputs[0] == outputs[1]
     # The site publishes three JSON downloads, not a fourth; preserve the current export set.
     assert {name for name in outputs[0] if name.startswith("data/") and name.endswith(".json")} == {

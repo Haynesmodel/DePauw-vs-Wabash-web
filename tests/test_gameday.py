@@ -177,7 +177,7 @@ def test_before_the_start_it_says_game_day_with_the_time_and_place(tmp_path):
 def test_after_the_scheduled_start_it_says_underway_until_the_result_is_in(tmp_path):
     t, _, _ = banner(tmp_path, "2026-11-14 13:07", {"football": [sched()]})
     assert t == ("Football vs. Wabash is underway or just finished. "
-                 "The result will appear here soon after it's posted.")
+                 "The result will appear here soon after it’s posted.")
     t, _, _ = banner(tmp_path, "2026-11-14 22:00", {"football": [sched()]})
     assert t.startswith("Football vs. Wabash is underway or just finished.")
 
@@ -217,7 +217,7 @@ def test_two_sports_on_one_day_share_one_banner_each_in_its_own_phase(tmp_path):
     t, html, _ = banner(tmp_path, "2026-11-14 14:00", games, sports)
     assert html.count('class="game-day"') == 1
     assert t == ("Final, Football: DePauw 41, Wabash 20 · DePauw holds the Monon Bell. "
-                 "Game day: Men's Lacrosse vs. Wabash today, 3:00 PM · Greencastle, Ind.")
+                 "Game day: Men’s Lacrosse vs. Wabash today, 3:00 PM · Greencastle, Ind.")
 
 
 def test_a_doubleheader_banner_lists_every_game(tmp_path):

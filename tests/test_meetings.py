@@ -109,7 +109,7 @@ def test_the_soonest_sport_wins_the_top_spot_and_every_card_shows_its_own(tmp_pa
         "football": entry(sched("2026-11-14")),
         "mens-basketball": entry(sched("2026-11-12", "7:00 PM", "home", "Neal Fieldhouse, Greencastle, Ind."))})
     top = text_of(html[html.index('id="next-meeting"'):html.index('id="overall-h"')])
-    assert "Men's Basketball, Thu, Nov 12 · 7:00 PM · Neal Fieldhouse" in top
+    assert "Men’s Basketball, Thu, Nov 12 · 7:00 PM · Neal Fieldhouse" in top
     football_card = html[html.index('id="football"'):html.index('id="mens-basketball"')]
     assert "Next meeting" in text_of(football_card) and "Sat, Nov 14 · 1:07 PM" in text_of(football_card)
     assert '>DePauw schedule</a>' in football_card

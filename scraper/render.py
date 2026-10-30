@@ -129,11 +129,43 @@ def safe_url(url) -> str | None:
     return url
 
 
+# Visible text uses the curly apostrophe (’) everywhere; the data files, sources.json, URLs, ids and games.csv
+# keep the sources' straight one. The conversion happens once, when each page is written (curly_html), so
+# every renderer can keep working with the sources' own spelling.
+APOSTROPHE = re.compile(r"&#x27;|&#39;|'")
+READ_ATTR = re.compile(r'(?<![\w-])(alt|aria-label|title|placeholder)="([^"]*)"')
+# Meta tags whose content a reader sees (a link preview card, a search result), by name or property.
+READ_META = {"description", "twitter:title", "twitter:description", "twitter:image:alt",
+             "og:title", "og:description", "og:image:alt", "og:site_name"}
+
+
+def curly(text: str) -> str:
+    """The text with every straight apostrophe, plain or HTML-escaped, written as a curly one."""
+    return APOSTROPHE.sub("\u2019", text)
+
+
+def curly_html(page: str) -> str:
+    """A finished page with the curly apostrophe in everything a reader sees or hears: text, the <title>, the
+    description and share-card meta tags, and alt, aria-label, title and placeholder attributes. Links, ids,
+    classes and every other attribute are left exactly as they were."""
+    parts = re.split(r"(<[^>]*>)", page)
+    for i, part in enumerate(parts):
+        if not part.startswith("<") or part.startswith("<!"):
+            parts[i] = curly(part) if not part.startswith("<!") else part
+            continue
+        if part.startswith("<meta"):
+            label = re.search(r'(?<![\w-])(?:name|property)="([^"]*)"', part)
+            if label and label.group(1) in READ_META:
+                part = re.sub(r'(?<![\w-])content="([^"]*)"', lambda m: f'content="{curly(m.group(1))}"', part)
+        parts[i] = READ_ATTR.sub(lambda m: f'{m.group(1)}="{curly(m.group(2))}"', part)
+    return "".join(parts)
+
+
 def report_url(sport_name: str | None = None) -> str:
     """Opens the data-correction issue form, with the sport filled in when the link comes from a card."""
     query = "template=data-correction.yml"
     if sport_name:
-        query += f"&title={quote('Data correction: ' + sport_name)}&sport={quote(sport_name)}"
+        query += f"&title={quote(curly('Data correction: ' + sport_name))}&sport={quote(curly(sport_name))}"
     return f"{REPO_URL}/issues/new?{query}"
 
 
@@ -1099,7 +1131,6 @@ def render_404(now: dt.datetime | None = None) -> str:
         '<h2>Page not found</h2>',
         f'<p class="back"><a href="{esc(BASE_PATH)}">{esc(BACK_ATHLETICS)}</a> · '
         f'<a href="{esc(BASE_PATH + ALUMNI_PATH)}">{esc(BACK_ALUMNI)}</a></p>',
-        f'<p><a href="{esc(BASE_PATH + HOW_PATH)}">How the numbers work</a></p>',
         '</main>',
         *site_footer(now or dt.datetime.now(dt.timezone.utc), prefix=BASE_PATH),
         '</body>',
@@ -1201,7 +1232,7 @@ def build(data_path: Path, out: Path, *, checked_at: str | None = None,
     out.mkdir(parents=True)
     for name, text in pages.items():
         (out / name).parent.mkdir(parents=True, exist_ok=True)
-        (out / name).write_text(text, encoding="utf-8", newline="\n")
+        (out / name).write_text(curly_html(text) if name.endswith(".html") else text, encoding="utf-8", newline="\n")
     for asset in ("styles.css", "favicon.svg"):
         shutil.copyfile(STATIC / asset, out / asset)
     # Images are drawn at build time from the bundled font, so every deploy has a card that matches the data.

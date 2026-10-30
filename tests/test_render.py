@@ -140,7 +140,7 @@ def test_a_third_sport_appears_with_no_template_changes(tmp_path):
     _, page = build(tmp_path, {"football": football(), "mens-basketball": basketball(),
                                "mens-lacrosse": lacrosse()})
     t = text_of(page)
-    assert 'id="mens-basketball"' in page and "Men's Basketball" in t
+    assert 'id="mens-basketball"' in page and "Men’s Basketball" in t
     assert "Wabash won the last meeting" in t
     assert "8 games across 3 sports" in t
     assert 'href="https://depauwtigers.com/sports/mens-basketball/opponent-history/wabash/215"' in page

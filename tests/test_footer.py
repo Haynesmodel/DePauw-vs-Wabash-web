@@ -1,4 +1,5 @@
-"""The footer is one function, so every page (home, how-it-works, 404) carries the same lines."""
+"""The footer is one function with a page-specific data block, so every page (home, the three how-it-works
+pages, alumni, 404) carries the same structure, styles and wording after it."""
 
 import datetime as dt
 import json
@@ -9,6 +10,7 @@ from pathlib import Path
 import pytest
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "scraper"))
+import alumni  # noqa: E402
 import render  # noqa: E402
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -16,6 +18,8 @@ NOW = dt.datetime(2026, 12, 1, 15, 0, tzinfo=dt.timezone.utc)
 MEN_ONLY = ("Only men’s head-to-head competition is compared: Wabash is an all-male college, and multi-team "
             "events (cross country, track and field, golf, and swimming invitationals and championships) "
             "aren’t head-to-head.")
+ATHLETICS_ONLY = ("Data last changed", "series.json", "games.csv", "Report a data error", "depauwtigers.com",
+                  "sports.wabash.edu", MEN_ONLY, "Last checked")
 
 
 @pytest.fixture(scope="module")
@@ -30,30 +34,93 @@ def footer(site, name):
     return html[html.index('<footer class="site-footer">'):]
 
 
-PAGES = {"index.html": "", "how-it-works/index.html": "../", "404.html": "/"}
+# page -> (prefix to the site root, the "How the numbers work" page it links to, kind of data block)
+PAGES = {
+    "index.html": ("", "how-it-works/athletics/", "athletics"),
+    "how-it-works/athletics/index.html": ("../../", "how-it-works/athletics/", "athletics"),
+    "alumni/index.html": ("../", "how-it-works/alumni/", "alumni"),
+    "how-it-works/alumni/index.html": ("../../", "how-it-works/alumni/", "alumni"),
+    "how-it-works/index.html": ("../", "how-it-works/", "neutral"),
+    "404.html": ("/", "how-it-works/", "neutral"),
+}
+
+
+def shared_tail(f):
+    """Everything from the 'How the numbers work' line on: the part every page has in common."""
+    return f[f.index('<p class="footer-links">'):]
 
 
 @pytest.mark.parametrize("name", PAGES)
-def test_every_page_has_the_new_lines_in_order(site, name):
+def test_every_page_has_the_shared_lines_in_order_and_links_to_its_own_how_page(site, name):
+    prefix, how, kind = PAGES[name]
     f = footer(site, name)
-    how, git, men, disclaimer, copyright_ = (f.index(x) for x in (
-        "How the numbers work", "Built in the open: code and data on GitHub", MEN_ONLY, render.DISCLAIMER, "© 2026"))
-    assert how < git < men < disclaimer < copyright_
-    assert f.count("How the numbers work") == 1
-    assert f'href="{PAGES[name]}how-it-works/"' in f
+    assert f.count("How the numbers work") == 1 and f.count('class="footer-links"') == 1
+    assert f'<a href="{prefix}{how}">How the numbers work</a>' in f
     assert f'<a href="{render.REPO_URL}">Built in the open: code and data on GitHub</a>' in f
+    assert f.index("How the numbers work") < f.index("Built in the open") < f.index(render.DISCLAIMER) < f.index("© 2026")
     assert 'class="copyright"' in f[-200:]                       # the copyright is still the last line
+    assert f.count(render.DISCLAIMER) == 1
+    assert "Code and data on GitHub" not in f.replace("Built in the open: code and data on GitHub", "")
 
 
 @pytest.mark.parametrize("name", PAGES)
-def test_the_old_men_only_line_is_gone(site, name):
-    assert "Only men’s sports are compared because" not in footer(site, name)
-
-
-@pytest.mark.parametrize("name", ["index.html", "how-it-works/index.html"])
-def test_the_links_sit_next_to_the_source_links(site, name):
+def test_the_mens_note_shows_on_every_page_except_the_alumni_pages(site, name):
     f = footer(site, name)
+    assert (MEN_ONLY in f) == (PAGES[name][2] != "alumni")
+    assert "Only men’s sports are compared because" not in f
+
+
+@pytest.mark.parametrize("name", [n for n, p in PAGES.items() if p[2] == "athletics"])
+def test_the_athletics_footer_keeps_its_data_block_in_front_of_the_shared_lines(site, name):
+    prefix = PAGES[name][0]
+    f = footer(site, name)
+    assert "Data last changed" in f and "Last checked" not in f          # no live check in a fixture build
+    assert f'href="{prefix}data/series.json"' in f and f'href="{prefix}games.csv"' in f
+    assert render.report_url() in f.replace("&amp;", "&")
+    assert ('Data from <a href="https://depauwtigers.com/">depauwtigers.com</a> and '
+            '<a href="https://sports.wabash.edu/">sports.wabash.edu</a>. Source pages:') in f
     assert f.index('class="sources"') < f.index("How the numbers work") < f.index(MEN_ONLY)
+    assert "alumni.json" not in f and "Records last verified" not in f
+
+
+@pytest.mark.parametrize("name", [n for n, p in PAGES.items() if p[2] == "alumni"])
+def test_the_alumni_footer_has_the_alumni_data_block_and_nothing_athletics_only(site, name):
+    prefix = PAGES[name][0]
+    f = footer(site, name)
+    endowment = alumni.load_json(ROOT / "data" / "endowment.json", "endowment")
+    assert "Records last verified <time datetime=\"2026-10-29\">Oct 29, 2026</time>." in f
+    assert f'<a href="{prefix}data/alumni.json">alumni.json</a>' in f
+    assert f'<a href="{prefix}data/endowment.json">endowment.json</a>' in f
+    assert f'<a href="{alumni.correction_url()}">Suggest a correction</a>' in f
+    assert ("Data from: DePauw and Wabash audited FY2025 financial statements, the U.S. Department of Education’s "
+            "College Navigator (IPEDS), and the sources listed with each name.") in f
+    for item in endowment["schools"].values():
+        assert f'<a href="{item["source_url"]}">FY2025 audited financial statements</a>' in f
+        assert f'<a href="{item["enrollment"]["source_url"]}">College Navigator (IPEDS)</a>' in f
+    assert f.index("Records last verified") < f.index('class="sources"') < f.index("How the numbers work")
+    for athletics_only in ATHLETICS_ONLY:
+        assert athletics_only not in f, athletics_only
+    assert "Alumni and endowment records use manually reviewed sources" not in f
+
+
+def test_the_records_verified_date_is_the_newest_of_the_two_curated_files_in_the_athletics_date_style():
+    data = alumni.load_json(ROOT / "data" / "alumni.json", "alumni")
+    endowment = alumni.load_json(ROOT / "data" / "endowment.json", "endowment")
+    data["verified_at"], endowment["verified_at"] = "2026-11-02", "2026-11-09"
+    block = "\n".join(render.alumni_footer_block("../", data, endowment))
+    assert 'datetime="2026-11-09">Nov 9, 2026</time>' in block
+    assert render.alumni_verified_date(data, endowment) == "2026-11-09"
+
+
+@pytest.mark.parametrize("name", PAGES)
+def test_the_shared_lines_are_the_same_on_every_page_apart_from_the_how_link_and_the_mens_note(site, name):
+    prefix, how, kind = PAGES[name]
+    tail = shared_tail(footer(site, name)).replace(f'href="{prefix}{how}"', 'href="HOW"')
+    tail = tail.replace(f"<p>{MEN_ONLY}</p>\n", "")
+    assert tail == ('<p class="footer-links"><a href="HOW">How the numbers work</a> · '
+                    f'<a href="{render.REPO_URL}">Built in the open: code and data on GitHub</a></p>\n'
+                    f'<p>{render.DISCLAIMER}</p>\n<p class="copyright">© 2026 Jackson Mote</p>\n'
+                    '</div>\n</footer>\n</body>\n</html>\n')
 
 
 def test_the_not_included_note_under_the_totals_is_unchanged(site):

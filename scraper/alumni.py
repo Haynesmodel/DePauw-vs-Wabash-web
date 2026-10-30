@@ -367,10 +367,12 @@ def tile_label(cid: str, count: int) -> str:
     return one if count == 1 else many
 
 
-def correction_url(category: str, repo_url: str = REPO_URL) -> str:
-    """Opens the alumni-correction issue form with the category filled in."""
-    return (f"{repo_url}/issues/new?template=alumni-correction.yml"
-            f"&title={quote('Alumni correction: ' + category)}&category={quote(category)}")
+def correction_url(category: str | None = None, repo_url: str = REPO_URL) -> str:
+    """Opens the alumni-correction issue form, with the category filled in when the link comes from a card."""
+    url = f"{repo_url}/issues/new?template=alumni-correction.yml"
+    if category:
+        url += f"&title={quote('Alumni correction: ' + category)}&category={quote(category)}"
+    return url
 
 
 def _tile(cls: str, name: str, number: str, label: str) -> str:
@@ -412,8 +414,10 @@ def scoreboard(categories: list, counts_by_id: dict, per: dict, even: bool = Fal
             f'<tbody>{"".join(rows)}</tbody></table>')
 
 
-def render_page(data: dict, endowment: dict, *, head_html: str, copyright_year: int = 2026,
+def render_page(data: dict, endowment: dict, *, head_html: str, footer_html: str,
                 repo_url: str = REPO_URL) -> str:
+    """The page. head_html and footer_html come from render.py, so the head and the footer are the same
+    functions every other page uses."""
     counts_by_id = counts(data)
     categories = visible_categories(data)
     per = per_student(endowment)
@@ -485,7 +489,7 @@ def render_page(data: dict, endowment: dict, *, head_html: str, copyright_year: 
         'for DePauw and Wabash.</p>',
         scoreboard(categories, counts_by_id, per, even),
         f'<p class="alumni-method">Counts show named graduates verified in the reviewed sources. '
-        f'Verified {_esc(fmt_date(data["verified_at"]))}. Endowment per student: audited '
+        f'Endowment per student: audited '
         f'{_esc(endowment["fiscal_year"])} endowment divided by {_esc(next(iter(endowment["schools"].values()))["enrollment"]["term"].lower())} '
         f'headcount; the two schools’ endowment figures cover different scopes (see Endowment below).</p>',
         '<details class="alumni-method-details"><summary>Who counts and how sources were reviewed</summary>'
@@ -500,14 +504,7 @@ def render_page(data: dict, endowment: dict, *, head_html: str, copyright_year: 
         f'<p class="alumni-report"><a href="{_esc(correction_url("Endowment", repo_url))}">Suggest a correction</a></p>'
         f'<p>Verified {_esc(fmt_date(endowment["verified_at"]))}.</p></section>',
         *cards,
-        '<p class="alumni-download">Download the curated records: <a href="../data/alumni.json">alumni.json</a> · '
-        '<a href="../data/endowment.json">endowment.json</a> · <a href="../how-it-works/">How the athletics numbers work</a></p>',
-        '</main>', '<footer class="site-footer"><div class="wrap"><p class="footer-links"><a href="../">Athletics</a> · '
-        '<a href="./" aria-current="page">Alumni</a> · <a href="../how-it-works/">How the athletics numbers work</a> · '
-        '<a href="https://github.com/jacksonmote/DePauw-vs-Wabash-web">Code and data on GitHub</a></p>',
-        '<p>Alumni and endowment records use manually reviewed sources; athletic data has its own update record and scope.</p>',
-        '<p>Unofficial fan site, not affiliated with DePauw University or Wabash College.</p>'
-        f'<p class="copyright">© {_esc(copyright_year)} Jackson Mote</p></div></footer>',
+        '</main>', footer_html,
         '</body>', '</html>', ''])
 
 

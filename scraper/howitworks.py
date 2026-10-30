@@ -1,5 +1,5 @@
 """
-The "How the numbers work" page (/how-it-works/): the same facts as the README's merge section, written for
+The "How the numbers work" pages (/how-it-works/athletics/ and /how-it-works/alumni/, plus the landing page at /how-it-works/): the same facts as the README's merge section, written for
 fans. Every number comes from the data (or from the constants in merge.py and gameday.py that the merge
 actually uses), never from this file, so the page cannot go out of date when the data changes.
 
@@ -9,11 +9,13 @@ Standard library only; render.py supplies the page shell and footer.
 from __future__ import annotations
 
 import html
+from fractions import Fraction
 
+import alumni as alumni_page
 import gameday
 import merge
 
-TITLE = "How the numbers work | DePauw vs. Wabash"
+TITLE = "How the athletics numbers work | DePauw vs. Wabash"
 H1 = "How the numbers work"
 
 MONTH_ABBR = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"]
@@ -198,3 +200,142 @@ def content(data: dict, rules: dict, kept: int, *, sources_html: str, not_includ
         '</section>',
     ]
     return out
+
+
+LANDING_TITLE = "How the numbers work | DePauw vs. Wabash"
+LANDING_DESCRIPTION = ("How the numbers work on DePauw vs. Wabash: the head-to-head athletics records, and the "
+                       "alumni and endowment comparison.")
+ALUMNI_TITLE = "How the alumni numbers work | DePauw vs. Wabash"
+
+
+def landing_content() -> list:
+    """/how-it-works/: one line for each of the two pages, so the address that was already shared still works."""
+    return [
+        '<section class="prose" aria-labelledby="how-h">',
+        f'<h2 id="how-h">{esc(H1)}</h2>',
+        '<p>The site has two halves, and each has its own plain-language explanation.</p>',
+        '<h3><a href="athletics/">How the athletics numbers work</a></h3>',
+        '<p>Where the head-to-head records come from, how the two schools’ records are combined, and what '
+        'happens when they disagree.</p>',
+        '<h3><a href="alumni/">How the alumni numbers work</a></h3>',
+        '<p>Who counts as a notable graduate, how names were sourced and checked, and how endowment per '
+        'student is worked out.</p>',
+        '</section>',
+    ]
+
+
+def _dollars(n: int) -> str:
+    return f"${n:,}"
+
+
+def _list_and(items: list) -> str:
+    """'a', 'a and b', 'a, b, and c' (the site's serial comma)."""
+    if len(items) <= 2:
+        return " and ".join(items)
+    return ", ".join(items[:-1]) + ", and " + items[-1]
+
+
+def alumni_content(data: dict, endowment: dict, *, repo_url: str) -> list:
+    """/how-it-works/alumni/'s <main> section. Every number is read from alumni.json and endowment.json (or
+    worked out from them with the same functions the alumni page uses), never typed here."""
+    schools = alumni_page.SCHOOLS
+    categories = alumni_page.visible_categories(data)
+    by_cat = alumni_page.counts(data)
+    n_people = {k: len({p["id"] for p in data["people"] if p["school"] == k}) for k in schools}
+    n_multi = {k: sum(1 for p in data["people"] if p["school"] == k and len(p["categories"]) > 1) for k in schools}
+    fy, as_of = endowment["fiscal_year"], alumni_page.fmt_date(endowment["as_of"])
+    verified = alumni_page.fmt_date(max(data["verified_at"], endowment["verified_at"]))
+    per = alumni_page.per_student(endowment)
+    even = alumni_page.about_even(endowment)
+    exact = {k: Fraction(alumni_page.comparable_amount(i), i["enrollment"]["count"])
+             for k, i in endowment["schools"].items()}
+    gap = (max(exact.values()) / min(exact.values()) - 1) * 100
+    term = next(iter(endowment["schools"].values()))["enrollment"]["term"]
+    basis = endowment["comparable_basis"]
+
+    cat_items = [
+        f'<li><strong>{esc(c["name"])}.</strong> {esc(c["definition"])} '
+        f'DePauw {by_cat[c["id"]]["depauw"]}, Wabash {by_cat[c["id"]]["wabash"]}.</li>' for c in categories]
+
+    adjusted, plain = [], []
+    for key, name in schools.items():
+        item = endowment["schools"][key]
+        if item["comparable"]["excluded"]:
+            parts = [f'{_dollars(p["amount_usd"])} of {esc(p["label"])}' for p in item["comparable"]["excluded"]]
+            adjusted.append(
+                f'{esc(name)} reports total endowment net assets of {_dollars(item["amount_usd"])}, which '
+                f'includes {_list_and(parts)}. Taking those out leaves '
+                f'{_dollars(alumni_page.comparable_amount(item))}.')
+        else:
+            plain.append(f'{esc(name)} reports {esc(basis)} of {_dollars(item["amount_usd"])}')
+    basis_html = (' '.join(adjusted) + (' ' if adjusted and plain else '') +
+                  (_list_and(plain) + ', so nothing is taken out.' if plain else ''))
+
+    enrolled = ", ".join(f'{esc(name)} {endowment["schools"][key]["enrollment"]["count"]:,}'
+                         for key, name in schools.items())
+    enroll_links = " and ".join(
+        f'<a href="{esc(endowment["schools"][key]["enrollment"]["source_url"])}">{esc(name)}’s College Navigator page</a>'
+        for key, name in schools.items())
+    figures = " and ".join(f'{esc(name)} {_dollars(per[key])}' for key, name in schools.items())
+    even_html = (f'Right now the two figures are about {gap:.1f}% apart, so the page says “about even” and does '
+                 f'not mark either school as higher.' if even else
+                 f'Right now the two figures are about {gap:.1f}% apart, which is more than '
+                 f'{alumni_page.EVEN_PERCENT}%, so the page marks the higher one.')
+    return [
+        '<section class="prose" aria-labelledby="how-h">',
+        '<h2 id="how-h">How the alumni numbers work</h2>',
+        f'<p>The alumni page lists named graduates of DePauw and Wabash in {len(categories)} award and '
+        f'public-service categories, and compares the two schools’ endowments per student. Unlike the '
+        f'athletics records, none of it updates by itself.</p>',
+
+        '<h3>Who counts</h3>',
+        '<p>Only people who <strong>earned a degree</strong> from the school count. Honorary degrees, attending '
+        'without graduating, nominees, finalists, and people who were part of a winning team or film without an '
+        'individual prize or office do not. Graduates of any gender count, under the school’s historical names too.</p>',
+        '<p>A person counts <strong>once per school and category</strong>. Someone who was both a senator and a '
+        'governor appears in both categories, once in each. There is <strong>no overall alumni score</strong>: '
+        'the page never adds the categories together or says which school “wins”, because a bigger count in one '
+        'category says nothing about another.</p>',
+        f'<p>Right now the page names {n_people["depauw"]} DePauw graduates and {n_people["wabash"]} Wabash '
+        f'graduates; {n_multi["depauw"]} and {n_multi["wabash"]} of them appear in more than one category. A '
+        f'category with no verified graduate at either school is left off the page.</p>',
+
+        '<h3>The categories</h3>',
+        f'<ul>{"".join(cat_items)}</ul>',
+
+        '<h3>How names were found and checked</h3>',
+        f'<p>{esc(data["methodology"])}</p>',
+        '<p>Every name carries a source for the degree and a source for the office or award, shown beside it on '
+        'the alumni page. For Fortune 500 CEOs the page also shows the company, the ranking year and the rank, '
+        'with a source for the ranking; the year shown is the ranking year, not the length of the term. Open '
+        'terms read “present”.</p>'
+        f'<p>These are verified named graduates in the sources reviewed, not a claim that the list is complete: '
+        f'a missing name usually means no source was found yet. The records were last verified {esc(verified)}.</p>',
+
+        '<h3>Curated by hand</h3>',
+        f'<p>The athletics results update automatically from the schools’ websites. The alumni and endowment records '
+        f'do not: they are researched and written by hand in two data files, '
+        f'<a href="../../data/alumni.json">alumni.json</a> and <a href="../../data/endowment.json">endowment.json</a>, '
+        f'and every change is reviewed through a pull request on <a href="{esc(repo_url)}">GitHub</a> before it '
+        f'goes live.</p>',
+
+        '<h3>Endowment per student</h3>',
+        f'<p>The endowment amounts come from each school’s audited {esc(fy)} financial statements, as of '
+        f'{esc(as_of)}. The two statements do not measure the same thing, so the page puts them on one basis, '
+        f'{esc(basis)}. {basis_html} The page still shows the full total as a supporting line.</p>',
+        f'<p>Each amount on that basis is divided by the school’s {esc(term.lower())} total undergraduate '
+        f'headcount from the U.S. Department of Education’s College Navigator (IPEDS): {enrolled}. Fall '
+        f'{esc(term.split()[-1])} is the academic year that ends with the {esc(as_of)} endowment date. See '
+        f'{enroll_links}.</p>',
+        f'<p>The result is rounded to the nearest $1,000, from the exact amounts rather than from the rounded '
+        f'totals shown on the page: {figures}.</p>',
+        f'<p>When the higher per-student figure is within {alumni_page.EVEN_PERCENT}% of the lower one, the page '
+        f'calls them <strong>about even</strong> instead of marking one school higher. {even_html} None of the '
+        f'figures is cash a school can spend freely.</p>',
+
+        '<h3>Suggest a correction</h3>',
+        f'<p>If a name, a count or a figure looks wrong or missing, use “Suggest a correction” on the alumni page '
+        f'or <a href="{esc(alumni_page.correction_url())}">open the correction form</a>. Say which school, the '
+        f'category and the person, and link a source. The issue is public, so please leave out personal details.</p>',
+        '</section>',
+    ]

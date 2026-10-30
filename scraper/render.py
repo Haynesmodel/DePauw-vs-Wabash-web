@@ -50,7 +50,9 @@ OVERRIDES = ROOT / "data" / "overrides.json"
 CHECKED_AT = ROOT / ".checked-at"  # written by scrape.py after a live run; never committed
 
 SITE_URL = "https://depauwvswabash.com/"
-HOW_PATH = "how-it-works/"      # the plain-language page, relative to the site root
+HOW_PATH = "how-it-works/"      # the landing page for the two plain-language pages, relative to the site root
+HOW_ATHLETICS_PATH = HOW_PATH + "athletics/"
+HOW_ALUMNI_PATH = HOW_PATH + "alumni/"
 BASE_PATH = urlparse(SITE_URL).path  # "/" on the custom domain
 ALUMNI_PATH = "alumni/"
 ALUMNI_DATA = ROOT / "data" / "alumni.json"
@@ -872,34 +874,72 @@ def footer_source(key: str, s: dict, up: dict | None) -> str:
             + " · ".join(f'<a href="{esc(u)}">{esc(label)}</a>' for label, u in links) + '</li>')
 
 
+def athletics_footer_block(now: dt.datetime, prefix: str, data: dict, checked: str | None,
+                           upcoming: dict | None) -> list:
+    """The athletics part of the footer: update and check times, downloads, the error report, the sources."""
+    upcoming = upcoming or {}
+    sources = "\n".join(footer_source(k, s, upcoming.get(k)) for k, s in data["sports"].items())
+    return [
+        updated_line(data["updated_at"], checked, now),
+        f'<p class="downloads">Download the data: <a href="{esc(prefix)}data/series.json">series.json</a> '
+        f'(every game, as JSON) · <a href="{esc(prefix)}games.csv">games.csv</a> (one row per game, for '
+        f'spreadsheets). {report_link()}.</p>',
+        '<p>Data from <a href="https://depauwtigers.com/">depauwtigers.com</a> and '
+        '<a href="https://sports.wabash.edu/">sports.wabash.edu</a>. Source pages:</p>',
+        f'<ul class="sources">\n{sources}\n</ul>',
+    ]
+
+
+def alumni_verified_date(alumni_data: dict, endowment: dict) -> str:
+    """The newest verified_at of the two curated files: the footer's date and the sitemap's lastmod."""
+    return max(alumni_data["verified_at"], endowment["verified_at"])
+
+
+def alumni_footer_block(prefix: str, alumni_data: dict, endowment: dict) -> list:
+    """The alumni part of the footer: when the records were last verified, downloads, the correction form
+    and the sources (the two audited statements and the two College Navigator pages)."""
+    verified = alumni_verified_date(alumni_data, endowment)
+    fy = endowment["fiscal_year"]
+    sources = "\n".join(
+        f'<li>{esc(name)}: <a href="{esc(endowment["schools"][key]["source_url"])}">{esc(fy)} audited financial '
+        f'statements</a> · <a href="{esc(endowment["schools"][key]["enrollment"]["source_url"])}">College '
+        f'Navigator (IPEDS)</a></li>' for key, name in alumni_page.SCHOOLS.items())
+    return [
+        f'<p>Records last verified <time datetime="{esc(verified)}">{esc(fmt_date(verified))}</time>.</p>',
+        f'<p class="downloads">Download the data: <a href="{esc(prefix)}data/alumni.json">alumni.json</a> '
+        f'(named graduates and their sources) · <a href="{esc(prefix)}data/endowment.json">endowment.json</a> '
+        f'(endowment, enrollment and basis). <a href="{esc(alumni_page.correction_url())}">Suggest a '
+        f'correction</a>.</p>',
+        f'<p>Data from: DePauw and Wabash audited {esc(fy)} financial statements, the U.S. Department of '
+        f'Education’s College Navigator (IPEDS), and the sources listed with each name. Source pages:</p>',
+        f'<ul class="sources">\n{sources}\n</ul>',
+    ]
+
+
 def site_footer(now: dt.datetime, *, prefix: str = "", data: dict | None = None, checked: str | None = None,
-                upcoming: dict | None = None) -> list:
-    """The footer of every page. `prefix` reaches the site root from the page ("" on the home page, "../"
-    one folder down, the root path on 404.html). With `data`, the top of the footer also carries the update
-    and check times, the downloads and the source pages; without it (the 404 page) only the shared lines."""
-    lines = ['<footer class="site-footer">', '<div class="wrap">']
-    if data:
-        upcoming = upcoming or {}
-        sources = "\n".join(footer_source(k, s, upcoming.get(k)) for k, s in data["sports"].items())
-        lines += [
-            updated_line(data["updated_at"], checked, now),
-            f'<p class="downloads">Download the data: <a href="{esc(prefix)}data/series.json">series.json</a> '
-            f'(every game, as JSON) · <a href="{esc(prefix)}games.csv">games.csv</a> (one row per game, for '
-            f'spreadsheets). {report_link()}.</p>',
-            '<p>Data from <a href="https://depauwtigers.com/">depauwtigers.com</a> and '
-            '<a href="https://sports.wabash.edu/">sports.wabash.edu</a>. Source pages:</p>',
-            f'<ul class="sources">\n{sources}\n</ul>',
-        ]
-    lines += [
-        f'<p class="footer-links"><a href="{esc(prefix + HOW_PATH)}">How the numbers work</a> · '
+                upcoming: dict | None = None, alumni: tuple | None = None) -> list:
+    """The footer of every page: one function with a page-specific data block and the same structure and
+    lines after it. `prefix` reaches the site root from the page ("" on the home page, "../" one folder
+    down, the root path on 404.html). With `data` the block is the athletics one, with `alumni` (the alumni
+    and endowment data) the alumni one; with neither (404 and the how-it-works landing page) only the shared
+    lines show. "How the numbers work" links to the matching page, and the men's head-to-head note stays off
+    the alumni pages."""
+    block, how, men_note = [], HOW_PATH, True
+    if alumni:
+        block, how, men_note = alumni_footer_block(prefix, *alumni), HOW_ALUMNI_PATH, False
+    elif data:
+        block, how = athletics_footer_block(now, prefix, data, checked, upcoming), HOW_ATHLETICS_PATH
+    return [
+        '<footer class="site-footer">', '<div class="wrap">',
+        *block,
+        f'<p class="footer-links"><a href="{esc(prefix + how)}">How the numbers work</a> · '
         f'<a href="{esc(REPO_URL)}">Built in the open: code and data on GitHub</a></p>',
-        f'<p>{esc(MEN_ONLY)}</p>',
+        *([f'<p>{esc(MEN_ONLY)}</p>'] if men_note else []),
         f'<p>{esc(DISCLAIMER)}</p>',
         f'<p class="copyright">{esc(copyright_line(now))}</p>',
         '</div>',
         '</footer>',
     ]
-    return lines
 
 
 def site_nav(prefix: str, current: str) -> str:
@@ -962,9 +1002,39 @@ def render_index(data: dict, checked: str | None = None, now: dt.datetime | None
     ])
 
 
-def render_how(data: dict, rules: dict, kept: int, checked: str | None = None, now: dt.datetime | None = None,
-               upcoming: dict | None = None) -> str:
-    """/how-it-works/: the plain-language page. One folder down, so every URL it uses is relative to ../."""
+def athletics_preview(data: dict, now: dt.datetime, upcoming: dict) -> dict:
+    """The athletics share card (totals, Bell holder, game-day label) for any athletics-side page."""
+    return preview_info(data, game_day_label(gameday.todays_games(now, upcoming, data["sports"])))
+
+
+def how_page(title: str, description: str, *, prefix: str, path: str, current: str, preview: dict,
+             back: tuple, body: list, footer: list) -> str:
+    """The shell the three how-it-works pages share: header, nav, back link, the body, a footer."""
+    return "\n".join([
+        head(title, description, prefix=prefix, canonical=SITE_URL + path, preview=preview),
+        '<body>',
+        '<header class="site-header">',
+        '<div class="wrap">',
+        '<h1>DePauw vs. Wabash</h1>',
+        site_nav(prefix, current),
+        f'<p class="subtitle">{esc(SUBTITLE)}</p>',
+        '</div>',
+        '</header>',
+        '<main class="wrap">',
+        f'<p class="back"><a href="{esc(back[0])}">{esc(back[1])}</a></p>',
+        *body,
+        '</main>',
+        *footer,
+        '</body>',
+        '</html>',
+        '',
+    ])
+
+
+def render_how_athletics(data: dict, rules: dict, kept: int, checked: str | None = None,
+                         now: dt.datetime | None = None, upcoming: dict | None = None) -> str:
+    """/how-it-works/athletics/: the plain-language page about the records. Two folders down, so every URL
+    it uses is relative to ../../."""
     now = now or dt.datetime.now(dt.timezone.utc)
     upcoming = upcoming or {}
     sports = data["sports"]
@@ -973,27 +1043,32 @@ def render_how(data: dict, rules: dict, kept: int, checked: str | None = None, n
     description = (f"Where the DePauw vs. Wabash numbers come from and how the two schools’ records are "
                    f"combined: {t['games_played']:,} games in {plural(len(sports), 'sport')}, with disputed "
                    f"games and hand-made rulings shown openly.")
-    today_games = gameday.todays_games(now, upcoming, sports)
-    return "\n".join([
-        head(howitworks.TITLE, description, prefix="../", canonical=SITE_URL + HOW_PATH,
-             preview=preview_info(data, game_day_label(today_games))),
-        '<body>',
-        '<header class="site-header">',
-        '<div class="wrap">',
-        '<h1>DePauw vs. Wabash</h1>',
-        site_nav("../", ""),
-        f'<p class="subtitle">{esc(SUBTITLE)}</p>',
-        '</div>',
-        '</header>',
-        '<main class="wrap">',
-        '<p class="back"><a href="../">← Back to the head-to-head records</a></p>',
-        *howitworks.content(data, rules, kept, sources_html=sources, not_included=NOT_INCLUDED, repo_url=REPO_URL),
-        '</main>',
-        *site_footer(now, prefix="../", data=data, checked=checked, upcoming=upcoming),
-        '</body>',
-        '</html>',
-        '',
-    ])
+    return how_page(
+        howitworks.TITLE, description, prefix="../../", path=HOW_ATHLETICS_PATH, current="athletics",
+        preview=athletics_preview(data, now, upcoming), back=("../../", "← Back to the head-to-head records"),
+        body=howitworks.content(data, rules, kept, sources_html=sources, not_included=NOT_INCLUDED, repo_url=REPO_URL),
+        footer=site_footer(now, prefix="../../", data=data, checked=checked, upcoming=upcoming))
+
+
+def render_how_alumni(alumni_data: dict, endowment: dict, now: dt.datetime | None = None) -> str:
+    """/how-it-works/alumni/: who counts, how names were sourced, how the endowment per student is made."""
+    now = now or dt.datetime.now(dt.timezone.utc)
+    description = ("Who counts as a notable DePauw or Wabash graduate, how names were sourced and checked, and "
+                   "how endowment per student is worked out on one common basis.")
+    return how_page(
+        howitworks.ALUMNI_TITLE, description, prefix="../../", path=HOW_ALUMNI_PATH, current="alumni",
+        preview=alumni_preview_info(endowment), back=("../../alumni/", "← Back to the alumni and endowment page"),
+        body=howitworks.alumni_content(alumni_data, endowment, repo_url=REPO_URL),
+        footer=site_footer(now, prefix="../../", alumni=(alumni_data, endowment)))
+
+
+def render_how_landing(data: dict, now: dt.datetime | None = None, upcoming: dict | None = None) -> str:
+    """/how-it-works/: the address that was already shared, now a short page that points to the two."""
+    now = now or dt.datetime.now(dt.timezone.utc)
+    return how_page(
+        howitworks.LANDING_TITLE, howitworks.LANDING_DESCRIPTION, prefix="../", path=HOW_PATH, current="",
+        preview=athletics_preview(data, now, upcoming or {}), back=("../", "← Back to the head-to-head records"),
+        body=howitworks.landing_content(), footer=site_footer(now, prefix="../"))
 
 
 def render_404(now: dt.datetime | None = None) -> str:
@@ -1027,7 +1102,9 @@ def render_sitemap(data: dict, checked: str | None = None, alumni_verified: str 
             '<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n'
             f'  <url><loc>{esc(SITE_URL)}</loc><lastmod>{lastmod}</lastmod></url>\n'
             f'  <url><loc>{esc(SITE_URL + HOW_PATH)}</loc><lastmod>{lastmod}</lastmod></url>\n'
+            f'  <url><loc>{esc(SITE_URL + HOW_ATHLETICS_PATH)}</loc><lastmod>{lastmod}</lastmod></url>\n'
             + (f'  <url><loc>{esc(SITE_URL + ALUMNI_PATH)}</loc><lastmod>{esc(alumni_verified)}</lastmod></url>\n'
+               f'  <url><loc>{esc(SITE_URL + HOW_ALUMNI_PATH)}</loc><lastmod>{esc(alumni_verified)}</lastmod></url>\n'
                if alumni_verified else '') +
             '</urlset>\n')
 
@@ -1083,20 +1160,24 @@ def build(data_path: Path, out: Path, *, checked_at: str | None = None,
     alumni_head = head("Alumni and Endowment | DePauw vs. Wabash",
                         "Verified named DePauw and Wabash graduates across achievement categories, plus dated endowment values.",
                         prefix="../", canonical=SITE_URL + ALUMNI_PATH, preview=alumni_preview)
-    alumni_html = alumni_page.render_page(alumni_data, endowment_data, head_html=alumni_head,
-                                          copyright_year=(now or dt.datetime.now(dt.timezone.utc)).year)
+    when = now or dt.datetime.now(dt.timezone.utc)
+    alumni_html = alumni_page.render_page(
+        alumni_data, endowment_data, head_html=alumni_head,
+        footer_html="\n".join(site_footer(when, prefix="../", alumni=(alumni_data, endowment_data))))
     upcoming = meetings.load_upcoming(upcoming_path)
     overrides_path = overrides_path or OVERRIDES
     rules = merge.load_overrides(overrides_path)
     kept = sum(len(r) for r in review.load_keep_previous(overrides_path).values())
     pages = {
         "index.html": render_index(data, checked_at, now, upcoming),
-        HOW_PATH + "index.html": render_how(data, rules, kept, checked_at, now, upcoming),
+        HOW_PATH + "index.html": render_how_landing(data, now, upcoming),
+        HOW_ATHLETICS_PATH + "index.html": render_how_athletics(data, rules, kept, checked_at, now, upcoming),
+        HOW_ALUMNI_PATH + "index.html": render_how_alumni(alumni_data, endowment_data, now),
         ALUMNI_PATH + "index.html": alumni_html,
         "404.html": render_404(now),
         "games.csv": render_csv(data),
         "site.webmanifest": render_manifest(),
-        "sitemap.xml": render_sitemap(data, checked_at, max(alumni_data["verified_at"], endowment_data["verified_at"])),
+        "sitemap.xml": render_sitemap(data, checked_at, alumni_verified_date(alumni_data, endowment_data)),
         "robots.txt": f"User-agent: *\nAllow: /\n\nSitemap: {SITE_URL}sitemap.xml\n",
         ".nojekyll": "",
     }
@@ -1109,7 +1190,6 @@ def build(data_path: Path, out: Path, *, checked_at: str | None = None,
     for asset in ("styles.css", "favicon.svg"):
         shutil.copyfile(STATIC / asset, out / asset)
     # Images are drawn at build time from the bundled font, so every deploy has a card that matches the data.
-    when = now or dt.datetime.now(dt.timezone.utc)
     info = preview_info(data, game_day_label(gameday.todays_games(when, upcoming, data["sports"])))
     (out / "og-image.png").write_bytes(images.og_image(data["totals"], info["holder"], info["label"]))
     (out / "alumni-og-image.png").write_bytes(images.alumni_og_image(alumni_preview["values"], alumni_preview["even"]))

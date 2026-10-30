@@ -1,4 +1,4 @@
-"""The /how-it-works/ page: plain-language, every number from the data, same shell as the home page."""
+"""The /how-it-works/athletics/ page: plain-language, every number from the data, same shell as the home page."""
 
 import datetime as dt
 import json
@@ -39,11 +39,12 @@ def site(tmp_path_factory):
 
 
 def how(site):
-    return (site / "how-it-works" / "index.html").read_text(encoding="utf-8")
+    return (site / "how-it-works" / "athletics" / "index.html").read_text(encoding="utf-8")
 
 
-def test_the_page_is_written_to_its_own_folder(site):
-    assert (site / "how-it-works" / "index.html").exists()
+def test_the_page_is_written_to_its_own_folder_next_to_the_landing_page_and_the_alumni_page(site):
+    for name in ("index.html", "athletics/index.html", "alumni/index.html"):
+        assert (site / "how-it-works" / name).exists()
 
 
 def test_every_number_comes_from_the_data(site):
@@ -120,11 +121,11 @@ def test_it_has_the_same_shell_as_the_home_page(site):
     page, home = how(site), (site / "index.html").read_text(encoding="utf-8")
     csp = re.search(r'http-equiv="Content-Security-Policy" content="([^"]+)"', page).group(1)
     assert csp == re.search(r'http-equiv="Content-Security-Policy" content="([^"]+)"', home).group(1)
-    assert '<link rel="canonical" href="https://depauwvswabash.com/how-it-works/">' in page
+    assert '<link rel="canonical" href="https://depauwvswabash.com/how-it-works/athletics/">' in page
     for prop in ("og:title", "og:description", "og:url", "og:image", "og:image:alt", "twitter:card"):
         assert f'"{prop}"' in page, prop
     assert re.search(r'og:image" content="https://depauwvswabash.com/og-image.png\?v=\w+"', page)
-    assert 'href="../styles.css"' in page and 'href="../favicon.svg"' in page
+    assert 'href="../../styles.css"' in page and 'href="../../favicon.svg"' in page
     assert 'color-scheme" content="light dark"' in page
     assert 'class="site-header"' in page and 'class="site-footer"' in page
     assert "style=" not in page and "<script" not in page and "<style" not in page
@@ -134,11 +135,13 @@ def test_it_has_the_same_shell_as_the_home_page(site):
 def test_the_page_uses_only_relative_urls_for_the_site_itself(site):
     page = how(site)
     assert re.findall(r'(?:href|src)="(/[^"]*)"', page) == []          # nothing root-relative: only 404.html does that
-    assert 'href="../"' in page and 'href="../data/series.json"' in page and 'href="../games.csv"' in page
+    assert 'href="../../"' in page and 'href="../../data/series.json"' in page and 'href="../../games.csv"' in page
 
 
 def test_the_sitemap_lists_it_and_the_404_page_links_to_it(site):
-    assert "<loc>https://depauwvswabash.com/how-it-works/</loc>" in (site / "sitemap.xml").read_text(encoding="utf-8")
+    sitemap = (site / "sitemap.xml").read_text(encoding="utf-8")
+    for path in ("how-it-works/", "how-it-works/athletics/", "how-it-works/alumni/"):
+        assert f"<loc>https://depauwvswabash.com/{path}</loc>" in sitemap
     nf = (site / "404.html").read_text(encoding="utf-8")
     assert 'href="/how-it-works/"' in nf          # root-relative: GitHub Pages serves 404.html at any depth
 

@@ -182,8 +182,7 @@ def test_render_escapes_curated_text_and_source_attributes():
     data = alumni.validate_alumni(read_data())
     evil = copy.deepcopy(data)
     evil["people"][0]["name"] = '<img src=x onerror="alert(1)">'
-    page = alumni.render_page(alumni.validate_alumni(evil), alumni.validate_endowment(read_endowment()),
-                              head_html="<head><title>Test</title></head>")
+    page = page_for(alumni.validate_alumni(evil), alumni.validate_endowment(read_endowment()))
     assert "<img" not in page
     assert "&lt;img src=x onerror=&quot;alert(1)&quot;&gt;" in page
 
@@ -192,9 +191,17 @@ def visible_text(page):
     return re.sub(r"\s+", " ", html.unescape(re.sub(r"<[^>]+>", " ", page)))
 
 
+NOW = dt.datetime(2026, 10, 29, 15, 0, tzinfo=dt.timezone.utc)
+
+
+def page_for(data, endowment):
+    """The alumni page as render.build makes it, with the shared footer."""
+    footer = "\n".join(render.site_footer(NOW, prefix="../", alumni=(data, endowment)))
+    return alumni.render_page(data, endowment, head_html="<head><title>Test</title></head>", footer_html=footer)
+
+
 def committed_page():
-    return alumni.render_page(alumni.validate_alumni(read_data()), alumni.validate_endowment(read_endowment()),
-                              head_html="<head><title>Test</title></head>")
+    return page_for(alumni.validate_alumni(read_data()), alumni.validate_endowment(read_endowment()))
 
 
 def test_no_iso_date_shows_in_visible_text_and_dates_match_the_athletics_style():
@@ -379,8 +386,7 @@ def test_scoreboard_marks_the_larger_count_in_its_school_accent_and_leaves_ties_
     tie = read_data()
     murad = next(p for p in tie["people"] if p["id"] == "ferid-murad")
     tie["people"].append(dict(copy.deepcopy(murad), id="ferid-murad-2", school="wabash"))
-    tied = alumni.render_page(alumni.validate_alumni(tie), alumni.validate_endowment(read_endowment()),
-                              head_html="<head></head>")
+    tied = page_for(alumni.validate_alumni(tie), alumni.validate_endowment(read_endowment()))
     row = re.search(r'<tr><th scope="row"><a href="#nobel">.*?</tr>', scoreboard_table(tied)).group(0)
     assert "lead" not in row and row.count('<td class="score">1</td>') == 2
 
@@ -428,7 +434,7 @@ def test_every_card_and_the_endowment_card_offer_a_prefilled_correction_form():
     page = committed_page()
     base = "https://github.com/jacksonmote/DePauw-vs-Wabash-web/issues/new?template=alumni-correction.yml"
     assert alumni.REPO_URL == render.REPO_URL
-    assert page.count("Suggest a correction</a>") == 11
+    assert page.count("Suggest a correction</a>") == 12     # ten cards, the endowment card and the footer
     assert f'href="{base}&amp;title=Alumni%20correction%3A%20U.S.%20senators&amp;category=U.S.%20senators"' in page
     assert 'category=Endowment"' in page
     assert alumni.correction_url("Rhodes Scholars") == (
@@ -445,16 +451,14 @@ def test_the_alumni_issue_form_asks_for_the_right_fields_and_nothing_personal():
     assert "blank_issues_enabled: false" in config
 
 
-def test_the_alumni_footer_is_unchanged_by_the_polish():
+def test_the_top_section_no_longer_shows_a_verified_date_and_the_downloads_line_is_gone():
     page = committed_page()
-    footer = page[page.index('<footer class="site-footer">'):]
-    assert footer == (
-        '<footer class="site-footer"><div class="wrap"><p class="footer-links"><a href="../">Athletics</a> · '
-        '<a href="./" aria-current="page">Alumni</a> · <a href="../how-it-works/">How the athletics numbers work</a> · '
-        '<a href="https://github.com/jacksonmote/DePauw-vs-Wabash-web">Code and data on GitHub</a></p>\n'
-        '<p>Alumni and endowment records use manually reviewed sources; athletic data has its own update record and scope.</p>\n'
-        '<p>Unofficial fan site, not affiliated with DePauw University or Wabash College.</p>'
-        '<p class="copyright">© 2026 Jackson Mote</p></div></footer>\n</body>\n</html>\n')
+    overview = page[page.index('<section class="overall alumni-overview"'):page.index('<section class="overall endowment"')]
+    assert "Verified" not in overview and "Counts show named graduates verified in the reviewed sources." in overview
+    main = page[page.index("<main"):page.index("</main>")]
+    assert "alumni-download" not in main and "Download the curated records" not in page
+    assert "How the athletics numbers work" not in page and "Code and data on GitHub" not in page
+    assert "Alumni and endowment records use manually reviewed sources" not in page
 
 
 def test_sitemap_lastmod_for_the_alumni_page_follows_the_newest_verified_date(tmp_path):
@@ -505,8 +509,7 @@ def test_when_the_figures_differ_by_more_than_five_percent_the_higher_one_is_mar
     data = read_endowment()
     data["schools"]["depauw"]["enrollment"]["count"] = 1500              # 660,000 against 511,498
     assert not alumni.about_even(data)
-    page = alumni.render_page(alumni.validate_alumni(read_data()), alumni.validate_endowment(data),
-                              head_html="<head></head>")
+    page = page_for(alumni.validate_alumni(read_data()), alumni.validate_endowment(data))
     endow = re.search(r'<tr><th scope="row"><a href="#endowment">.*?</tr>', scoreboard_table(page)).group(0)
     assert 'lead-depauw"><strong>$660,000' in endow and "about even" not in endow
     assert "About even:" not in visible_text(page) and "neither is marked higher" not in visible_text(page)

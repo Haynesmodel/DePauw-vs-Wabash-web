@@ -193,9 +193,9 @@ main { padding-block: 1.5rem 2.5rem; display: grid; gap: 1.5rem; }
 .endowment-value .tile-name { margin: 0; }
 .endowment-value p { margin: 0.25rem 0; }
 .endowment-values .tile-num { font-size: clamp(1.375rem, 7vw, 2.25rem); }
-.money, .money-unit, .money-exact { white-space: nowrap; }
-.money-unit { font-weight: 600; }
-.money-exact, .money-unit + .money-exact { color: var(--color-text-muted); font-size: 0.875rem; }
+.money, .nowrap { white-space: nowrap; }
+.money-line { color: var(--color-text-muted); font-size: 0.875rem; }
+.endowment-caveat { color: var(--color-text-muted); font-size: 0.9375rem; margin-top: 0.75rem; }
 /* Name lists: side by side from 600px, stacked at full width below it */
 .alumni-schools { display: grid; grid-template-columns: minmax(0, 1fr); gap: 0.5rem 0.75rem; margin-top: 0.75rem; }
 .alumni-school { min-width: 0; }

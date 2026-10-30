@@ -197,7 +197,31 @@ def validate_endowment(data: dict) -> dict:
         for field in ("source_label", "source_note"):
             _text(item.get(field), f"endowment.schools.{key}.{field}")
         _url(item.get("source_url"), f"endowment.schools.{key}.source_url")
+        enrolled = item.get("enrollment")
+        if not isinstance(enrolled, dict):
+            _fail(f"endowment.schools.{key}.enrollment must be an object")
+        count = enrolled.get("count")
+        if isinstance(count, bool) or not isinstance(count, int) or count <= 0:
+            _fail(f"endowment.schools.{key}.enrollment.count must be a positive integer")
+        # the endowment is as of June 30 of the fiscal year, so the matching academic year began the fall before
+        if enrolled.get("term") != f"Fall {int(year[2:]) - 1}":
+            _fail(f"endowment.schools.{key}.enrollment.term must be Fall {int(year[2:]) - 1} "
+                  f"to match {year}")
+        _text(enrolled.get("measure"), f"endowment.schools.{key}.enrollment.measure")
+        _text(enrolled.get("source_label"), f"endowment.schools.{key}.enrollment.source_label")
+        _url(enrolled.get("source_url"), f"endowment.schools.{key}.enrollment.source_url")
+        _date(enrolled.get("verified_at"), f"endowment.schools.{key}.enrollment.verified_at")
     return data
+
+
+def per_student(endowment: dict) -> dict:
+    """{"depauw": 543000, "wabash": 511000}: endowment divided by headcount, to the nearest $1,000, half up.
+    Integer arithmetic from the exact amounts, never from a rounded figure. Calculated here, never stored."""
+    result = {}
+    for school, item in endowment["schools"].items():
+        amount, students = item["amount_usd"], item["enrollment"]["count"]
+        result[school] = (2 * amount + 1000 * students) // (2000 * students) * 1000
+    return result
 
 
 def counts(data: dict) -> dict:
@@ -235,6 +259,14 @@ def compact_usd(amount: int) -> tuple[str, str]:
     if amount >= 1_000_000:
         return f"${(Decimal(amount) / 1_000_000).quantize(Decimal('1'), ROUND_HALF_UP):,}", "million"
     return f"${amount:,}", ""
+
+
+def per_student_note(endowment: dict) -> str:
+    """How the per-student figure is made. Shown wherever a per-student figure is shown."""
+    term = next(iter(endowment["schools"].values()))["enrollment"]["term"].lower()
+    return (f"Endowment per student divides each school’s audited endowment by its {term} total undergraduate "
+            f"headcount from the U.S. Department of Education’s College Navigator (IPEDS), rounded to the "
+            f"nearest $1,000.")
 
 
 def degree_label(person: dict) -> str:
@@ -295,14 +327,20 @@ def render_page(data: dict, endowment: dict, *, head_html: str, copyright_year: 
                      f'<p>{_esc(category["definition"])}</p><div class="tiles">{"".join(tiles_html)}</div>'
                      f'<div class="alumni-schools">{"".join(schools_html)}</div></section>')
     endow_cards = []
+    per = per_student(endowment)
     for key, label in SCHOOLS.items():
         item = endowment["schools"][key]
+        enrolled = item["enrollment"]
         figure, unit = compact_usd(item["amount_usd"])
-        endow_cards.append(f'<div class="tile tile-{key} endowment-value"><h3 class="tile-name">{label}</h3>'
-                           f'<p class="tile-num money">{figure}</p>'
-                           + (f'<p class="money-unit">{unit}</p>' if unit else '') +
-                           f'<p class="money-exact">${item["amount_usd"]:,}</p>'
-                           f'<p><a href="{_esc(item["source_url"])}">Source</a></p></div>')
+        endow_cards.append(
+            f'<div class="tile tile-{key} endowment-value"><h3 class="tile-name">{label}</h3>'
+            f'<p class="tile-num money">${per[key]:,}</p><p class="tile-label">endowment per student</p>'
+            f'<p class="money-line">Endowment: <span class="nowrap">{figure}{" " + unit if unit else ""}</span> '
+            f'<span class="nowrap">(${item["amount_usd"]:,})</span></p>'
+            f'<p class="money-line">Enrollment: <span class="nowrap">{enrolled["count"]:,}</span> students, '
+            f'{_esc(enrolled["term"].lower())}</p>'
+            f'<p class="money-line"><a href="{_esc(item["source_url"])}">Endowment source</a> · '
+            f'<a href="{_esc(enrolled["source_url"])}">Enrollment source</a></p></div>')
     return "\n".join([
         head_html, '<body>',
         '<header class="site-header"><div class="wrap"><h1>DePauw vs. Wabash</h1>',
@@ -314,7 +352,9 @@ def render_page(data: dict, endowment: dict, *, head_html: str, copyright_year: 
         f'<p>{_esc(data["methodology"])} A person may appear in more than one category; each person counts once per school and category. There is no overall alumni score.</p></details>',
         f'<section class="overall endowment" id="endowment"><h2>Endowment</h2>'
         f'<p>Audited {_esc(endowment["fiscal_year"])} figures as of {_esc(fmt_date(endowment["as_of"]))}; reported accounting scopes differ.</p>'
-        f'<div class="tiles endowment-values">{"".join(endow_cards)}</div><p>Verified {_esc(fmt_date(endowment["verified_at"]))}.</p></section>',
+        f'<div class="tiles endowment-values">{"".join(endow_cards)}</div>'
+        f'<p class="endowment-caveat">{_esc(endowment["explanation"])} {_esc(per_student_note(endowment))}</p>'
+        f'<p>Verified {_esc(fmt_date(endowment["verified_at"]))}.</p></section>',
         *cards,
         '<p class="alumni-download">Download the curated records: <a href="../data/alumni.json">alumni.json</a> · '
         '<a href="../data/endowment.json">endowment.json</a> · <a href="../how-it-works/">How the athletics numbers work</a></p>',

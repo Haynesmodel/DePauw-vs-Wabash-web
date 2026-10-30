@@ -167,7 +167,7 @@ def test_build_emits_navigation_alumni_and_auditable_json(tmp_path):
     assert "Albert J. Beveridge" in page and "The Life of John Marshall" in page
     assert 'id="endowment"' in page and "$1,041,801,089" in page and "$442,957,416" in page
     assert "reported accounting scopes differ" in page
-    assert page.count(">Source</a>") == 2
+    assert page.count(">Endowment source</a>") == 2 and page.count(">Enrollment source</a>") == 2
     assert "FY2025" in page and "Jun 30, 2025" in page
     assert "<script" not in page
     assert "ranked #340 in the 2008 Fortune 500" in page
@@ -214,10 +214,70 @@ def test_compact_endowment_rounds_half_up_from_the_exact_amount(amount, expected
     assert alumni.compact_usd(amount) == expected
 
 
-def test_endowment_tiles_show_a_compact_figure_with_the_exact_amount_beneath():
+def test_endowment_card_leads_with_per_student_and_supports_it_with_total_and_enrollment():
     page = committed_page()
-    assert '<p class="tile-num money">$1.04</p><p class="money-unit">billion</p><p class="money-exact">$1,041,801,089</p>' in page
-    assert '<p class="tile-num money">$443</p><p class="money-unit">million</p><p class="money-exact">$442,957,416</p>' in page
+    text = visible_text(page)
+    assert '<p class="tile-num money">$543,000</p><p class="tile-label">endowment per student</p>' in page
+    assert '<p class="tile-num money">$511,000</p>' in page
+    assert "Endowment: $1.04 billion ($1,041,801,089)" in text
+    assert "Endowment: $443 million ($442,957,416)" in text
+    assert "Enrollment: 1,917 students, fall 2024" in text and "Enrollment: 866 students, fall 2024" in text
+    assert 'href="https://nces.ed.gov/collegenavigator/?id=150400"' in page
+    assert 'href="https://nces.ed.gov/collegenavigator/?id=152673"' in page
+
+
+def test_per_student_is_computed_from_exact_amounts_and_rounded_half_up_to_the_thousand():
+    assert alumni.per_student(read_endowment()) == {"depauw": 543000, "wabash": 511000}   # 543,453.9 and 511,498.2
+    # rounding from the compact "$443 million" would give 512,000; the exact amount must be used
+    assert round(443_000_000 / 866, -3) == 512000
+    def one(amount, students):
+        data = copy.deepcopy(read_endowment())
+        data["schools"]["depauw"]["amount_usd"] = amount
+        data["schools"]["depauw"]["enrollment"]["count"] = students
+        return alumni.per_student(data)["depauw"]
+    assert one(1_500_000, 3) == 500000
+    assert one(1_499_999, 1) == 1_500_000 and one(1_500_000, 1) == 1_500_000
+    assert one(1_250_000, 2) == 625000
+    assert one(2_500, 1) == 3000 and one(2_499, 1) == 2000 and one(500, 1) == 1000 and one(499, 1) == 0
+
+
+def test_per_student_is_never_stored_in_the_data():
+    assert "per_student" not in json.dumps(read_endowment()) and "per student" not in json.dumps(read_endowment())
+
+
+@pytest.mark.parametrize("mutation, message", [
+    (lambda x: x["schools"]["depauw"].pop("enrollment"), "enrollment must be an object"),
+    (lambda x: x["schools"]["depauw"]["enrollment"].update(count=0), "positive integer"),
+    (lambda x: x["schools"]["wabash"]["enrollment"].update(count=True), "positive integer"),
+    (lambda x: x["schools"]["wabash"]["enrollment"].update(count=866.5), "positive integer"),
+    (lambda x: x["schools"]["wabash"]["enrollment"].update(term="Fall 2023"), "must be Fall 2024"),
+    (lambda x: x["schools"]["wabash"]["enrollment"].update(source_url="ftp://nces.ed.gov/x"), r"HTTP\(S\) URL"),
+    (lambda x: x["schools"]["depauw"]["enrollment"].update(source_label=" "), "source_label"),
+    (lambda x: x["schools"]["depauw"]["enrollment"].update(verified_at="10/29/2026"), "ISO date"),
+])
+def test_invalid_enrollment_data_is_rejected(mutation, message):
+    data = read_endowment()
+    mutation(data)
+    with pytest.raises(alumni.AlumniError, match=message):
+        alumni.validate_endowment(data)
+
+
+def test_enrollment_term_follows_the_fiscal_year():
+    data = read_endowment()
+    data["fiscal_year"], data["as_of"] = "FY2026", "2026-06-30"
+    with pytest.raises(alumni.AlumniError, match="must be Fall 2025"):
+        alumni.validate_endowment(data)
+    for item in data["schools"].values():
+        item["enrollment"]["term"] = "Fall 2025"
+    assert alumni.validate_endowment(data)
+
+
+def test_the_scope_caveat_and_enrollment_basis_show_wherever_per_student_figures_show():
+    text = visible_text(committed_page())
+    assert "$543,000" in text
+    assert "pledges receivable and perpetual trusts" in text and "pooled endowment net assets" in text
+    assert "not cash available for general spending" in text
+    assert "fall 2024 total undergraduate headcount" in text and "College Navigator (IPEDS)" in text
 
 
 def test_degree_labels_say_what_is_recorded_and_never_the_vague_graduate():

@@ -37,6 +37,7 @@ Data
 
 Pipeline
 - Tests run before the scrape in `update-and-deploy.yml`. A scraper failure is tolerated (validated fallback data publishes) and the `report` job turns the run red. A push made with the workflow's token does not start another run.
+- Render is a hard gate: `render.py` runs after the scrape and before the data commit, and a failure stops the build before any commit, upload or deploy. The HTML validation then runs in production after the render, with the same pinned `setup-node`, `html-validate` version and page list as `checks.yml`; it is a warning, never a gate, so a validation problem must not stop the site from publishing.
 - The frequent cron (`7,37 * * * *`) must equal `gameday.FREQUENT_CRON`. GitHub can delay or skip scheduled runs and switches them off after 60 days without repo activity.
 - Snapshots: the Wayback calls stay in the last `archive` job, which can never fail the run. A retry merges links and never overwrites them. The limits are the `SAVE_*` constants in `scraper/snapshot.py`.
 - `render.py --now` is for previews and tests; no workflow may use it.

@@ -6,6 +6,7 @@ import json
 import os
 import re
 import shlex
+import shutil
 import subprocess
 import sys
 from pathlib import Path
@@ -434,33 +435,107 @@ def test_a_test_failure_blocks_later_build_steps_and_downstream_writes():
     assert "github.ref == 'refs/heads/main'" in job("issues")
 
 
-def test_scraper_failure_remains_tolerated_and_is_the_only_summary_input():
+def test_scraper_failure_remains_tolerated_and_the_summary_takes_only_scrape_and_validation_outcomes():
     assert named_step("Scrape")["continue-on-error"] is True
     summary = named_step("Summarize")
-    assert summary["env"] == {"SCRAPE": "${{ steps.scrape.outcome }}"}
+    assert summary["env"] == {
+        "SCRAPE": "${{ steps.scrape.outcome }}",
+        "SETUP_NODE": "${{ steps.setup_node.outcome }}",
+        "VALIDATE": "${{ steps.validate_html.outcome }}",
+    }
+    outputs = workflow_jobs()["build"]["outputs"]
+    assert set(outputs) == {"problems", "scrape", "validation"}
 
 
-@pytest.mark.parametrize(("scrape_result", "expected"), [("success", "false"), ("failure", "true")])
-def test_summary_shell_reports_only_the_scrape_outcome(tmp_path, scrape_result, expected):
+# The workflow's shell steps run under bash on the Linux runner. A Windows machine without bash on PATH skips
+# these tests; CI on Linux always has bash, so they run there.
+needs_bash = pytest.mark.skipif(shutil.which("bash") is None, reason="needs bash on PATH (the workflow's shell steps run under bash)")
+
+
+@needs_bash
+@pytest.mark.parametrize(
+    ("scrape_result", "node_result", "validate_result", "expected"),
+    [
+        ("success", "success", "success", ["problems=false", "scrape=ok", "validation=ok"]),
+        ("failure", "success", "success", ["problems=true", "scrape=failed", "validation=ok"]),
+        ("success", "success", "failure", ["problems=true", "scrape=ok", "validation=failed"]),
+        ("success", "failure", "skipped", ["problems=true", "scrape=ok", "validation=skipped"]),
+        ("failure", "failure", "skipped", ["problems=true", "scrape=failed", "validation=skipped"]),
+    ],
+)
+def test_summary_shell_reports_the_scrape_and_validation_outcomes(
+    tmp_path, scrape_result, node_result, validate_result, expected
+):
     output = tmp_path / "github-output"
     result = subprocess.run(
         ["bash", "-e", "-c", named_step("Summarize")["run"]],
-        env={"PATH": os.environ["PATH"], "SCRAPE": scrape_result, "GITHUB_OUTPUT": str(output)},
+        env={
+            "PATH": os.environ["PATH"],
+            "SCRAPE": scrape_result,
+            "SETUP_NODE": node_result,
+            "VALIDATE": validate_result,
+            "GITHUB_OUTPUT": str(output),
+        },
+        stdin=subprocess.DEVNULL,
         capture_output=True,
         text=True,
         check=False,
     )
     assert result.returncode == 0, result.stderr
-    assert output.read_text(encoding="utf-8").splitlines() == [f"problems={expected}"]
+    assert output.read_text(encoding="utf-8").splitlines() == expected
 
 
-def test_report_only_describes_scraper_failure_and_still_fails_the_run():
+def test_bash_is_never_missing_where_ci_runs():
+    # Only a Windows machine may skip the bash tests; a skip on Linux (where CI runs) would hide them.
+    assert sys.platform == "win32" or shutil.which("bash")
+
+
+@needs_bash
+@pytest.mark.parametrize(
+    ("node_result", "expected"),
+    [
+        ("failure", "HTML validation was skipped because Node could not be set up"),
+        ("success", "The HTML validator found a problem"),
+    ],
+)
+def test_validation_warning_shell_names_what_happened_in_the_annotation_and_the_summary(tmp_path, node_result, expected):
+    summary = tmp_path / "step-summary"
+    result = subprocess.run(
+        ["bash", "-e", "-c", named_step("Report HTML validation problem")["run"]],
+        env={"PATH": os.environ["PATH"], "SETUP_NODE": node_result, "GITHUB_STEP_SUMMARY": str(summary)},
+        stdin=subprocess.DEVNULL,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    assert result.returncode == 0, result.stderr
+    assert result.stdout.startswith("::warning title=HTML validation::")
+    assert expected in result.stdout
+    assert expected in summary.read_text(encoding="utf-8")
+
+
+def test_report_names_the_problem_and_still_fails_the_run_after_the_deploy():
     report = workflow_jobs()["report"]
     report_text = "\n".join(step.get("run", "") for step in report["steps"])
     assert "needs.build.outputs.problems == 'true'" in report["if"]
+    assert set(report["needs"]) == {"build", "deploy"}
+    env = report["steps"][0]["env"]
+    assert env == {
+        "SCRAPE": "${{ needs.build.outputs.scrape }}",
+        "VALIDATION": "${{ needs.build.outputs.validation }}",
+    }
     assert "exit 1" in report_text
-    assert "scraper" in report_text.lower()
+    assert "The scraper reported a failure" in report_text
+    assert "HTML validation failed" in report_text
+    assert "HTML validation was skipped because Node could not be set up" in report_text
     assert "site was still deployed" not in report_text.lower()
+
+
+def test_a_validation_problem_is_a_warning_annotation_and_a_summary_note():
+    report = named_step("Report HTML validation problem")["run"]
+    assert '::warning title=HTML validation::$message' in report
+    assert '>> "$GITHUB_STEP_SUMMARY"' in report
+    assert "review the" in report and "step logs" in report              # where to look
 
 
 def test_readme_documents_distinct_test_and_scraper_failure_paths():
@@ -469,38 +544,47 @@ def test_readme_documents_distinct_test_and_scraper_failure_paths():
     assert "scraper failure" in readme.lower() and "fallback" in readme.lower()
 
 
-def test_render_and_html_validation_precede_data_commit_and_artifact_upload():
+def test_render_then_node_then_validation_then_report_precede_data_commit_and_artifact_upload():
     steps = build_steps()
     render_index = step_index(steps, lambda step: step.get("name") == "Render site")
     node_index = step_index(steps, lambda step: step.get("uses", "").startswith("actions/setup-node@"))
+    syntax_index = step_index(steps, lambda step: step.get("name") == "Check the home-page script syntax")
     validation_index = step_index(steps, lambda step: step.get("name") == "Validate generated HTML")
-    warning_index = step_index(steps, lambda step: step.get("name") == "Report HTML validation warning")
+    report_index = step_index(steps, lambda step: step.get("name") == "Report HTML validation problem")
     commit_index = step_index(steps, lambda step: step.get("name") == "Commit if data changed")
     upload_index = step_index(steps, lambda step: step.get("uses", "").startswith("actions/upload-pages-artifact@"))
-    assert render_index < node_index < validation_index < warning_index < commit_index < upload_index
+    assert render_index < node_index < syntax_index < validation_index < report_index < commit_index < upload_index
     assert upload_index == commit_index + 1
     assert sum(step.get("name") == "Render site" for step in steps) == 1
 
 
-def test_render_and_html_validation_fail_closed():
+def test_render_is_fail_closed_and_node_and_validation_are_non_blocking_and_reported():
     steps = build_steps()
     assert "continue-on-error" not in workflow_jobs()["build"]
     render_step = named_step("Render site")
     assert render_step["run"] == "python scraper/render.py"
+    assert "continue-on-error" not in render_step
+    assert not re.search(r"\b(always|failure|cancelled)\s*\(", render_step.get("if", ""))
+
     node_step = next(step for step in steps if step.get("uses", "").startswith("actions/setup-node@"))
-    for step in (render_step, node_step):
-        assert "continue-on-error" not in step
-        condition = step.get("if", "")
-        assert not re.search(r"\b(always|failure|cancelled)\s*\(", condition), step.get("name", step.get("uses"))
+    assert node_step["id"] == "setup_node"
+    assert node_step["continue-on-error"] is True
+
+    syntax = named_step("Check the home-page script syntax")
+    assert syntax["if"] == "${{ steps.setup_node.outcome == 'success' }}"
+    assert syntax["continue-on-error"] is True  # PR checks gate syntax; production keeps publishing if Node fails.
 
     validation = named_step("Validate generated HTML")
     assert validation["id"] == "validate_html"
     assert validation["continue-on-error"] is True
-    warning = named_step("Report HTML validation warning")
-    assert warning["if"] == "${{ steps.validate_html.outcome == 'failure' }}"
-    assert "$GITHUB_STEP_SUMMARY" in warning["run"]
-    assert "Warning: generated HTML validation failed" in warning["run"]
-    assert "Publishing continues" in warning["run"]
+    assert validation["if"] == "${{ steps.setup_node.outcome == 'success' }}"   # skipped, not failed, without Node
+
+    report = named_step("Report HTML validation problem")
+    assert report["if"] == "${{ steps.setup_node.outcome != 'success' || steps.validate_html.outcome == 'failure' }}"
+    assert "$GITHUB_STEP_SUMMARY" in report["run"]
+    assert "HTML validation was skipped because Node could not be set up" in report["run"]
+    assert "generated HTML validation failed" in report["run"]
+    assert "Publishing continues" in report["run"]
     assert "needs.build.result == 'success'" in job("deploy")
     assert "needs.build.result == 'success'" in job("issues")
 
@@ -525,23 +609,40 @@ def test_production_html_validation_matches_pull_request_checks():
     pr_node = next(step for step in production_checks if step.get("uses", "").startswith("actions/setup-node@"))
     assert production_node["uses"] == pr_node["uses"]
     assert production_node["with"] == pr_node["with"] == {"node-version": "22"}
-    for steps in (build_steps(), production_checks):
-        node_index = step_index(steps, lambda step: step.get("uses", "").startswith("actions/setup-node@"))
-        assert steps[node_index + 1]["run"] == "node --check static/easter-eggs.js"
+    production_syntax = named_step("Check the home-page script syntax")
+    assert production_syntax["if"] == "${{ steps.setup_node.outcome == 'success' }}"
+    assert production_syntax["continue-on-error"] is True
+    pr_syntax = next(step for step in production_checks if step.get("name") == "Check the home-page script syntax")
+    assert "continue-on-error" not in pr_syntax and "if" not in pr_syntax
 
 
 def test_readme_documents_render_and_html_validation_before_data_commit():
     readme = (ROOT / "README.md").read_text(encoding="utf-8").lower()
     workflow_table = next(line for line in readme.splitlines() if "`update-and-deploy.yml`" in line)
-    assert "reports seven-page html validation problems as warnings" in workflow_table
-    assert "render failures stop the build" in workflow_table
+    assert "renders the candidate site, which must succeed" in workflow_table
+    assert "with `html-validate`, which only warns" in workflow_table
+    assert "turns the run red after the deploy" in workflow_table and "validation failed or was skipped" in workflow_table
+    assert "test and render failures stop the build" in workflow_table
     assert "commits changed `data/`" in workflow_table
     operator_text = readme.split("what each run of `update-and-deploy.yml` does:", 1)[0]
     assert "render failure stops the build before the data commit" in operator_text
-    assert "html validation problems are reported as warnings and do not stop publishing" in operator_text
+    assert "html validation problems" in operator_text and "do not stop publishing" in operator_text
+    assert "html validation never stops the build" in operator_text
+    assert "if node cannot be set up the validation is skipped" in operator_text
+    assert "a warning annotation and a run-summary note" in operator_text
+    assert "turns the run red for a scraper failure, a failed validation or a skipped validation" in operator_text
     workflow_section = readme.split("what each run of `update-and-deploy.yml` does:", 1)[1].split("### why the merge works", 1)[0]
     assert "render" in workflow_section and "validate" in workflow_section and "commit" in workflow_section
-    assert workflow_section.index("render site") < workflow_section.index("warning only") < workflow_section.index("data/ changed?") < workflow_section.index("commits data")
+    assert (
+        workflow_section.index("render site")
+        < workflow_section.index("set up node")
+        < workflow_section.index("validate all seven")
+        < workflow_section.index("data/ changed?")
+        < workflow_section.index("commits data")
+    )
+    assert "render fails" in workflow_section and "no commit, no deploy" in workflow_section
+    assert "validation skipped" in workflow_section and "run turns red" in workflow_section
+    assert "the site still publishes" in workflow_section
 
 
 def test_a_skipped_build_means_no_commit_no_deploy_and_no_new_check_time():

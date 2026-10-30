@@ -165,13 +165,13 @@ Three GitHub Actions workflows live in `.github/workflows/`:
 
 | Workflow | Runs when | Jobs and permissions |
 |---|---|---|
-| `update-and-deploy.yml` ("Update data and deploy site") | Twice a day, every 30 minutes (ended at once by the gate unless a game is being played), on every push to `main`, and by hand | `gate` (read-only; decides whether a 30-minute run does anything), `build` (`contents: write`; runs required tests, scrapes, renders the candidate site, reports seven-page HTML validation problems as warnings, then commits changed `data/` as the Actions bot and uploads the site), `deploy` (`pages: write`, `id-token: write`; publishes to GitHub Pages), `issues` (`issues: write`; keeps the `data-review` issue in step), `report` (turns the run red if a sport failed to scrape; test or render failures stop the build) |
-| `checks.yml` ("Checks") | On every pull request to `main` | One read-only job: the tests, the render, `html-validate` on all seven pages and every Mermaid diagram in this README |
+| `update-and-deploy.yml` ("Update data and deploy site") | Twice a day, every 30 minutes (ended at once by the gate unless a game is being played), on every push to `main`, and by hand | `gate` (read-only; decides whether a 30-minute run does anything), `build` (`contents: write`; runs required tests, scrapes, renders the candidate site, which must succeed, checks all seven generated pages with `html-validate`, which only warns, then commits changed `data/` as the Actions bot and uploads the site), `deploy` (`pages: write`, `id-token: write`; publishes to GitHub Pages), `issues` (`issues: write`; keeps the `data-review` issue in step), `report` (turns the run red after the deploy if a sport failed to scrape or the HTML validation failed or was skipped, and says which; test and render failures stop the build instead) |
+| `checks.yml` ("Checks") | On every pull request to `main` | One read-only job: the tests, the render, script syntax, `html-validate` on all seven pages and every Mermaid diagram in this README |
 | `snapshot.yml` ("Data snapshot") | July 1 and January 2, and by hand | `prepare` (read-only; the change check and the release files), `release` (`contents: write`; the GitHub Release), `archive` (`contents: write`; asks the Wayback Machine to save the source pages, last, and can never fail the run) |
 
 To run the update by hand: Actions, "Update data and deploy site", Run workflow, on `main`. The two optional inputs are "Accept a sport whose game count went down" (`allow_shrink`) and "Apply the changes to old games waiting for review" (`apply_reviewed_changes`, see "Review hold"). Scraping and rendering share one `build` job because the "Last checked" time is an uncommitted file that exists only on that runner. A push made with the workflow's own token does not start another run, so scraping on every push to `main` cannot loop. Every run that gets past the gate scrapes first, so every deploy carries a fresh "Last checked". It then renders the candidate site before committing changed data; a render failure stops the build before the data commit, artifact upload, deploy, or issue sync. HTML validation problems are reported as warnings and do not stop publishing. With no data changes, the site is still rendered, checked, and uploaded. A scraper failure remains tolerated when its validated fallback data can render. "Data last changed" is different: it is when `series.json` last changed (`updated_at`), which can be weeks ago because nothing changes between games.
 
-In `update-and-deploy.yml`, the build runs tests before it scrapes. If tests fail, the build stops and no scrape or later build step runs. A render failure also stops the build before the data commit, artifact upload, deploy, or issue sync. HTML validation problems are reported as warnings in the run summary and do not stop publishing. If tests pass, a scraper failure is tolerated so validated fallback data can continue through publication; the report job then marks the run red and points to the build logs and deployment result. Because the tests gate every run, a failing test stops all updates (scheduled, push and manual alike, since a manual run runs the same tests) until it is fixed.
+In `update-and-deploy.yml`, the build runs tests before it scrapes. If tests fail, the build stops and no scrape or later build step runs. A render failure also stops the build before the data commit, artifact upload, deploy, or issue sync. HTML validation never stops the build: setting up Node and running `html-validate` on all seven pages can each fail without blocking anything, and if Node cannot be set up the validation is skipped. The production script syntax check is also skipped if Node setup fails and cannot block publishing; the pull-request check remains the hard syntax gate. A failed or skipped validation writes a warning annotation and a run-summary note, and the site still publishes. If tests pass, a scraper failure is tolerated so validated fallback data can continue through publication. After the deploy, the report job turns the run red for a scraper failure, a failed validation or a skipped validation, says which it was, and points to the build logs and deployment result. Because the tests gate every run, a failing test stops all updates (scheduled, push and manual alike, since a manual run runs the same tests) until it is fixed.
 
 What each run of `update-and-deploy.yml` does:
 
@@ -187,14 +187,20 @@ flowchart TD
   B -- "tests fail" --> TF["build stops:<br/>no scrape or publication"]
   B -- "tests pass" --> S["Scrape<br/>(failure tolerated)"]
   S --> R["render site/"]
-  R --> V["validate all six generated<br/>HTML pages (warning only)"]
-  V --> C{"data/ changed?"}
+  R -- "render fails" --> RF["build stops:<br/>no commit, no deploy"]
+  R -- "render succeeds" --> N["set up Node<br/>(failure tolerated)"]
+  N -- "Node ready" --> JS["check home script syntax<br/>(non-blocking in production)"]
+  JS --> V["validate all seven generated<br/>HTML pages (failure tolerated)"]
+  N -- "setup fails:<br/>syntax and validation skipped" --> W
+  V -- "passes" --> C
+  V -- "fails" --> W["warning annotation and<br/>run-summary note"]
+  W --> C{"data/ changed?"}
   C -- "yes" --> CM["github-actions bot<br/>commits data to main"]
   C -- "no" --> U
-  CM --> U["upload validated site artifact"]
-  U --> D["deploy to GitHub Pages"]
+  CM --> U["upload site artifact"]
+  U --> D["deploy to GitHub Pages<br/>(the site still publishes)"]
   U --> IS["issues: open, update or close<br/>the data-review issue"]
-  D -- "scraper failed" --> RP["report: run shows red<br/>check logs and deployment result"]
+  D -- "scraper failed, or validation<br/>failed or skipped" --> RP["report: run turns red<br/>names the problem, check the logs"]
 ```
 
 The schedule times are written in UTC in the workflow, so they shift by an hour with daylight saving time (the times above are for Eastern daylight time; in winter the daily runs are about 5:19 AM and 10:47 PM). GitHub can delay a scheduled run or skip it altogether, and it switches scheduled workflows off after 60 days with no repository activity; if a day's update is missing, run the workflow by hand as described above.

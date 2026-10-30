@@ -3,11 +3,14 @@ schedule carry-over that keeps a just-finished game visible until its result is 
 import datetime as dt
 import hashlib
 import json
+import os
 import re
+import subprocess
 import sys
 from pathlib import Path
 
 import pytest
+import yaml
 
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT / "scraper"))
@@ -370,6 +373,18 @@ def job(name):
     return m.group(1)
 
 
+def workflow_jobs():
+    return yaml.safe_load(WORKFLOW)["jobs"]
+
+
+def build_steps():
+    return workflow_jobs()["build"]["steps"]
+
+
+def named_step(name):
+    return next(step for step in build_steps() if step.get("name") == name)
+
+
 def test_the_frequent_cron_in_the_workflow_is_the_one_the_gate_recognises_and_is_jittered():
     crons = re.findall(r'^\s+- cron: "([^"]+)"', WORKFLOW, re.M)
     assert crons == ["19 10 * * *", "47 3 * * *", FREQ]                  # the two daily runs are unchanged
@@ -384,6 +399,65 @@ def test_only_the_gate_decides_and_build_deploy_and_report_follow_it():
     for step in ("Scrape", "Commit if data changed", "Render site", "upload-pages-artifact"):
         assert step in job("build") and step not in job("gate")        # nothing that changes anything runs in the gate
     assert "git push" not in job("gate") and "git commit" not in job("gate")
+
+
+def test_required_tests_run_before_scraping_without_failure_suppression():
+    steps = build_steps()
+    tests = next(i for i, step in enumerate(steps) if step.get("id") == "tests")
+    scrape = next(i for i, step in enumerate(steps) if step.get("id") == "scrape")
+    assert steps[tests]["run"] == "python -m pytest -q tests"
+    assert tests < scrape
+    assert "continue-on-error" not in steps[tests]
+    assert "continue-on-error" not in workflow_jobs()["build"]
+
+
+def test_a_test_failure_blocks_later_build_steps_and_downstream_writes():
+    steps = build_steps()
+    tests = next(i for i, step in enumerate(steps) if step.get("id") == "tests")
+    for step in steps[tests + 1:]:
+        condition = step.get("if", "")
+        assert not re.search(r"\b(always|failure)\s*\(", condition), step.get("name", step.get("uses"))
+        assert not re.search(r"!\s*cancelled\s*\(\s*\)", condition), step.get("name", step.get("uses"))
+
+    assert "needs.build.result == 'success'" in job("deploy")
+    assert "needs.build.result == 'success'" in job("issues")
+    assert "github.ref == 'refs/heads/main'" in job("deploy")
+    assert "github.ref == 'refs/heads/main'" in job("issues")
+
+
+def test_scraper_failure_remains_tolerated_and_is_the_only_summary_input():
+    assert named_step("Scrape")["continue-on-error"] is True
+    summary = named_step("Summarize")
+    assert summary["env"] == {"SCRAPE": "${{ steps.scrape.outcome }}"}
+
+
+@pytest.mark.parametrize(("scrape_result", "expected"), [("success", "false"), ("failure", "true")])
+def test_summary_shell_reports_only_the_scrape_outcome(tmp_path, scrape_result, expected):
+    output = tmp_path / "github-output"
+    result = subprocess.run(
+        ["bash", "-e", "-c", named_step("Summarize")["run"]],
+        env={"PATH": os.environ["PATH"], "SCRAPE": scrape_result, "GITHUB_OUTPUT": str(output)},
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    assert result.returncode == 0, result.stderr
+    assert output.read_text(encoding="utf-8").splitlines() == [f"problems={expected}"]
+
+
+def test_report_only_describes_scraper_failure_and_still_fails_the_run():
+    report = workflow_jobs()["report"]
+    report_text = "\n".join(step.get("run", "") for step in report["steps"])
+    assert "needs.build.outputs.problems == 'true'" in report["if"]
+    assert "exit 1" in report_text
+    assert "scraper" in report_text.lower()
+    assert "site was still deployed" not in report_text.lower()
+
+
+def test_readme_documents_distinct_test_and_scraper_failure_paths():
+    readme = (ROOT / "README.md").read_text(encoding="utf-8")
+    assert "tests fail" in readme.lower() and "build stops" in readme.lower()
+    assert "scraper failure" in readme.lower() and "fallback" in readme.lower()
 
 
 def test_a_skipped_build_means_no_commit_no_deploy_and_no_new_check_time():

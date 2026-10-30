@@ -5,6 +5,7 @@ import hashlib
 import json
 import os
 import re
+import shlex
 import subprocess
 import sys
 from pathlib import Path
@@ -377,12 +378,20 @@ def workflow_jobs():
     return yaml.safe_load(WORKFLOW)["jobs"]
 
 
+def checks_workflow_jobs():
+    return yaml.safe_load((ROOT / ".github" / "workflows" / "checks.yml").read_text(encoding="utf-8"))["jobs"]
+
+
 def build_steps():
     return workflow_jobs()["build"]["steps"]
 
 
 def named_step(name):
     return next(step for step in build_steps() if step.get("name") == name)
+
+
+def step_index(steps, predicate):
+    return next(i for i, step in enumerate(steps) if predicate(step))
 
 
 def test_the_frequent_cron_in_the_workflow_is_the_one_the_gate_recognises_and_is_jittered():
@@ -458,6 +467,65 @@ def test_readme_documents_distinct_test_and_scraper_failure_paths():
     readme = (ROOT / "README.md").read_text(encoding="utf-8")
     assert "tests fail" in readme.lower() and "build stops" in readme.lower()
     assert "scraper failure" in readme.lower() and "fallback" in readme.lower()
+
+
+def test_render_and_html_validation_precede_data_commit_and_artifact_upload():
+    steps = build_steps()
+    render_index = step_index(steps, lambda step: step.get("name") == "Render site")
+    node_index = step_index(steps, lambda step: step.get("uses", "").startswith("actions/setup-node@"))
+    validation_index = step_index(steps, lambda step: step.get("name") == "Validate generated HTML")
+    commit_index = step_index(steps, lambda step: step.get("name") == "Commit if data changed")
+    upload_index = step_index(steps, lambda step: step.get("uses", "").startswith("actions/upload-pages-artifact@"))
+    assert render_index < node_index < validation_index < commit_index < upload_index
+    assert upload_index == commit_index + 1
+    assert sum(step.get("name") == "Render site" for step in steps) == 1
+
+
+def test_render_and_html_validation_fail_closed():
+    steps = build_steps()
+    assert "continue-on-error" not in workflow_jobs()["build"]
+    render_step = named_step("Render site")
+    assert render_step["run"] == "python scraper/render.py"
+    node_step = next(step for step in steps if step.get("uses", "").startswith("actions/setup-node@"))
+    for step in (render_step, node_step, named_step("Validate generated HTML")):
+        assert "continue-on-error" not in step
+        condition = step.get("if", "")
+        assert not re.search(r"\b(always|failure|cancelled)\s*\(", condition), step.get("name", step.get("uses"))
+    assert "needs.build.result == 'success'" in job("deploy")
+    assert "needs.build.result == 'success'" in job("issues")
+
+
+def test_production_html_validation_matches_pull_request_checks():
+    production = named_step("Validate generated HTML")
+    production_checks = checks_workflow_jobs()["checks"]["steps"]
+    pr_validation = next(step for step in production_checks if step.get("name") == "Validate generated HTML")
+    production_command = shlex.split(production["run"])
+    assert production_command == shlex.split(pr_validation["run"])
+    assert set(production_command[3:]) == {
+        "site/index.html",
+        "site/404.html",
+        "site/how-it-works/index.html",
+        "site/how-it-works/athletics/index.html",
+        "site/how-it-works/alumni/index.html",
+        "site/alumni/index.html",
+    }
+
+    production_node = next(step for step in build_steps() if step.get("uses", "").startswith("actions/setup-node@"))
+    pr_node = next(step for step in production_checks if step.get("uses", "").startswith("actions/setup-node@"))
+    assert production_node["uses"] == pr_node["uses"]
+    assert production_node["with"] == pr_node["with"] == {"node-version": "22"}
+
+
+def test_readme_documents_render_and_html_validation_before_data_commit():
+    readme = (ROOT / "README.md").read_text(encoding="utf-8").lower()
+    workflow_table = next(line for line in readme.splitlines() if "`update-and-deploy.yml`" in line)
+    assert "validates all six generated html pages" in workflow_table
+    assert "commits changed `data/`" in workflow_table
+    operator_text = readme.split("what each run of `update-and-deploy.yml` does:", 1)[0]
+    assert "render or html validation failure stops the build before the data commit" in operator_text
+    workflow_section = readme.split("what each run of `update-and-deploy.yml` does:", 1)[1].split("### why the merge works", 1)[0]
+    assert "render" in workflow_section and "validate" in workflow_section and "commit" in workflow_section
+    assert workflow_section.index("validate") < workflow_section.index("data/ changed?") < workflow_section.index("commits data")
 
 
 def test_a_skipped_build_means_no_commit_no_deploy_and_no_new_check_time():

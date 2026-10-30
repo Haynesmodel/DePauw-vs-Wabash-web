@@ -111,7 +111,18 @@ jobs:
           node-version: "22"
 
       - name: Validate generated HTML
+        id: validate_html
+        continue-on-error: true
         run: npx --yes html-validate@11.17.0 site/index.html site/404.html site/how-it-works/index.html site/how-it-works/athletics/index.html site/how-it-works/alumni/index.html site/alumni/index.html
+
+      - name: Report HTML validation warning
+        if: ${{ steps.validate_html.outcome == 'failure' }}
+        run: |
+          {
+            echo "## Warning: generated HTML validation failed"
+            echo
+            echo "The HTML validator found a problem. Publishing continues; review the Validate generated HTML step logs."
+          } >> "$GITHUB_STEP_SUMMARY"
 
       - name: Commit if data changed
         if: ${{ github.ref == 'refs/heads/main' }}

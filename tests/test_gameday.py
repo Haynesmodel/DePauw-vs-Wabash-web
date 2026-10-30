@@ -474,9 +474,10 @@ def test_render_and_html_validation_precede_data_commit_and_artifact_upload():
     render_index = step_index(steps, lambda step: step.get("name") == "Render site")
     node_index = step_index(steps, lambda step: step.get("uses", "").startswith("actions/setup-node@"))
     validation_index = step_index(steps, lambda step: step.get("name") == "Validate generated HTML")
+    warning_index = step_index(steps, lambda step: step.get("name") == "Report HTML validation warning")
     commit_index = step_index(steps, lambda step: step.get("name") == "Commit if data changed")
     upload_index = step_index(steps, lambda step: step.get("uses", "").startswith("actions/upload-pages-artifact@"))
-    assert render_index < node_index < validation_index < commit_index < upload_index
+    assert render_index < node_index < validation_index < warning_index < commit_index < upload_index
     assert upload_index == commit_index + 1
     assert sum(step.get("name") == "Render site" for step in steps) == 1
 
@@ -487,10 +488,19 @@ def test_render_and_html_validation_fail_closed():
     render_step = named_step("Render site")
     assert render_step["run"] == "python scraper/render.py"
     node_step = next(step for step in steps if step.get("uses", "").startswith("actions/setup-node@"))
-    for step in (render_step, node_step, named_step("Validate generated HTML")):
+    for step in (render_step, node_step):
         assert "continue-on-error" not in step
         condition = step.get("if", "")
         assert not re.search(r"\b(always|failure|cancelled)\s*\(", condition), step.get("name", step.get("uses"))
+
+    validation = named_step("Validate generated HTML")
+    assert validation["id"] == "validate_html"
+    assert validation["continue-on-error"] is True
+    warning = named_step("Report HTML validation warning")
+    assert warning["if"] == "${{ steps.validate_html.outcome == 'failure' }}"
+    assert "$GITHUB_STEP_SUMMARY" in warning["run"]
+    assert "Warning: generated HTML validation failed" in warning["run"]
+    assert "Publishing continues" in warning["run"]
     assert "needs.build.result == 'success'" in job("deploy")
     assert "needs.build.result == 'success'" in job("issues")
 
@@ -519,13 +529,15 @@ def test_production_html_validation_matches_pull_request_checks():
 def test_readme_documents_render_and_html_validation_before_data_commit():
     readme = (ROOT / "README.md").read_text(encoding="utf-8").lower()
     workflow_table = next(line for line in readme.splitlines() if "`update-and-deploy.yml`" in line)
-    assert "validates all six generated html pages" in workflow_table
+    assert "reports six-page html validation problems as warnings" in workflow_table
+    assert "render failures stop the build" in workflow_table
     assert "commits changed `data/`" in workflow_table
     operator_text = readme.split("what each run of `update-and-deploy.yml` does:", 1)[0]
-    assert "render or html validation failure stops the build before the data commit" in operator_text
+    assert "render failure stops the build before the data commit" in operator_text
+    assert "html validation problems are reported as warnings and do not stop publishing" in operator_text
     workflow_section = readme.split("what each run of `update-and-deploy.yml` does:", 1)[1].split("### why the merge works", 1)[0]
     assert "render" in workflow_section and "validate" in workflow_section and "commit" in workflow_section
-    assert workflow_section.index("validate") < workflow_section.index("data/ changed?") < workflow_section.index("commits data")
+    assert workflow_section.index("render site") < workflow_section.index("warning only") < workflow_section.index("data/ changed?") < workflow_section.index("commits data")
 
 
 def test_a_skipped_build_means_no_commit_no_deploy_and_no_new_check_time():

@@ -166,7 +166,7 @@ Three GitHub Actions workflows live in `.github/workflows/`:
 | `checks.yml` ("Checks") | On every pull request to `main` | One read-only job: the tests, the render, `html-validate` on all six pages and every Mermaid diagram in this README |
 | `snapshot.yml` ("Data snapshot") | July 1 and January 2, and by hand | `prepare` (read-only; the change check and the release files), `release` (`contents: write`; the GitHub Release), `archive` (`contents: write`; asks the Wayback Machine to save the source pages, last, and can never fail the run) |
 
-To run the update by hand: Actions, "Update data and deploy site", Run workflow, on `main`. The two optional inputs are "Accept a sport whose game count went down" (`allow_shrink`) and "Apply the changes to old games waiting for review" (`apply_reviewed_changes`, see "Review hold"). Every run that gets past the gate scrapes first, so every deploy carries a fresh "Last checked". "Data last changed" is different: it is when `series.json` last changed (`updated_at`), which can be weeks ago because nothing changes between games.
+To run the update by hand: Actions, "Update data and deploy site", Run workflow, on `main`. The two optional inputs are "Accept a sport whose game count went down" (`allow_shrink`) and "Apply the changes to old games waiting for review" (`apply_reviewed_changes`, see "Review hold"). Scraping and rendering share one `build` job because the "Last checked" time is an uncommitted file that exists only on that runner. A push made with the workflow's own token does not start another run, so scraping on every push to `main` cannot loop. Every run that gets past the gate scrapes first, so every deploy carries a fresh "Last checked". "Data last changed" is different: it is when `series.json` last changed (`updated_at`), which can be weeks ago because nothing changes between games.
 
 In `update-and-deploy.yml`, the build runs tests before it scrapes. If tests fail, the build stops and no scrape, data commit, render, artifact upload, deploy, or issue sync runs. If tests pass, a scraper failure is tolerated so validated fallback data can continue through publication; the report job then marks the run red and points to the build logs and deployment result. Because the tests gate every run, a failing test stops all updates (scheduled, push and manual alike, since a manual run runs the same tests) until it is fixed.
 
@@ -253,7 +253,7 @@ To see why a pair was matched, run `python scraper/scrape.py --dry-run` and read
 1. Run the tests. `tests/test_merge.py` covers the passes, and `tests/test_overrides.py` pins the real-data totals, so a change that moves any sport's record fails loudly.
 2. Run `python scraper/scrape.py --dry-run` on the live pages and compare the per-sport counts and `REVIEW` lines with the previous run.
 3. Update the pinned totals in `tests/test_overrides.py` only after confirming each changed game is right, never just to make a test pass.
-4. Update this section and `CLAUDE.md` to match.
+4. Update this section and the `merge.py` docstring to match.
 
 **Worked examples from the real data**
 
@@ -385,6 +385,7 @@ npx --yes -p @mermaid-js/mermaid-cli@11.17.0 mmdc -i README.md -o <temp folder>/
 
 ```
 README.md, LICENSE, requirements.txt      this file, the MIT license, the Python packages (Pillow is pinned exactly)
+AGENTS.md                                 the short rules for any agent or contributor: checks, invariants, hygiene
 data/
   series.json        the merged records the athletics pages read (always the merge of the next three)
   depauw.json        DePauw's page for each sport as read, in DePauw's point of view
@@ -457,6 +458,7 @@ Only meets where DePauw's team swims Wabash's team head to head count toward the
 - **Add a sport.** See "Adding a sport" below. Only head-to-head sports qualify.
 - **Add or edit an alumni entry.** Edit `data/alumni.json`: a person needs an `id`, `name`, `school` (`depauw` or `wabash`), `degree` and `degree_year` (an earned degree), a `school_source` (label and URL), the `categories` they belong to, and a `qualifications` entry for each category with the `achievement`, `years` (one year, or start and end years; `"present": true` for an office still held) and a `source`. Fortune 500 CEOs also need `company`, `rank_year`, `rank` and a `ranking_source`. Update `verified_at` and the category's review notes, then run the tests and `python scraper/render.py`: validation refuses a missing source, an unknown category or a duplicate. The ten categories are fixed in the validation and in `TILE_LABELS`; adding an eleventh means changing both.
 - **Update the endowment.** Edit `data/endowment.json`: each school's audited amount and source, the components taken out to reach the common basis (`comparable.excluded`, with a source note), and the fall enrollment that matches the fiscal year (validation refuses any other term). The per-student figures and the "about even" call are calculated at build time and are never stored.
+- **Agents and tools.** `AGENTS.md` at the repository root is the short list of rules for any person or coding agent changing this repo: the checks to run, the invariants that must not break, repo hygiene and how to collaborate. Read it before your first change; this README has the detail.
 - **Pull requests.** The scraper commits data to `main` on a schedule and the repository can have more than one contributor, so `git fetch origin` and bring your branch up to date with `main` before you push. Run the tests, the render, `html-validate` and the diagram check (see "Run it locally"). Any change to the pipeline, data files, workflows, triggers or game-day behavior also updates the matching diagram in this README.
 
 ## License

@@ -94,6 +94,22 @@
       "schedule_url": "https://depauwtigers.com/sports/mens-tennis/schedule",
       "wabash_schedule_url": "https://sports.wabash.edu/sports/tennis/schedule",
       "games": []
+    },
+    "mens-swimming-and-diving": {
+      "schedule_url": "https://depauwtigers.com/sports/mens-swimming-and-diving/schedule",
+      "wabash_schedule_url": "https://sports.wabash.edu/sports/swimming-and-diving/schedule",
+      "games": [
+        {
+          "date": "2026-12-04",
+          "time": "7:00 PM",
+          "time_note": null,
+          "location": "away",
+          "site": "Crawfordsville, Ind.",
+          "status": "scheduled",
+          "doubleheader": false,
+          "source": "both"
+        }
+      ]
     }
   }
 }

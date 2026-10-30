@@ -35,7 +35,9 @@ def same(depauw, wabash, reason="checked the box score"):
 def test_the_committed_file_is_valid_and_every_ruling_has_a_reason():
     rules = merge.load_overrides(ROOT / "data" / "overrides.json")
     assert {k: (len(v["same_game"]), len(v["different_games"])) for k, v in rules.items()} == {
-        "football": (1, 0), "mens-basketball": (8, 1), "baseball": (3, 0), "mens-soccer": (3, 0)}
+        "football": (1, 0), "mens-basketball": (8, 1), "baseball": (3, 0), "mens-soccer": (3, 0),
+        "mens-swimming-and-diving": (1, 0)}
+    assert [len(v["session_of"]) for v in rules.values()] == [0, 0, 0, 0, 1]
     assert all(r["reason"] for v in rules.values() for kind in v.values() for r in kind)
 
 

@@ -32,11 +32,15 @@ def full_html(sport: str) -> str:
     for date, season, loc, site, res, us, them, note in ref["games"]:
         m, d, y = date.split("/")
         long_date = f"{MONTHS[int(m)-1]} {int(d)}, {y}"
+        if us is None:       # a result with no score: the page prints "L -" and says so beside it
+            score_text = f"{res} -"
+        else:
+            score_text = f"{res} {us} - {them}"
         rows.append(
             f'<tr><th scope="row"><span class="hide-on-large">{long_date}</span><span class="hide-on-medium-down">{date}</span></th>'
             f'<td class="sidearm-table-custom-field" data-label="Season"> {season} </td>'
             f'<td class="sidearm-table-custom-field location" data-label="Location"><div><span class="hide-on-medium-down"> {loc} </span><span>{site}</span></div></td>'
-            f'<td class="sidearm-table-custom-field score {res}" data-label="Score"><div><span class="hide-on-medium-down post-score">{(" " + note + " ") if note else ""}</span><span> {res} {us} - {them} </span></div></td>'
+            f'<td class="sidearm-table-custom-field score {res}" data-label="Score"><div><span class="hide-on-medium-down post-score">{(" " + note + " ") if note else ""}</span><span> {score_text} </span></div></td>'
             f'<td class="sidearm-table-custom-field" data-label="Media"><div class="media-list"></div></td></tr>'
         )
     # Replace only the history table's body (the last-matchup box score has its own <tbody>).
@@ -153,11 +157,13 @@ def fixture_dir(tmp_path):
     (d / "mens-soccer.html").write_text((FIX / "mens-soccer.html").read_text(encoding="utf-8"), encoding="utf-8")
     (d / "mens-lacrosse.html").write_text((FIX / "mens-lacrosse.html").read_text(encoding="utf-8"), encoding="utf-8")
     (d / "mens-tennis.html").write_text((FIX / "mens-tennis.html").read_text(encoding="utf-8"), encoding="utf-8")
+    (d / "mens-swimming-and-diving.html").write_text(full_html("mens-swimming-and-diving"), encoding="utf-8")
     return d
 
 
 WABASH_BASE = "https://sports.wabash.edu"
-SPORT_KEYS = ["football", "mens-basketball", "baseball", "mens-soccer", "mens-lacrosse", "mens-tennis"]
+SPORT_KEYS = ["football", "mens-basketball", "baseball", "mens-soccer", "mens-lacrosse", "mens-tennis",
+              "mens-swimming-and-diving"]
 
 
 def parse_wabash(html):
@@ -183,25 +189,30 @@ def test_end_to_end_writes_series_json(fixture_dir, tmp_path, capsys):
 
     # Sports come out in sources.json order, which is the order the page shows them.
     assert list(data["sports"]) == ["football", "mens-basketball", "baseball", "mens-soccer",
-                                    "mens-lacrosse", "mens-tennis"]
+                                    "mens-lacrosse", "mens-tennis", "mens-swimming-and-diving"]
     sp = data["sports"]
     assert sp["football"]["record"] == {"depauw_wins": 59, "wabash_wins": 63, "ties": 9}
     assert sp["football"]["first_game"] == "1890-11-22" and sp["football"]["last_game"] == "2025-11-15"
     assert {k: (v["record"]["depauw_wins"], v["record"]["wabash_wins"], v["record"]["ties"], v["games_played"])
             for k, v in sp.items()} == {
         "football": (59, 63, 9, 131), "mens-basketball": (130, 100, 1, 231), "baseball": (84, 57, 0, 141),
-        "mens-soccer": (41, 18, 6, 65), "mens-lacrosse": (12, 0, 0, 12), "mens-tennis": (33, 0, 0, 33)}
+        "mens-soccer": (41, 18, 6, 65), "mens-lacrosse": (12, 0, 0, 12), "mens-tennis": (33, 0, 0, 33),
+        "mens-swimming-and-diving": (19, 11, 0, 30)}
     assert {k: v["current_streak"] for k, v in sp.items()} == {
         "football": "W4", "mens-basketball": "L1", "baseball": "L1",
-        "mens-soccer": "W2", "mens-lacrosse": "W12", "mens-tennis": "W33"}
-    assert data["totals"] == {"depauw_wins": 359, "wabash_wins": 238, "ties": 16, "games_played": 613}
+        "mens-soccer": "W2", "mens-lacrosse": "W12", "mens-tennis": "W33", "mens-swimming-and-diving": "W1"}
+    assert data["totals"] == {"depauw_wins": 378, "wabash_wins": 249, "ties": 16, "games_played": 643}
     assert data["updated_at"]
 
     # Each sport carries the label for its total; tennis overrides the page's "points".
     assert {k: v["total_label"] for k, v in sp.items()} == {
         "football": "points", "mens-basketball": "points", "baseball": "runs",
-        "mens-soccer": "goals", "mens-lacrosse": "goals", "mens-tennis": "individual matches"}
+        "mens-soccer": "goals", "mens-lacrosse": "goals", "mens-tennis": "individual matches",
+        "mens-swimming-and-diving": "points"}
     assert sp["baseball"]["points"] == {"depauw": 904, "wabash": 709}
+    # Swimming scores can end in .5; the total keeps the half and a whole total stays a whole number.
+    assert sp["mens-swimming-and-diving"]["points"] == {"depauw": 4459.5, "wabash": 3968.5}
+    assert sp["mens-swimming-and-diving"]["unit"] == ["meet", "meets"]
 
     # A second run with identical pages must not rewrite the file (no empty scheduled commits).
     stamp = data["updated_at"]
@@ -380,7 +391,7 @@ def test_reordering_sources_rewrites_the_file(fixture_dir, tmp_path, monkeypatch
     reordered.write_text(json.dumps(cfg))
     monkeypatch.setattr(scrape, "SOURCES", reordered)
     assert scrape.main(["--fixtures", str(fixture_dir), "--output", str(out)]) == 0
-    assert list(json.loads(out.read_text())["sports"])[0] == "mens-tennis"
+    assert list(json.loads(out.read_text())["sports"])[0] == "mens-swimming-and-diving"
 
 
 # --------------------------------------------------------------------------- #
@@ -396,7 +407,7 @@ def live(both_dir, monkeypatch):
     def fake_fetch(url):
         wabash = "wabash.edu" in url
         slug = re.search(r"/sports/([^/]+)/", url).group(1)
-        key = "mens-tennis" if wabash and slug == "tennis" else slug      # Wabash's slug for men's tennis
+        key = {"tennis": "mens-tennis", "swimming-and-diving": "mens-swimming-and-diving"}.get(slug, slug)             if wabash else slug                                          # Wabash's slugs for tennis and swimming
         if url.endswith("/schedule"):
             raise OSError("schedule pages are not part of these tests")
         if key in state["broken"]:
@@ -433,7 +444,7 @@ def test_partial_failure_still_counts_as_a_check_but_exits_red(tmp_path, live):
 def test_every_sport_failing_does_not_advance_the_check_time(tmp_path, live):
     assert run_live(tmp_path) == 0
     (tmp_path / "checked").write_text("2026-01-01T00:00:00+00:00\n")
-    live["broken"] = {"football", "mens-basketball", "baseball", "mens-soccer", "mens-lacrosse", "mens-tennis"}
+    live["broken"] = set(SPORT_KEYS)
     assert run_live(tmp_path) == 1
     assert (tmp_path / "checked").read_text() == "2026-01-01T00:00:00+00:00\n"
 
@@ -485,16 +496,19 @@ def test_end_to_end_merges_both_schools_and_keeps_each_schools_games(both_dir, t
     sp = data["sports"]
     assert {k: v["games_played"] for k, v in sp.items()} == {
         "football": 132, "mens-basketball": 238, "baseball": 316, "mens-soccer": 65,
-        "mens-lacrosse": 12, "mens-tennis": 123}
-    assert data["totals"] == {"depauw_wins": 518, "wabash_wins": 348, "ties": 20, "games_played": 886}
+        "mens-lacrosse": 12, "mens-tennis": 123, "mens-swimming-and-diving": 41}
+    # No rulings file next to this output, so the swimming meet of March 19-21, 2021 counts as three here.
+    assert data["totals"] == {"depauw_wins": 544, "wabash_wins": 363, "ties": 20, "games_played": 927}
     assert sp["football"]["record"] == {"depauw_wins": 60, "wabash_wins": 63, "ties": 9}   # 1891 counted twice until ruled on
     assert sp["mens-tennis"]["record"] == {"depauw_wins": 115, "wabash_wins": 7, "ties": 1}
     # Everything derived comes from the merged games, not from either school's page.
     assert (sp["baseball"]["first_game"], sp["baseball"]["last_game"]) == ("1888-01-03", "2026-04-28")
     assert {k: v["current_streak"] for k, v in sp.items()} == {
         "football": "W4", "mens-basketball": "L1", "baseball": "L1",
-        "mens-soccer": "W2", "mens-lacrosse": "W12", "mens-tennis": "W61"}
-    assert sp["baseball"]["points"] == {"depauw": 1801, "wabash": 1750}
+        "mens-soccer": "W2", "mens-lacrosse": "W12", "mens-tennis": "W61", "mens-swimming-and-diving": "W1"}
+    # 1817-1734: Wabash's page prints three old baseball scores in the opposite order from their result
+    # letter (W 7-19, W 7-10, W 1-2 in DePauw's view); trusting the letter moves 16 runs to DePauw.
+    assert sp["baseball"]["points"] == {"depauw": 1817, "wabash": 1734}
     assert sp["football"]["sources"] == {"both": 130, "depauw_only": 1, "wabash_only": 1, "disputed": 2,
                                          "date_differs": 2, "dates_not_recorded": 0}
     assert sp["mens-tennis"]["unit"] == ["match", "matches"] and "unit" not in sp["football"]

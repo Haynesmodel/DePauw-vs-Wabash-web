@@ -329,8 +329,9 @@ def test_overtime_notes_are_tidied(tmp_path):
 def test_not_included_note_sits_under_the_totals(tmp_path):
     _, page = build(tmp_path, {"football": football()})
     t = text_of(page)
-    assert ("Not included: cross country, track and field, swimming and diving, and golf. "
-            "They are multi-team events rather than head-to-head games.") in t
+    assert ("Not included: cross country, track and field, and golf, which are multi-team events rather than "
+            "head-to-head games. Swimming and diving counts dual meets only; invitationals and championships "
+            "are left out.") in t
     assert page.index("overall-meta") < page.index("not-included") < page.index('class="sport"')
 
 

@@ -13,8 +13,9 @@ import render  # noqa: E402
 
 ROOT = Path(__file__).resolve().parent.parent
 NOW = dt.datetime(2026, 12, 1, 15, 0, tzinfo=dt.timezone.utc)
-MEN_ONLY = ("Only men’s head-to-head sports are compared: Wabash is an all-male college, and multi-team sports "
-            "(cross country, track and field, swimming and diving, golf) aren’t head-to-head.")
+MEN_ONLY = ("Only men’s head-to-head competition is compared: Wabash is an all-male college, and multi-team "
+            "events (cross country, track and field, golf, and swimming invitationals and championships) "
+            "aren’t head-to-head.")
 
 
 @pytest.fixture(scope="module")

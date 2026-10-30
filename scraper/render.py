@@ -65,10 +65,12 @@ AWAY_SITE = "Crawfordsville, Ind."
 
 TITLE = "DePauw University vs. Wabash College: All-Time Head-to-Head Records"
 SUBTITLE = "DePauw University vs. Wabash College: all-time head-to-head records in men’s sports."
-NOT_INCLUDED = ("cross country, track and field, swimming and diving, and golf. "
-                "They are multi-team events rather than head-to-head games.")
-MEN_ONLY = ("Only men’s head-to-head sports are compared: Wabash is an all-male college, and multi-team "
-            "sports (cross country, track and field, swimming and diving, golf) aren’t head-to-head.")
+NOT_INCLUDED = ("cross country, track and field, and golf, which are multi-team events rather than "
+                "head-to-head games. Swimming and diving counts dual meets only; invitationals and "
+                "championships are left out.")
+MEN_ONLY = ("Only men’s head-to-head competition is compared: Wabash is an all-male college, and multi-team "
+            "events (cross country, track and field, golf, and swimming invitationals and championships) "
+            "aren’t head-to-head.")
 DISCLAIMER = "Unofficial fan site, not affiliated with DePauw University or Wabash College."
 COPYRIGHT_HOLDER = "Jackson Mote"
 COPYRIGHT_START = 2026
@@ -124,6 +126,11 @@ def report_url(sport_name: str | None = None) -> str:
 
 def report_link(sport_name: str | None = None) -> str:
     return f'<a href="{esc(report_url(sport_name))}">Report a data error</a>'
+
+
+def fmt_num(x) -> str:
+    """A score, margin or total for display: 4,459.5 and 147.5, but 4,612 and 153 (never 147.50 or 153.0)."""
+    return f"{facts.num(x):,}"
 
 
 def plural(n: int, word: str) -> str:
@@ -198,13 +205,15 @@ def read_checked(path: Path | None) -> str | None:
     return text if stamp.tzinfo is not None else None
 
 
-def streak_text(code: str) -> str:
+def streak_text(code: str, noun: str = "") -> str:
+    """`noun` (a sport's own word, "meets" or "matches") follows "straight": "has won 3 straight meets"."""
     kind, n = STREAK_RE.match(code).groups()
     n = int(n)
+    tail = f" {noun}" if noun else ""
     if kind == "W":
-        return "DePauw won the last meeting" if n == 1 else f"DePauw has won {n} straight"
+        return "DePauw won the last meeting" if n == 1 else f"DePauw has won {n} straight{tail}"
     if kind == "L":
-        return "Wabash won the last meeting" if n == 1 else f"Wabash has won {n} straight"
+        return "Wabash won the last meeting" if n == 1 else f"Wabash has won {n} straight{tail}"
     return "The last meeting ended in a tie" if n == 1 else f"The last {n} meetings ended in ties"
 
 
@@ -220,7 +229,9 @@ def derive_streak(games: list) -> str:
 
 def score_text(g: dict) -> str:
     """Winner first: 'DePauw 41, Wabash 20', 'Wabash 24, DePauw 17', 'Tie 7–7'."""
-    d, w = g["depauw"], g["wabash"]
+    if not facts.has_score(g):
+        return {"W": "DePauw won", "L": "Wabash won", "T": "Tie"}[g["result"]] + " · score not recorded"
+    d, w = fmt_num(g["depauw"]), fmt_num(g["wabash"])
     if g["result"] == "W":
         return f"DePauw {d}, Wabash {w}"
     if g["result"] == "L":
@@ -322,7 +333,8 @@ def load(path: Path) -> dict:
         if not games:
             raise DataError(f"{key}: no games")
         for g in games:
-            missing = [f for f in GAME_FIELDS if g.get(f) is None]
+            required = GAME_FIELDS if g.get("score_known", True) else ("date", "location", "result")
+            missing = [f for f in required if g.get(f) is None]
             if missing:
                 raise DataError(f"{key}: game {g.get('date')} is missing {missing}")
             if g["result"] not in ("W", "L", "T"):
@@ -458,9 +470,9 @@ UNITS = {"points": ("point", "points"), "runs": ("run", "runs"), "goals": ("goal
          "individual matches": ("match", "matches")}
 
 
-def unit(n: int, label: str) -> str:
+def unit(n, label: str) -> str:
     one, many = UNITS.get(label, (label, label))
-    return f"{n:,} {one if n == 1 else many}"
+    return f"{fmt_num(n)} {one if n == 1 else many}"
 
 
 def year_span(first: str, last: str) -> str:
@@ -504,13 +516,14 @@ def fun_facts(key: str, s: dict) -> list:
     if close:
         limit = facts.ONE_SCORE[key]
         by = f"by {unit(limit, label)}" + (" or fewer" if limit > 1 else "")
-        out.append((f"One-score {game_words(s)[1]}",
+        out.append((f"{facts.CLOSE_WORD.get(key, 'One-score')} {game_words(s)[1]}",
                     f"{len(close):,} decided {by} · most recent: {game_line(facts.most_recent(close))}"))
-    if label != "individual matches":  # nine matches are always played, so the total never varies
-        tops = facts.highest_scoring_games(games)
+    # nine matches are always played, so a tennis total never varies
+    tops = facts.highest_scoring_games(games) if label != "individual matches" else []
+    if tops:
         top = facts.most_recent(tops)
         lead = score_text(top) if len(tops) > 1 else game_line(top)
-        out.append(("Highest-scoring game",
+        out.append((f"Highest-scoring {game_words(s)[0]}",
                     f"{lead} · {unit(top['depauw'] + top['wabash'], label)} combined{repeat_text(tops)}"))
     for title, found in (("Overtime games", facts.overtime_games(games)),
                          ("Extra-inning games", facts.extra_inning_games(games))):
@@ -552,8 +565,19 @@ def game_flags(key: str, g: dict, merged: bool) -> list:
         flags.append(f"DePauw’s record lists this game on {fmt_date(g['depauw_date'])}")
     v = g.get("wabash_version")
     if g.get("disputed") and v:
-        flags.append(f"DePauw’s record (DePauw-Wabash): {g['depauw']}-{g['wabash']} · "
-                     f"Wabash’s record (DePauw-Wabash): {v['depauw']}-{v['wabash']}")
+        flags.append(f"DePauw’s record (DePauw-Wabash): {fmt_num(g['depauw'])}-{fmt_num(g['wabash'])} · "
+                     f"Wabash’s record (DePauw-Wabash): {fmt_num(v['depauw'])}-{fmt_num(v['wabash'])}")
+    if g.get("score_known") is False:
+        flags.append("Score not recorded; the result counts in the record but not in the point totals.")
+    if g.get("score_order_reversed"):
+        who = join_and([f"{n}’s" for n in g["score_order_reversed"]])
+        flags.append(f"The two scores were listed in the opposite order on {who} page; the result "
+                     f"(win or loss) was trusted and the scores were swapped to match it.")
+    if g.get("sessions"):
+        days = join_and([f"{fmt_date(x['date'])} (DePauw {fmt_num(x['depauw'])}, Wabash {fmt_num(x['wabash'])})"
+                         for x in g["sessions"]])
+        flags.append(f"One meet over several days. Wabash’s record also lists {days} as separate games; "
+                     f"they are running scores of this meet, so they aren’t counted.")
     note = FOOTNOTES.get((key, g["date"]))
     if note and g["result"] == "T" and g.get("source") == "both" and not g.get("disputed"):
         flags.append(note)
@@ -628,13 +652,19 @@ def provenance_text(s: dict) -> str:
     if not c:
         return ""
     words = game_words(s)
-    if not (c["depauw_only"] or c["wabash_only"] or c["disputed"] or c["date_differs"]):
+    if not (c["depauw_only"] or c["wabash_only"] or c["disputed"] or c["date_differs"] or c.get("session_rows")):
         return "DePauw and Wabash records agree."
     parts = [f"{count_noun(c['both'], words)} listed by both", f"{c['wabash_only']:,} by Wabash only",
              f"{c['depauw_only']:,} by DePauw only", f"{c['disputed']:,} disputed"]
     text = "Combined from DePauw and Wabash records: " + ", ".join(parts) + "."
     if c["date_differs"]:
-        text += f" {c['date_differs']:,} of the shared {words[1]} have different dates in the two records."
+        n = c["date_differs"]
+        text += (f" {n:,} of the shared {words[1]} have different dates in the two records." if n != 1 else
+                 f" 1 of the shared {words[1]} has a different date in the two records.")
+    if rows := c.get("session_rows"):       # running scores a ruling set aside (see session_of in overrides.json)
+        text += (f" {plural(rows, 'row')} listed as separate {words[1]} {'is' if rows == 1 else 'are'} the running "
+                 f"score of a multi-day {words[0]} already counted once, so {'it is' if rows == 1 else 'they are'} "
+                 f"not counted.")
     return text
 
 
@@ -656,11 +686,11 @@ def card(key: str, s: dict, ahead: list, pending: list, up: dict | None, today: 
     words = game_words(s)
     since = facts.game_year(games[0])
     stat_rows = [
-        ("Current streak", esc(streak_text(code))),
+        ("Current streak", esc(streak_text(code, words[1] if s.get("unit") else ""))),
         ("Records since", esc(since)),
         (f"{words[1].capitalize()} played", esc(f"{len(games):,}")),
         (f"Total {s.get('total_label') or 'points'}",
-         f'DePauw {s["points"]["depauw"]:,}, Wabash {s["points"]["wabash"]:,}'),
+         f'DePauw {fmt_num(s["points"]["depauw"])}, Wabash {fmt_num(s["points"]["wabash"])}'),
         ("Most recent",
          f'{date_html(last)} · {esc(score_text(last))}'),
     ]
@@ -1001,6 +1031,11 @@ def csv_text(value) -> str:
     return "'" + text if text[:1] in ("=", "+", "-", "@") else text
 
 
+def fmt_csv_num(x) -> str:
+    """A score for a spreadsheet: no thousands separator, halves as 147.5, whole scores as 147."""
+    return str(facts.num(x))
+
+
 def render_csv(data: dict) -> str:
     """One row per game, oldest first within each sport, in the order the sports appear on the page."""
     buf = io.StringIO()
@@ -1010,13 +1045,15 @@ def render_csv(data: dict) -> str:
         for g in s["games"]:
             v = g.get("wabash_version")
             writer.writerow([csv_text(s["name"]), g["date"] if date_known(g) else "", csv_text(g.get("season")),
-                             g["location"], csv_text(g.get("site")), g["depauw"], g["wabash"],
+                             g["location"], csv_text(g.get("site")),
+                             fmt_csv_num(g["depauw"]) if facts.has_score(g) else "",
+                             fmt_csv_num(g["wabash"]) if facts.has_score(g) else "",
                              RESULT_WORDS[g["result"]], csv_text(fmt_note(g.get("note"))),
                              safe_url(g.get("boxscore")) or "", g.get("source", "depauw"),
                              "yes" if date_known(g) else "no", "yes" if g.get("disputed") else "no",
                              "yes" if g.get("date_differs") else "no", g.get("wabash_date") or "",
-                             f"{g['depauw']}-{g['wabash']}" if g.get("disputed") and v else "",
-                             f"{v['depauw']}-{v['wabash']}" if g.get("disputed") and v else ""])
+                             f"{fmt_csv_num(g['depauw'])}-{fmt_csv_num(g['wabash'])}" if g.get("disputed") and v else "",
+                             f"{fmt_csv_num(v['depauw'])}-{fmt_csv_num(v['wabash'])}" if g.get("disputed") and v else ""])
     return buf.getvalue()
 
 

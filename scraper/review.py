@@ -66,7 +66,8 @@ def _frozen(g: dict) -> str:
 
 
 def score_text(g: dict) -> str:
-    return f"{g['depauw']}-{g['wabash']}"
+    """DePauw-Wabash, as a ruling writes it. A game whose school lists no score reads "no score"."""
+    return "no score" if g.get("score_known") is False else f"{g['depauw']}-{g['wabash']}"
 
 
 def side(g: dict | None) -> dict | None:
@@ -175,12 +176,15 @@ def rejected(school: str, c: dict, rules: list) -> dict | None:
 
 
 def touches_ruling(c: dict, school: str, rules: dict | None) -> bool:
-    """Does the change edit a row that a same_game or different_games ruling names? Approving it would
-    make that ruling stale, and the sport's merge then fails loudly until the ruling is fixed."""
+    """Does the change edit a row that a same_game, different_games or session_of ruling names? Approving it
+    would make that ruling stale, and the sport's merge then fails loudly until the ruling is fixed."""
     named = set()
     for kind in ("same_game", "different_games"):
         for r in (rules or {}).get(kind, []):
             named.add((r[school]["date"], r[school]["score"]))
+    for r in (rules or {}).get("session_of", []):
+        if r["school"] == school:
+            named.update((x["date"], x["score"]) for x in [r["meet"], *r["sessions"]])
     return any(g is not None and (g["date"], (g["depauw"], g["wabash"])) in named for g in (c["old"], c["new"]))
 
 
@@ -274,11 +278,15 @@ APPROVE_HELP = (
     '"Apply the changes to old games waiting for review", and run it.')
 
 
+def _score_words(g: dict) -> str:
+    return "no score listed" if g.get("score_known") is False else f"DePauw {g['depauw']}-{g['wabash']}"
+
+
 def _game_text(g: dict | None) -> str:
     if g is None:
         return "(not listed)"
     place = " · ".join(x for x in (g.get("location"), g.get("site")) if x)
-    return f"{g['date']} (season {g['season']}) DePauw {g['depauw']}-{g['wabash']} ({g['result']})" \
+    return f"{g['date']} (season {g['season']}) {_score_words(g)} ({g['result']})" \
            + (f" · {place}" if place else "") + (f" · {g['note']}" if g.get("note") else "")
 
 

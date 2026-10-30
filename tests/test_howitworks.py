@@ -51,12 +51,27 @@ def test_every_number_comes_from_the_data(site):
     src = {k: sum(s["sources"][k] for s in DATA["sports"].values())
            for k in ("both", "depauw_only", "wabash_only", "disputed", "date_differs", "dates_not_recorded")}
     rules = merge.load_overrides(ROOT / "data" / "overrides.json")
-    n_rules = sum(len(r["same_game"]) + len(r["different_games"]) for r in rules.values())
+    n_rules = sum(len(r["same_game"]) + len(r["different_games"]) + len(r["session_of"]) for r in rules.values())
     assert f"Disputed games right now: {src['disputed']}" in t
     assert f"Rulings made so far: {n_rules}" in t
     assert f"Games with no recorded date right now: {src['dates_not_recorded']}" in t
     assert f"both schools list {src['both']:,} games" in t
     assert f"{DATA['totals']['games_played']:,} games so far" in t
+
+
+def test_the_swimming_section_explains_dual_meets_and_takes_its_numbers_from_the_data(site):
+    t = text_of(how(site))
+    swim = DATA["sports"]["mens-swimming-and-diving"]
+    half = sum(1 for g in swim["games"] if any(isinstance(g.get(f), float) for f in ("depauw", "wabash")))
+    unscored = sum(1 for g in swim["games"] if g.get("score_known") is False)
+    assert "Only dual meets, where DePauw’s team swims Wabash’s team head to head, are counted." in t
+    assert "Invitationals, relays and conference championships have many teams in the pool at once" in t
+    assert f"meets with a half point right now: {half}" in t and half > 0
+    assert f"(right now: {unscored})" in t and unscored > 0
+    assert f"rows set aside right now: {swim['sources']['session_rows']}" in t
+    assert "A score written the wrong way around" in t and "in March 2021" in t
+    assert "tennis counts matches and swimming and diving counts meets" in t
+    assert "days of one meet" in t
 
 
 def test_changing_the_data_changes_the_page(tmp_path):

@@ -98,6 +98,31 @@
           "reason": "Confirmed same game: same score, the year is off by one."
         }
       ]
+    },
+    "mens-swimming-and-diving": {
+      "same_game": [
+        {
+          "depauw": {"date": "1998-02-04", "score": "154-89"},
+          "wabash": {"date": "1998-02-01", "score": "154-89"},
+          "reason": "Confirmed same meet: the only 154-89 DePauw win in the 1997-98 season, listed once by each school, and only the date differs (three days apart, beyond the 2-day window)."
+        }
+      ],
+      "session_of": [
+        {
+          "school": "wabash",
+          "meet": {"date": "2021-03-21", "score": "120-231"},
+          "sessions": [
+            {"date": "2021-03-19", "score": "32-59"},
+            {"date": "2021-03-20", "score": "76-163"}
+          ],
+          "reason": "March 19-21, 2021 was one three-day dual meet, not three meets. Wabash's page lists three wins (Mar 19 59-32, Mar 20 163-76, Mar 21 231-120), but its own recaps describe the first two as the running score of the same meet (\"after the first day\", \"the second day of competition\") and the last as the final of \"the three-day competition\", 231-120. DePauw's page lists one meet, on Mar 21 (120-231). The two earlier rows are in-progress session scores, so they are set aside and the Mar 21 row matches DePauw's normally.",
+          "sources": [
+            "https://sports.wabash.edu/news/2021/3/19/swimming-diving-wabash-holds-early-lead-after-first-day-of-final-dual-meet.aspx",
+            "https://sports.wabash.edu/news/2021/3/20/swimming-diving-record-setting-performances-help-wabash-expand-lead-over-depauw.aspx",
+            "https://sports.wabash.edu/news/2021/3/21/swimming-diving-wabash-closes-out-season-with-dominant-win-over-depauw.aspx"
+          ]
+        }
+      ]
     }
   }
 }

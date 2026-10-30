@@ -1,12 +1,12 @@
 {
   "schema_version": 2,
-  "updated_at": "2026-10-29T01:20:41+00:00",
+  "updated_at": "2026-10-29T23:39:38+00:00",
   "perspective": "DePauw",
   "totals": {
-    "depauw_wins": 515,
-    "wabash_wins": 344,
+    "depauw_wins": 541,
+    "wabash_wins": 357,
     "ties": 20,
-    "games_played": 879
+    "games_played": 918
   },
   "sports": {
     "football": {
@@ -4557,8 +4557,8 @@
       "last_game": "2026-04-28",
       "current_streak": "L1",
       "points": {
-        "depauw": 1773,
-        "wabash": 1742
+        "depauw": 1789,
+        "wabash": 1726
       },
       "total_label": "runs",
       "sources": {
@@ -4743,11 +4743,14 @@
           "location": "neutral",
           "site": null,
           "result": "W",
-          "depauw": 7,
-          "wabash": 19,
+          "depauw": 19,
+          "wabash": 7,
           "note": null,
           "boxscore": null,
           "source": "wabash",
+          "score_order_reversed": [
+            "Wabash"
+          ],
           "date_known": false
         },
         {
@@ -5379,11 +5382,14 @@
           "location": "neutral",
           "site": null,
           "result": "W",
-          "depauw": 7,
-          "wabash": 10,
+          "depauw": 10,
+          "wabash": 7,
           "note": null,
           "boxscore": null,
           "source": "wabash",
+          "score_order_reversed": [
+            "Wabash"
+          ],
           "date_known": false
         },
         {
@@ -6211,11 +6217,14 @@
           "location": "away",
           "site": "Crawfordsville, IN",
           "result": "W",
-          "depauw": 1,
-          "wabash": 2,
+          "depauw": 2,
+          "wabash": 1,
           "note": null,
           "boxscore": null,
-          "source": "wabash"
+          "source": "wabash",
+          "score_order_reversed": [
+            "Wabash"
+          ]
         },
         {
           "date": "1953-05-18",
@@ -9457,8 +9466,8 @@
       "last_game": "2026-04-24",
       "current_streak": "W61",
       "points": {
-        "depauw": 777,
-        "wabash": 189
+        "depauw": 839,
+        "wabash": 127
       },
       "total_label": "individual matches",
       "unit": [
@@ -9649,11 +9658,14 @@
           "location": "neutral",
           "site": null,
           "result": "W",
-          "depauw": 1,
-          "wabash": 6,
+          "depauw": 6,
+          "wabash": 1,
           "note": null,
           "boxscore": null,
           "source": "wabash",
+          "score_order_reversed": [
+            "Wabash"
+          ],
           "date_known": false
         },
         {
@@ -9792,11 +9804,14 @@
           "location": "neutral",
           "site": null,
           "result": "W",
-          "depauw": 0,
-          "wabash": 9,
+          "depauw": 9,
+          "wabash": 0,
           "note": null,
           "boxscore": null,
           "source": "wabash",
+          "score_order_reversed": [
+            "Wabash"
+          ],
           "date_known": false
         },
         {
@@ -9922,11 +9937,14 @@
           "location": "neutral",
           "site": null,
           "result": "W",
-          "depauw": 0,
-          "wabash": 7,
+          "depauw": 7,
+          "wabash": 0,
           "note": null,
           "boxscore": null,
           "source": "wabash",
+          "score_order_reversed": [
+            "Wabash"
+          ],
           "date_known": false
         },
         {
@@ -10156,11 +10174,14 @@
           "location": "neutral",
           "site": null,
           "result": "W",
-          "depauw": 0,
-          "wabash": 9,
+          "depauw": 9,
+          "wabash": 0,
           "note": null,
           "boxscore": null,
           "source": "wabash",
+          "score_order_reversed": [
+            "Wabash"
+          ],
           "date_known": false
         },
         {
@@ -10182,11 +10203,14 @@
           "location": "neutral",
           "site": null,
           "result": "W",
-          "depauw": 0,
-          "wabash": 9,
+          "depauw": 9,
+          "wabash": 0,
           "note": null,
           "boxscore": null,
           "source": "wabash",
+          "score_order_reversed": [
+            "Wabash"
+          ],
           "date_known": false
         },
         {
@@ -10390,11 +10414,14 @@
           "location": "neutral",
           "site": null,
           "result": "W",
-          "depauw": 1,
-          "wabash": 8,
+          "depauw": 8,
+          "wabash": 1,
           "note": null,
           "boxscore": null,
           "source": "wabash",
+          "score_order_reversed": [
+            "Wabash"
+          ],
           "date_known": false
         },
         {
@@ -10494,11 +10521,14 @@
           "location": "neutral",
           "site": null,
           "result": "W",
-          "depauw": 0,
-          "wabash": 9,
+          "depauw": 9,
+          "wabash": 0,
           "note": null,
           "boxscore": null,
           "source": "wabash",
+          "score_order_reversed": [
+            "Wabash"
+          ],
           "date_known": false
         },
         {
@@ -10559,11 +10589,14 @@
           "location": "neutral",
           "site": null,
           "result": "W",
-          "depauw": 0,
-          "wabash": 7,
+          "depauw": 7,
+          "wabash": 0,
           "note": null,
           "boxscore": null,
           "source": "wabash",
+          "score_order_reversed": [
+            "Wabash"
+          ],
           "date_known": false
         },
         {
@@ -11042,6 +11075,548 @@
           "wabash": 0,
           "note": null,
           "boxscore": "https://depauwtigers.com/boxscore.aspx?id=19521&path=mten",
+          "source": "both"
+        }
+      ],
+      "skipped_rows": []
+    },
+    "mens-swimming-and-diving": {
+      "name": "Men's Swimming and Diving",
+      "source_url": "https://depauwtigers.com/sports/mens-swimming-and-diving/opponent-history/wabash/215",
+      "wabash_source_url": "https://sports.wabash.edu/sports/swimming-and-diving/opponent-history/depauw-university/4",
+      "record": {
+        "depauw_wins": 26,
+        "wabash_wins": 13,
+        "ties": 0
+      },
+      "games_played": 39,
+      "first_game": "1927-02-08",
+      "last_game": "2025-12-05",
+      "current_streak": "W1",
+      "points": {
+        "depauw": 4957,
+        "wabash": 4369
+      },
+      "total_label": "points",
+      "unit": [
+        "meet",
+        "meets"
+      ],
+      "sources": {
+        "both": 30,
+        "depauw_only": 0,
+        "wabash_only": 9,
+        "disputed": 3,
+        "date_differs": 1,
+        "dates_not_recorded": 0,
+        "session_rows": 2
+      },
+      "games": [
+        {
+          "date": "1927-02-08",
+          "season": "1926-27",
+          "location": "home",
+          "site": "Greencastle, IN",
+          "result": "W",
+          "depauw": 54,
+          "wabash": 13,
+          "note": null,
+          "boxscore": null,
+          "source": "wabash"
+        },
+        {
+          "date": "1928-02-02",
+          "season": "1927-28",
+          "location": "home",
+          "site": "Greencastle, IN",
+          "result": "W",
+          "depauw": 57,
+          "wabash": 12,
+          "note": null,
+          "boxscore": null,
+          "source": "wabash"
+        },
+        {
+          "date": "1929-01-15",
+          "season": "1928-29",
+          "location": "home",
+          "site": "Greencastle, IN",
+          "result": "W",
+          "depauw": 40,
+          "wabash": 26,
+          "note": null,
+          "boxscore": null,
+          "source": "wabash"
+        },
+        {
+          "date": "1930-02-27",
+          "season": "1929-30",
+          "location": "home",
+          "site": "Greencastle, IN",
+          "result": "W",
+          "depauw": 52,
+          "wabash": 26,
+          "note": null,
+          "boxscore": null,
+          "source": "wabash"
+        },
+        {
+          "date": "1934-01-05",
+          "season": "1933-34",
+          "location": "home",
+          "site": "Greencastle, IN",
+          "result": "W",
+          "depauw": null,
+          "wabash": null,
+          "note": null,
+          "boxscore": null,
+          "source": "wabash",
+          "score_known": false
+        },
+        {
+          "date": "1934-02-12",
+          "season": "1933-34",
+          "location": "home",
+          "site": "Greencastle, IN",
+          "result": "W",
+          "depauw": null,
+          "wabash": null,
+          "note": null,
+          "boxscore": null,
+          "source": "wabash",
+          "score_known": false
+        },
+        {
+          "date": "1937-01-08",
+          "season": "1936-37",
+          "location": "home",
+          "site": "Greencastle, IN",
+          "result": "W",
+          "depauw": 50,
+          "wabash": 25,
+          "note": null,
+          "boxscore": null,
+          "source": "wabash"
+        },
+        {
+          "date": "1995-02-01",
+          "season": "1994-95",
+          "location": "away",
+          "site": "Crawfordsville, IN",
+          "result": "L",
+          "depauw": 117,
+          "wabash": 126,
+          "note": null,
+          "boxscore": null,
+          "source": "wabash"
+        },
+        {
+          "date": "1996-02-07",
+          "season": "1995-96",
+          "location": "home",
+          "site": "Greencastle, IN",
+          "result": "L",
+          "depauw": 120,
+          "wabash": 123,
+          "note": null,
+          "boxscore": null,
+          "source": "both"
+        },
+        {
+          "date": "1997-02-05",
+          "season": "1996-97",
+          "location": "away",
+          "site": "Crawfordsville, IN",
+          "result": "W",
+          "depauw": 122,
+          "wabash": 121,
+          "note": null,
+          "boxscore": null,
+          "source": "both"
+        },
+        {
+          "date": "1998-02-04",
+          "season": "1997-98",
+          "location": "home",
+          "site": "Greencastle, IN",
+          "result": "W",
+          "depauw": 154,
+          "wabash": 89,
+          "note": null,
+          "boxscore": null,
+          "source": "both",
+          "date_differs": true,
+          "wabash_date": "1998-02-01"
+        },
+        {
+          "date": "1999-01-27",
+          "season": "1998-99",
+          "location": "away",
+          "site": "Crawfordsville, IN",
+          "result": "L",
+          "depauw": 109,
+          "wabash": 135,
+          "note": null,
+          "boxscore": null,
+          "source": "both",
+          "disputed": true,
+          "wabash_version": {
+            "result": "L",
+            "depauw": 108,
+            "wabash": 135
+          }
+        },
+        {
+          "date": "2000-02-23",
+          "season": "1999-00",
+          "location": "home",
+          "site": "Greencastle, IN",
+          "result": "L",
+          "depauw": 135,
+          "wabash": 165,
+          "note": null,
+          "boxscore": null,
+          "source": "both"
+        },
+        {
+          "date": "2001-02-23",
+          "season": "2000-01",
+          "location": "away",
+          "site": "Crawfordsville, IN",
+          "result": "L",
+          "depauw": 135,
+          "wabash": 165,
+          "note": null,
+          "boxscore": null,
+          "source": "both"
+        },
+        {
+          "date": "2002-02-23",
+          "season": "2001-02",
+          "location": "home",
+          "site": "Greencastle, IN",
+          "result": "L",
+          "depauw": 113,
+          "wabash": 186,
+          "note": null,
+          "boxscore": null,
+          "source": "both"
+        },
+        {
+          "date": "2003-01-17",
+          "season": "2002-03",
+          "location": "away",
+          "site": "Crawfordsville, IN",
+          "result": "W",
+          "depauw": 145,
+          "wabash": 98,
+          "note": null,
+          "boxscore": null,
+          "source": "both"
+        },
+        {
+          "date": "2004-01-14",
+          "season": "2003-04",
+          "location": "home",
+          "site": "Greencastle, IN",
+          "result": "W",
+          "depauw": 132,
+          "wabash": 105,
+          "note": null,
+          "boxscore": null,
+          "source": "both"
+        },
+        {
+          "date": "2005-01-19",
+          "season": "2004-05",
+          "location": "away",
+          "site": "Crawfordsville, IN",
+          "result": "W",
+          "depauw": 144,
+          "wabash": 97,
+          "note": null,
+          "boxscore": null,
+          "source": "both"
+        },
+        {
+          "date": "2006-01-18",
+          "season": "2005-06",
+          "location": "home",
+          "site": "Greencastle, IN",
+          "result": "W",
+          "depauw": 147,
+          "wabash": 96,
+          "note": null,
+          "boxscore": null,
+          "source": "both"
+        },
+        {
+          "date": "2006-11-03",
+          "season": "2006-07",
+          "location": "away",
+          "site": "Crawfordsville, IN",
+          "result": "L",
+          "depauw": 127.5,
+          "wabash": 172.5,
+          "note": null,
+          "boxscore": null,
+          "source": "wabash"
+        },
+        {
+          "date": "2008-01-25",
+          "season": "2007-08",
+          "location": "home",
+          "site": "Greencastle, IN",
+          "result": "W",
+          "depauw": 150,
+          "wabash": 141,
+          "note": null,
+          "boxscore": null,
+          "source": "both",
+          "disputed": true,
+          "wabash_version": {
+            "result": "W",
+            "depauw": 159,
+            "wabash": 141
+          }
+        },
+        {
+          "date": "2008-11-12",
+          "season": "2008-09",
+          "location": "away",
+          "site": "Crawfordsville, IN",
+          "result": "W",
+          "depauw": 153,
+          "wabash": 141,
+          "note": null,
+          "boxscore": null,
+          "source": "both",
+          "score_order_reversed": [
+            "Wabash"
+          ]
+        },
+        {
+          "date": "2009-11-11",
+          "season": "2009-10",
+          "location": "home",
+          "site": "Greencastle, IN",
+          "result": "W",
+          "depauw": 200,
+          "wabash": 100,
+          "note": null,
+          "boxscore": null,
+          "source": "both"
+        },
+        {
+          "date": "2010-11-10",
+          "season": "2010-11",
+          "location": "away",
+          "site": "Crawfordsville, IN",
+          "result": "W",
+          "depauw": 165,
+          "wabash": 135,
+          "note": null,
+          "boxscore": null,
+          "source": "both"
+        },
+        {
+          "date": "2011-11-09",
+          "season": "2011-12",
+          "location": "home",
+          "site": "Greencastle, IN",
+          "result": "W",
+          "depauw": 205,
+          "wabash": 80,
+          "note": null,
+          "boxscore": null,
+          "source": "both",
+          "disputed": true,
+          "wabash_version": {
+            "result": "W",
+            "depauw": 205,
+            "wabash": 89
+          }
+        },
+        {
+          "date": "2012-11-07",
+          "season": "2012-13",
+          "location": "away",
+          "site": "Crawfordsville, IN",
+          "result": "W",
+          "depauw": 196,
+          "wabash": 84,
+          "note": null,
+          "boxscore": null,
+          "source": "both"
+        },
+        {
+          "date": "2013-11-13",
+          "season": "2013-14",
+          "location": "home",
+          "site": "Greencastle, IN",
+          "result": "W",
+          "depauw": 181,
+          "wabash": 89,
+          "note": null,
+          "boxscore": null,
+          "source": "both"
+        },
+        {
+          "date": "2014-10-31",
+          "season": "2014-15",
+          "location": "away",
+          "site": "Crawfordsville, IN",
+          "result": "L",
+          "depauw": 129,
+          "wabash": 162,
+          "note": null,
+          "boxscore": null,
+          "source": "both"
+        },
+        {
+          "date": "2015-10-30",
+          "season": "2015-16",
+          "location": "home",
+          "site": "Greencastle, IN",
+          "result": "L",
+          "depauw": 146,
+          "wabash": 148,
+          "note": null,
+          "boxscore": null,
+          "source": "both"
+        },
+        {
+          "date": "2016-11-04",
+          "season": "2016-17",
+          "location": "away",
+          "site": "Crawfordsville, IN",
+          "result": "W",
+          "depauw": 177,
+          "wabash": 119,
+          "note": null,
+          "boxscore": null,
+          "source": "both"
+        },
+        {
+          "date": "2017-11-03",
+          "season": "2017-18",
+          "location": "home",
+          "site": "Greencastle, IN",
+          "result": "W",
+          "depauw": 178,
+          "wabash": 113,
+          "note": null,
+          "boxscore": null,
+          "source": "both"
+        },
+        {
+          "date": "2018-11-02",
+          "season": "2018-19",
+          "location": "away",
+          "site": "Crawfordsville, IN",
+          "result": "W",
+          "depauw": 147.5,
+          "wabash": 143.5,
+          "note": null,
+          "boxscore": null,
+          "source": "both"
+        },
+        {
+          "date": "2019-11-01",
+          "season": "2019-20",
+          "location": "home",
+          "site": "Greencastle, IN",
+          "result": "W",
+          "depauw": 169,
+          "wabash": 128,
+          "note": null,
+          "boxscore": null,
+          "source": "both"
+        },
+        {
+          "date": "2021-03-21",
+          "season": "2020-21",
+          "location": "away",
+          "site": "Crawfordsville, IN",
+          "result": "L",
+          "depauw": 120,
+          "wabash": 231,
+          "note": null,
+          "boxscore": null,
+          "source": "both",
+          "sessions": [
+            {
+              "date": "2021-03-19",
+              "depauw": 32,
+              "wabash": 59,
+              "school": "Wabash"
+            },
+            {
+              "date": "2021-03-20",
+              "depauw": 76,
+              "wabash": 163,
+              "school": "Wabash"
+            }
+          ]
+        },
+        {
+          "date": "2021-12-04",
+          "season": "2021-22",
+          "location": "home",
+          "site": "Greencastle, IN",
+          "result": "L",
+          "depauw": 107,
+          "wabash": 187,
+          "note": null,
+          "boxscore": null,
+          "source": "both"
+        },
+        {
+          "date": "2022-12-02",
+          "season": "2022-23",
+          "location": "away",
+          "site": "Crawfordsville, IN",
+          "result": "L",
+          "depauw": 139,
+          "wabash": 141,
+          "note": null,
+          "boxscore": null,
+          "source": "both"
+        },
+        {
+          "date": "2023-12-01",
+          "season": "2023-24",
+          "location": "home",
+          "site": "Greencastle, Ind.",
+          "result": "W",
+          "depauw": 148,
+          "wabash": 146,
+          "note": null,
+          "boxscore": null,
+          "source": "both"
+        },
+        {
+          "date": "2024-12-06",
+          "season": "2024-25",
+          "location": "away",
+          "site": "Crawfordsville, Ind.",
+          "result": "L",
+          "depauw": 100,
+          "wabash": 194,
+          "note": null,
+          "boxscore": null,
+          "source": "both"
+        },
+        {
+          "date": "2025-12-05",
+          "season": "2025-26",
+          "location": "home",
+          "site": "Greencastle, Ind.",
+          "result": "W",
+          "depauw": 193,
+          "wabash": 106,
+          "note": null,
+          "boxscore": null,
           "source": "both"
         }
       ],

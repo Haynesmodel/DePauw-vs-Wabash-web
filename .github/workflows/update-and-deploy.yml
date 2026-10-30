@@ -102,26 +102,41 @@ jobs:
           if [ "$APPLY_REVIEWED" = "true" ]; then args="$args --apply-reviewed"; fi
           python scraper/scrape.py $args
 
-      # Validate the candidate data and rendered site before the commit step can publish the data.
+      # Render is a hard gate: if it fails the build stops here, before the data commit and the upload.
       - name: Render site
         run: python scraper/render.py
 
-      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+      # HTML validation only warns. If Node cannot be set up, validation is skipped and reported; either
+      # way the site is still committed, uploaded and deployed (the report job turns the run red afterward).
+      - name: Set up Node for HTML validation
+        id: setup_node
+        continue-on-error: true
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: "22"
 
       - name: Validate generated HTML
         id: validate_html
+        if: ${{ steps.setup_node.outcome == 'success' }}
         continue-on-error: true
         run: npx --yes html-validate@11.17.0 site/index.html site/404.html site/how-it-works/index.html site/how-it-works/athletics/index.html site/how-it-works/alumni/index.html site/alumni/index.html
 
-      - name: Report HTML validation warning
-        if: ${{ steps.validate_html.outcome == 'failure' }}
+      - name: Report HTML validation problem
+        if: ${{ steps.setup_node.outcome != 'success' || steps.validate_html.outcome == 'failure' }}
+        env:
+          SETUP_NODE: ${{ steps.setup_node.outcome }}
         run: |
+          if [ "$SETUP_NODE" != "success" ]; then
+            heading="Warning: HTML validation was skipped"
+            message="HTML validation was skipped because Node could not be set up. Publishing continues; review the Set up Node for HTML validation step logs."
+          else
+            heading="Warning: generated HTML validation failed"
+            message="The HTML validator found a problem. Publishing continues; review the Validate generated HTML step logs."
+          fi
           {
-            echo "## Warning: generated HTML validation failed"
+            echo "## $heading"
             echo
-            echo "The HTML validator found a problem. Publishing continues; review the Validate generated HTML step logs."
+            echo "$message"
           } >> "$GITHUB_STEP_SUMMARY"
 
       - name: Commit if data changed

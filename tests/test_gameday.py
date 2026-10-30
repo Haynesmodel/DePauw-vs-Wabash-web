@@ -469,38 +469,42 @@ def test_readme_documents_distinct_test_and_scraper_failure_paths():
     assert "scraper failure" in readme.lower() and "fallback" in readme.lower()
 
 
-def test_render_and_html_validation_precede_data_commit_and_artifact_upload():
+def test_render_then_node_then_validation_then_report_precede_data_commit_and_artifact_upload():
     steps = build_steps()
     render_index = step_index(steps, lambda step: step.get("name") == "Render site")
     node_index = step_index(steps, lambda step: step.get("uses", "").startswith("actions/setup-node@"))
     validation_index = step_index(steps, lambda step: step.get("name") == "Validate generated HTML")
-    warning_index = step_index(steps, lambda step: step.get("name") == "Report HTML validation warning")
+    report_index = step_index(steps, lambda step: step.get("name") == "Report HTML validation problem")
     commit_index = step_index(steps, lambda step: step.get("name") == "Commit if data changed")
     upload_index = step_index(steps, lambda step: step.get("uses", "").startswith("actions/upload-pages-artifact@"))
-    assert render_index < node_index < validation_index < warning_index < commit_index < upload_index
+    assert render_index < node_index < validation_index < report_index < commit_index < upload_index
     assert upload_index == commit_index + 1
     assert sum(step.get("name") == "Render site" for step in steps) == 1
 
 
-def test_render_and_html_validation_fail_closed():
+def test_render_is_fail_closed_and_node_and_validation_are_non_blocking_and_reported():
     steps = build_steps()
     assert "continue-on-error" not in workflow_jobs()["build"]
     render_step = named_step("Render site")
     assert render_step["run"] == "python scraper/render.py"
+    assert "continue-on-error" not in render_step
+    assert not re.search(r"\b(always|failure|cancelled)\s*\(", render_step.get("if", ""))
+
     node_step = next(step for step in steps if step.get("uses", "").startswith("actions/setup-node@"))
-    for step in (render_step, node_step):
-        assert "continue-on-error" not in step
-        condition = step.get("if", "")
-        assert not re.search(r"\b(always|failure|cancelled)\s*\(", condition), step.get("name", step.get("uses"))
+    assert node_step["id"] == "setup_node"
+    assert node_step["continue-on-error"] is True
 
     validation = named_step("Validate generated HTML")
     assert validation["id"] == "validate_html"
     assert validation["continue-on-error"] is True
-    warning = named_step("Report HTML validation warning")
-    assert warning["if"] == "${{ steps.validate_html.outcome == 'failure' }}"
-    assert "$GITHUB_STEP_SUMMARY" in warning["run"]
-    assert "Warning: generated HTML validation failed" in warning["run"]
-    assert "Publishing continues" in warning["run"]
+    assert validation["if"] == "${{ steps.setup_node.outcome == 'success' }}"   # skipped, not failed, without Node
+
+    report = named_step("Report HTML validation problem")
+    assert report["if"] == "${{ steps.setup_node.outcome != 'success' || steps.validate_html.outcome == 'failure' }}"
+    assert "$GITHUB_STEP_SUMMARY" in report["run"]
+    assert "HTML validation was skipped because Node could not be set up" in report["run"]
+    assert "generated HTML validation failed" in report["run"]
+    assert "Publishing continues" in report["run"]
     assert "needs.build.result == 'success'" in job("deploy")
     assert "needs.build.result == 'success'" in job("issues")
 

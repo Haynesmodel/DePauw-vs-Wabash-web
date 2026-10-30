@@ -443,12 +443,25 @@ def alumni_preview_info(endowment: dict) -> dict:
             "values": values, "even": even}
 
 
+MANIFEST_DESCRIPTION = ("DePauw vs. Wabash, side by side: head-to-head athletics records, notable graduates and "
+                        "endowments.")
+NUMBER_WORDS = {2: "two", 3: "three", 4: "four", 5: "five", 6: "six", 7: "seven", 8: "eight", 9: "nine",
+                10: "ten", 11: "eleven", 12: "twelve"}
+
+
+def alumni_description(data: dict) -> str:
+    """The alumni page's meta description; the category count is read from the data."""
+    n = len(data["categories"])
+    return (f"Notable DePauw and Wabash graduates in {NUMBER_WORDS.get(n, str(n))} award and public-service "
+            f"categories, plus endowment per student, with a source for every name.")
+
+
 def render_manifest() -> str:
     icons = [{"src": "icon-192.png", "sizes": "192x192", "type": "image/png"},
              {"src": "icon-512.png", "sizes": "512x512", "type": "image/png"},
              {"src": "icon-maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable"}]
     return json.dumps({"name": "DePauw vs. Wabash", "short_name": "DePauw v Wabash",
-                       "description": SUBTITLE, "start_url": BASE_PATH, "scope": BASE_PATH,
+                       "description": MANIFEST_DESCRIPTION, "start_url": BASE_PATH, "scope": BASE_PATH,
                        "display": "browser", "theme_color": THEME_LIGHT, "background_color": BACKGROUND,
                        "icons": icons}, indent=2) + "\n"
 
@@ -1085,9 +1098,8 @@ def render_how_athletics(data: dict, rules: dict, kept: int, checked: str | None
     sports = data["sports"]
     sources = "\n".join(footer_source(k, s, upcoming.get(k)) for k, s in sports.items())
     t = data["totals"]
-    description = (f"Where the DePauw vs. Wabash numbers come from and how the two schools’ records are "
-                   f"combined: {t['games_played']:,} games in {plural(len(sports), 'sport')}, with disputed "
-                   f"games and hand-made rulings shown openly.")
+    description = (f"How the DePauw vs. Wabash records are built: {plural(t['games_played'], 'game')} in "
+                   f"{plural(len(sports), 'sport')} from both schools’ records, with disputes and rulings shown openly.")
     return how_page(
         howitworks.TITLE, description, prefix="../../", path=HOW_ATHLETICS_PATH, current="athletics",
         preview=athletics_preview(data, now, upcoming), back=("../../", BACK_ATHLETICS),
@@ -1204,7 +1216,7 @@ def build(data_path: Path, out: Path, *, checked_at: str | None = None,
     endowment_data = alumni_page.validate_endowment(alumni_page.load_json(endowment_path or ENDOWMENT_DATA, "endowment"))
     alumni_preview = alumni_preview_info(endowment_data)
     alumni_head = head("Alumni and Endowment | DePauw vs. Wabash",
-                        "Verified named DePauw and Wabash graduates across achievement categories, plus dated endowment values.",
+                        alumni_description(alumni_data),
                         prefix="../", canonical=SITE_URL + ALUMNI_PATH, preview=alumni_preview)
     when = now or dt.datetime.now(dt.timezone.utc)
     alumni_html = alumni_page.render_page(

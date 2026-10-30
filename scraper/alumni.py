@@ -5,11 +5,15 @@ from __future__ import annotations
 import datetime as dt
 import html
 import json
+import re
+from decimal import Decimal, ROUND_HALF_UP
+from fractions import Fraction
 from pathlib import Path
-from urllib.parse import urlparse
+from urllib.parse import quote, urlparse
 
 
 SCHOOLS = {"depauw": "DePauw", "wabash": "Wabash"}
+SUBTITLE = "Notable graduates and endowments, side by side, with a source for every name."
 
 
 class AlumniError(ValueError):
@@ -71,6 +75,8 @@ def validate_alumni(data: dict) -> dict:
             _fail(f"invalid or duplicate alumni category id: {cid!r}")
         _text(category.get("name"), f"category {cid}.name")
         _text(category.get("definition"), f"category {cid}.definition")
+        if cid not in TILE_LABELS:
+            _fail(f"category {cid} has no count-tile label; add it to TILE_LABELS in alumni.py")
         reviews = category.get("review")
         if not isinstance(reviews, dict) or set(reviews) != set(SCHOOLS):
             _fail(f"category {cid}.review must document both schools")
@@ -143,6 +149,11 @@ def validate_alumni(data: dict) -> dict:
                 intervals[i][0] <= intervals[i - 1][1] for i in range(1, len(intervals))
             ):
                 _fail(f"person {pid}.qualifications.{cid}.years must use ordered, non-overlapping ranges")
+            present = qualification.get("present", False)
+            if not isinstance(present, bool):
+                _fail(f"person {pid}.qualifications.{cid}.present must be true or false")
+            if present and (len(years) > 1 and len(years) % 2):
+                _fail(f"person {pid}.qualifications.{cid}.present needs a start year or ordered year ranges")
             source = qualification.get("source")
             if not isinstance(source, dict):
                 _fail(f"person {pid}.qualifications.{cid}.source must have label and url")
@@ -190,7 +201,66 @@ def validate_endowment(data: dict) -> dict:
         for field in ("source_label", "source_note"):
             _text(item.get(field), f"endowment.schools.{key}.{field}")
         _url(item.get("source_url"), f"endowment.schools.{key}.source_url")
+        comparable = item.get("comparable")
+        if not isinstance(comparable, dict):
+            _fail(f"endowment.schools.{key}.comparable must be an object")
+        _text(data.get("comparable_basis"), "endowment.comparable_basis")
+        if comparable.get("basis") != data["comparable_basis"]:
+            _fail(f"endowment.schools.{key}.comparable.basis must be {data['comparable_basis']!r}")
+        _text(comparable.get("source_note"), f"endowment.schools.{key}.comparable.source_note")
+        excluded = comparable.get("excluded")
+        if not isinstance(excluded, list):
+            _fail(f"endowment.schools.{key}.comparable.excluded must be a list")
+        for i, part in enumerate(excluded):
+            if not isinstance(part, dict):
+                _fail(f"endowment.schools.{key}.comparable.excluded[{i}] must be an object")
+            _text(part.get("label"), f"endowment.schools.{key}.comparable.excluded[{i}].label")
+            part_amount = part.get("amount_usd")
+            if isinstance(part_amount, bool) or not isinstance(part_amount, int) or part_amount <= 0:
+                _fail(f"endowment.schools.{key}.comparable.excluded[{i}].amount_usd must be a positive integer")
+        if sum(part["amount_usd"] for part in excluded) >= amount:
+            _fail(f"endowment.schools.{key}.comparable.excluded must total less than amount_usd")
+        enrolled = item.get("enrollment")
+        if not isinstance(enrolled, dict):
+            _fail(f"endowment.schools.{key}.enrollment must be an object")
+        count = enrolled.get("count")
+        if isinstance(count, bool) or not isinstance(count, int) or count <= 0:
+            _fail(f"endowment.schools.{key}.enrollment.count must be a positive integer")
+        # the endowment is as of June 30 of the fiscal year, so the matching academic year began the fall before
+        if enrolled.get("term") != f"Fall {int(year[2:]) - 1}":
+            _fail(f"endowment.schools.{key}.enrollment.term must be Fall {int(year[2:]) - 1} "
+                  f"to match {year}")
+        _text(enrolled.get("measure"), f"endowment.schools.{key}.enrollment.measure")
+        _text(enrolled.get("source_label"), f"endowment.schools.{key}.enrollment.source_label")
+        _url(enrolled.get("source_url"), f"endowment.schools.{key}.enrollment.source_url")
+        _date(enrolled.get("verified_at"), f"endowment.schools.{key}.enrollment.verified_at")
     return data
+
+
+EVEN_PERCENT = 5      # per-student figures within this share of each other are shown as "about even"
+
+
+def comparable_amount(item: dict) -> int:
+    """The endowment on the common basis: the reported amount minus anything the other school's statements
+    do not include (DePauw: pledges receivable and perpetual trusts). Calculated here, never stored."""
+    return item["amount_usd"] - sum(part["amount_usd"] for part in item["comparable"]["excluded"])
+
+
+def per_student(endowment: dict) -> dict:
+    """{"depauw": 516000, "wabash": 511000}: comparable endowment divided by headcount, to the nearest $1,000,
+    half up. Integer arithmetic from the exact amounts, never from a rounded figure. Never stored."""
+    result = {}
+    for school, item in endowment["schools"].items():
+        amount, students = comparable_amount(item), item["enrollment"]["count"]
+        result[school] = (2 * amount + 1000 * students) // (2000 * students) * 1000
+    return result
+
+
+def about_even(endowment: dict) -> bool:
+    """True when the higher per-student figure is no more than EVEN_PERCENT above the lower one. Judged on
+    the exact quotients, not the rounded figures, and no school is marked higher when it holds."""
+    exact = sorted(Fraction(comparable_amount(i), i["enrollment"]["count"]) for i in endowment["schools"].values())
+    return (exact[-1] - exact[0]) * 100 <= EVEN_PERCENT * exact[0]
 
 
 def counts(data: dict) -> dict:
@@ -210,6 +280,63 @@ def visible_categories(data: dict) -> list:
     return [c for c in data["categories"] if any(counts_by_id[c["id"]].values())]
 
 
+MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"]
+
+
+def fmt_date(iso: str) -> str:
+    """"Oct 29, 2026": the same style as the athletics page (render.fmt_date; a test keeps them equal).
+    The JSON keeps ISO dates; they never show in the page text."""
+    d = dt.date.fromisoformat(iso)
+    return f"{MONTHS[d.month - 1]} {d.day}, {d.year}"
+
+
+def compact_usd(amount: int) -> tuple[str, str]:
+    """("$1.04", "billion") or ("$443", "million"): billions to two decimals, millions to whole numbers,
+    always from the exact integer (half up), so two figures are rounded the same way."""
+    if amount >= 1_000_000_000:
+        return f"${(Decimal(amount) / 1_000_000_000).quantize(Decimal('0.01'), ROUND_HALF_UP)}", "billion"
+    if amount >= 1_000_000:
+        return f"${(Decimal(amount) / 1_000_000).quantize(Decimal('1'), ROUND_HALF_UP):,}", "million"
+    return f"${amount:,}", ""
+
+
+def _money_list(parts: list) -> str:
+    items = [f'${p["amount_usd"]:,} of {p["label"]}' for p in parts]
+    return items[0] if len(items) == 1 else ", ".join(items[:-1]) + (", and " if len(items) > 2 else " and ") + items[-1]
+
+
+def per_student_note(endowment: dict) -> str:
+    """Which basis the per-student headline uses and how it is made. Shown wherever a per-student figure is."""
+    term = next(iter(endowment["schools"].values()))["enrollment"]["term"].lower()
+    basis = endowment["comparable_basis"]
+    adjusted = [(SCHOOLS[k], i["comparable"]["excluded"]) for k, i in endowment["schools"].items()
+                if i["comparable"]["excluded"]]
+    text = (f"The per-student figures are on one basis, {basis}: ")
+    text += " ".join(f"{name}’s total is shown without its {_money_list(parts)}." for name, parts in adjusted) \
+        if adjusted else "every figure is the amount each school reports."
+    text += (f" Each is divided by the school’s {term} total undergraduate headcount from the U.S. Department "
+             f"of Education’s College Navigator (IPEDS) and rounded to the nearest $1,000.")
+    if about_even(endowment):
+        text += f" The two are within {EVEN_PERCENT}% of each other, so neither is marked higher."
+    return text
+
+
+def _compact_text(amount: int) -> str:
+    figure, unit = compact_usd(amount)
+    return f"{figure} {unit}" if unit else figure
+
+
+def degree_label(person: dict) -> str:
+    """"B.A., 1969" when the degree is recorded, "Class of 1885" when only the year is known. A degree
+    text that already names its years ("Literary department (1853), law department (1855)") is not repeated."""
+    degree, year = person["degree"].strip(), person["degree_year"]
+    if degree.lower() == "graduate":
+        return f"Class of {year}"
+    if re.search(r"\b(1[7-9]|20)\d\d\b", degree):
+        return degree
+    return f"{degree}, {year}"
+
+
 def _esc(value):
     return html.escape(str(value), quote=True)
 
@@ -218,15 +345,111 @@ def _source(source):
     return f'<a href="{_esc(source["url"])}">{_esc(source["label"])}</a>'
 
 
-def render_page(data: dict, endowment: dict, *, head_html: str, copyright_year: int = 2026) -> str:
+REPO_URL = "https://github.com/jacksonmote/DePauw-vs-Wabash-web"     # a test keeps this equal to render.REPO_URL
+
+# What a count tile calls one and many of each category's graduates. A new category must be added here.
+TILE_LABELS = {
+    "nobel": ("Nobel laureate", "Nobel laureates"),
+    "vice-presidents": ("vice president", "vice presidents"),
+    "senators": ("senator", "senators"),
+    "representatives": ("representative", "representatives"),
+    "governors": ("governor", "governors"),
+    "fortune-500-ceos": ("Fortune 500 CEO", "Fortune 500 CEOs"),
+    "pulitzer": ("Pulitzer winner", "Pulitzer winners"),
+    "rhodes-scholars": ("Rhodes Scholar", "Rhodes Scholars"),
+    "astronauts": ("astronaut", "astronauts"),
+    "academy-awards": ("Academy Award winner", "Academy Award winners"),
+}
+
+
+def tile_label(cid: str, count: int) -> str:
+    one, many = TILE_LABELS[cid]
+    return one if count == 1 else many
+
+
+def correction_url(category: str | None = None, repo_url: str = REPO_URL) -> str:
+    """Opens the alumni-correction issue form, with the category filled in when the link comes from a card."""
+    url = f"{repo_url}/issues/new?template=alumni-correction.yml"
+    if category:
+        url += f"&title={quote('Alumni correction: ' + category)}&category={quote(category)}"
+    return url
+
+
+def _tile(cls: str, name: str, number: str, label: str) -> str:
+    return (f'<div class="tile {cls}"><span class="tile-name">{_esc(name)}</span>'
+            f'<span class="tile-num">{_esc(number)}</span><span class="tile-label">{_esc(label)}</span></div>')
+
+
+def _heading(anchor: str, text: str) -> str:
+    """The heading text is the link to its own section, like the athletics cards."""
+    return f'<h2><a class="permalink" id="{_esc(anchor)}-h" href="#{_esc(anchor)}">{_esc(text)}</a></h2>'
+
+
+def _score_cell(school: str, text: str, lead: bool) -> str:
+    if lead:
+        return (f'<td class="score lead lead-{school}"><strong>{_esc(text)}</strong>'
+                f'<span class="sr-only"> (higher)</span></td>')
+    return f'<td class="score">{_esc(text)}</td>'
+
+
+# DePauw's first women graduates came in 1867, and Wabash has always been all-male: history, not data that changes.
+WOMEN_ADMITTED_YEAR = 1867
+
+
+def size_phrase(depauw: int, wabash: int) -> str:
+    """How much larger DePauw's enrollment is, in words, from the two headcounts ("about twice as many")."""
+    ratio = depauw / wabash
+    whole = round(ratio)
+    if whole >= 2 and abs(ratio - whole) / whole <= 0.15:
+        return "about twice as many" if whole == 2 else f"about {whole} times as many"
+    if ratio >= 1.15:
+        return f"about {ratio:.1f} times as many"
+    return "about as many" if ratio >= 0.85 else "fewer"
+
+
+def context_note(endowment: dict) -> str:
+    """The sentence under the scoreboard: the two differences the counts do not adjust for."""
+    d, w = (endowment["schools"][k]["enrollment"]["count"] for k in ("depauw", "wabash"))
+    return (f"Wabash has always been a men’s college; DePauw has admitted women since {WOMEN_ADMITTED_YEAR} and "
+            f"today enrolls {size_phrase(d, w)} students. Counts are of named graduates and aren’t adjusted "
+            f"for either difference.")
+
+
+def scoreboard(categories: list, counts_by_id: dict, per: dict, even: bool = False) -> str:
+    """One row per category: the two counts, the larger one marked in its school's accent (and in bold, and
+    for screen readers), ties plain. The endowment per student comes first. There is deliberately no total."""
+    rows = []
+
+    def row(href, name, depauw, wabash, shown, even=False):
+        lead = None if even else "depauw" if depauw > wabash else "wabash" if wabash > depauw else None
+        note = ' <span class="even-note">about even</span>' if even else ""
+        rows.append(f'<tr><th scope="row"><a href="#{_esc(href)}">{_esc(name)}</a>{note}</th>'
+                    f'{_score_cell("depauw", shown[0], lead == "depauw")}'
+                    f'{_score_cell("wabash", shown[1], lead == "wabash")}</tr>')
+
+    row("endowment", "Endowment per student", per["depauw"], per["wabash"],
+        (f'${per["depauw"]:,}', f'${per["wabash"]:,}'), even)
+    for category in categories:
+        c = counts_by_id[category["id"]]
+        row(category["id"], category["name"], c["depauw"], c["wabash"], (str(c["depauw"]), str(c["wabash"])))
+    return ('<table class="scoreboard"><caption>Named graduates by category, and endowment per student</caption>'
+            '<thead><tr><th scope="col">Category</th><th scope="col">DePauw</th><th scope="col">Wabash</th></tr></thead>'
+            f'<tbody>{"".join(rows)}</tbody></table>')
+
+
+def render_page(data: dict, endowment: dict, *, head_html: str, footer_html: str,
+                repo_url: str = REPO_URL) -> str:
+    """The page. head_html and footer_html come from render.py, so the head and the footer are the same
+    functions every other page uses."""
     counts_by_id = counts(data)
     categories = visible_categories(data)
-    links = " · ".join(f'<a href="#{_esc(c["id"])}">{_esc(c["name"])}</a>' for c in categories)
+    per = per_student(endowment)
+    even = about_even(endowment)
     cards = []
     for category in categories:
         cid = category["id"]
         members = [p for p in data["people"] if cid in p["categories"]]
-        schools_html = []
+        schools_html, tiles_html = [], []
         for school, label in SCHOOLS.items():
             people = [p for p in members if p["school"] == school]
             count = counts_by_id[cid][school]
@@ -234,55 +457,86 @@ def render_page(data: dict, endowment: dict, *, head_html: str, copyright_year: 
                 rows = []
                 for p in people:
                     q = p["qualifications"][cid]
-                    years = (", ".join(str(year) for year in q["years"]) if cid == "astronauts"
-                             else _format_years(q["years"]))
                     evidence = _source(q["source"])
                     if cid == "fortune-500-ceos":
-                        evidence += (f' · {_esc(q["company"])} ranked #{q["rank"]} in the U.S. Fortune 500 '
-                                     f'{q["rank_year"]} ({_source(q["ranking_source"])})')
+                        # the year is the Fortune ranking year, not a tenure, so say so
+                        what = f'{_esc(q["achievement"])} · ranked #{q["rank"]} in the {q["rank_year"]} Fortune 500'
+                        evidence += f' · {_source(q["ranking_source"])}'
+                    else:
+                        years = (", ".join(str(year) for year in q["years"]) if cid == "astronauts"
+                                 else _format_years(q["years"], q.get("present", False)))
+                        what = f'{_esc(q["achievement"])} ({years})'
                     rows.append(
-                        f'<li><strong>{_esc(p["name"])}</strong> · {_esc(p["degree"])} ({p["degree_year"]})'
-                        f'<br>{_esc(q["achievement"])} ({years})'
+                        f'<li><strong>{_esc(p["name"])}</strong> · {_esc(degree_label(p))}'
+                        f'<br>{what}'
                         f'<br>Sources: {_source(p["school_source"])} · {evidence}</li>')
                 details = f'<details><summary>Names and sources</summary><ul>{"".join(rows)}</ul></details>'
             else:
                 details = '<p class="alumni-zero">No qualifying graduates found in the reviewed sources.</p>'
-            schools_html.append(f'<div class="tile tile-{school} alumni-school"><h3 class="tile-name">{label} <span>({count})</span></h3>{details}</div>')
-        cards.append(f'<section class="sport alumni-card" id="{_esc(cid)}"><h2>{_esc(category["name"])}</h2>'
-                     f'<p>{_esc(category["definition"])}</p><div class="tiles alumni-schools">{"".join(schools_html)}</div></section>')
+            schools_html.append(f'<div class="alumni-school alumni-school-{school}"><h3 class="alumni-school-name">{label}</h3>{details}</div>')
+            tiles_html.append(_tile(f"tile-{school}", label, str(count), tile_label(cid, count)))
+        cards.append(f'<section class="sport alumni-card" id="{_esc(cid)}" aria-labelledby="{_esc(cid)}-h">'
+                     f'{_heading(cid, category["name"])}'
+                     f'<p>{_esc(category["definition"])}</p><div class="tiles">{"".join(tiles_html)}</div>'
+                     f'<div class="alumni-schools">{"".join(schools_html)}</div>'
+                     f'<p class="alumni-report"><a href="{_esc(correction_url(category["name"], repo_url))}">'
+                     f'Suggest a correction</a></p></section>')
     endow_cards = []
     for key, label in SCHOOLS.items():
         item = endowment["schools"][key]
-        endow_cards.append(f'<div class="tile tile-{key} endowment-value"><h3 class="tile-name">{label}</h3>'
-                           f'<p class="tile-num money">${item["amount_usd"]:,}</p>'
-                           f'<p><a href="{_esc(item["source_url"])}">Source</a></p></div>')
+        enrolled = item["enrollment"]
+        same = comparable_amount(item)
+        lines = ""
+        if item["comparable"]["excluded"]:
+            lines = (f'<p class="money-line">Total endowment, including pledges and trusts: '
+                     f'<span class="nowrap">{_compact_text(item["amount_usd"])}</span> '
+                     f'<span class="nowrap">(${item["amount_usd"]:,})</span></p>')
+        endow_cards.append(
+            f'<div class="tile tile-{key} endowment-value"><h3 class="tile-name">{label}</h3>'
+            f'<p class="tile-num money">${per[key]:,}</p><p class="tile-label">endowment per student</p>'
+            f'<p class="money-line">Endowment on the common basis: <span class="nowrap">{_compact_text(same)}</span> '
+            f'<span class="nowrap">(${same:,})</span></p>{lines}'
+            f'<p class="money-line">Enrollment: <span class="nowrap">{enrolled["count"]:,}</span> students, '
+            f'{_esc(enrolled["term"].lower())}</p>'
+            f'<p class="money-line"><a href="{_esc(item["source_url"])}">Endowment source</a> · '
+            f'<a href="{_esc(enrolled["source_url"])}">Enrollment source</a></p></div>')
     return "\n".join([
         head_html, '<body>',
         '<header class="site-header"><div class="wrap"><h1>DePauw vs. Wabash</h1>',
         '<nav class="site-nav" aria-label="Main navigation"><a href="../">Athletics</a> <a href="./" aria-current="page">Alumni</a></nav>',
-        '<p class="subtitle">Verified named graduates and endowment comparison</p></div></header>',
-        '<main class="wrap alumni-main"><nav class="category-nav" aria-label="Alumni categories"><a href="#endowment">Endowment</a> · ' + links + '</nav>',
-        f'<p class="alumni-method">Counts show named graduates verified in the reviewed sources. Verified {_esc(data["verified_at"])}.</p>',
+        f'<p class="subtitle">{_esc(SUBTITLE)}</p></div></header>',
+        '<main class="wrap alumni-main">',
+        '<section class="overall alumni-overview" aria-labelledby="alumni-h">',
+        '<h2 id="alumni-h">Alumni and endowment</h2>',
+        '<p class="alumni-lede">Named graduates in award and public-service categories, and endowment per student, '
+        'for DePauw and Wabash.</p>',
+        scoreboard(categories, counts_by_id, per, even),
+        f'<p class="alumni-context">{_esc(context_note(endowment))}</p>',
+        f'<p class="alumni-method">Counts show named graduates verified in the reviewed sources. '
+        f'Endowment per student: audited '
+        f'{_esc(endowment["fiscal_year"])} endowment divided by {_esc(next(iter(endowment["schools"].values()))["enrollment"]["term"].lower())} '
+        f'headcount; the two schools’ endowment figures cover different scopes (see Endowment below).</p>',
         '<details class="alumni-method-details"><summary>Who counts and how sources were reviewed</summary>'
         f'<p>{_esc(data["methodology"])} A person may appear in more than one category; each person counts once per school and category. There is no overall alumni score.</p></details>',
-        f'<section class="overall endowment" id="endowment"><h2>Endowment</h2>'
-        f'<p>Audited {_esc(endowment["fiscal_year"])} figures as of {_esc(endowment["as_of"])}; reported accounting scopes differ.</p>'
-        f'<div class="tiles endowment-values">{"".join(endow_cards)}</div><p>Verified { _esc(endowment["verified_at"]) }.</p></section>',
+        '</section>',
+        f'<section class="overall endowment" id="endowment" aria-labelledby="endowment-h">{_heading("endowment", "Endowment")}'
+        f'<p>Audited {_esc(endowment["fiscal_year"])} figures as of {_esc(fmt_date(endowment["as_of"]))}; reported accounting scopes differ.</p>'
+        f'<div class="tiles endowment-values">{"".join(endow_cards)}</div>'
+        + ('<p class="endowment-even"><strong>About even:</strong> the per-student figures are within '
+           f'{EVEN_PERCENT}% of each other.</p>' if even else '') +
+        f'<p class="endowment-caveat">{_esc(endowment["explanation"])} {_esc(per_student_note(endowment))}</p>'
+        f'<p class="alumni-report"><a href="{_esc(correction_url("Endowment", repo_url))}">Suggest a correction</a></p>'
+        f'<p>Verified {_esc(fmt_date(endowment["verified_at"]))}.</p></section>',
         *cards,
-        '<p class="alumni-download">Download the curated records: <a href="../data/alumni.json">alumni.json</a> · '
-        '<a href="../data/endowment.json">endowment.json</a> · <a href="../how-it-works/">How the athletics numbers work</a></p>',
-        '</main>', '<footer class="site-footer"><div class="wrap"><p class="footer-links"><a href="../">Athletics</a> · '
-        '<a href="./" aria-current="page">Alumni</a> · <a href="../how-it-works/">How the athletics numbers work</a> · '
-        '<a href="https://github.com/jacksonmote/DePauw-vs-Wabash-web">Code and data on GitHub</a></p>',
-        '<p>Alumni and endowment records use manually reviewed sources; athletic data has its own update record and scope.</p>',
-        '<p>Unofficial fan site, not affiliated with DePauw University or Wabash College.</p>'
-        f'<p class="copyright">© {_esc(copyright_year)} Jackson Mote</p></div></footer>',
+        '</main>', footer_html,
         '</body>', '</html>', ''])
 
 
-def _format_years(years: list[int]) -> str:
+def _format_years(years: list[int], present: bool = False) -> str:
+    """"2025", "1989–1993", "1981–1989, 1993–1995"; with present, the open term reads "2025–present"."""
     if len(years) == 1:
-        return str(years[0])
-    if len(years) == 2:
-        return f"{years[0]}–{years[1]}"
-    return ", ".join(f"{years[i]}–{years[i + 1]}" for i in range(0, len(years), 2))
+        return f"{years[0]}–present" if present else str(years[0])
+    pairs = [f"{years[i]}–{years[i + 1]}" for i in range(0, len(years), 2)]
+    if present:
+        pairs[-1] = f"{years[-2]}–present"
+    return ", ".join(pairs)

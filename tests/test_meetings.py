@@ -202,7 +202,7 @@ def test_a_doubleheader_with_one_time_missing_says_tba_for_that_game(tmp_path):
 
 
 def test_three_games_on_one_date_and_a_postponed_pair_read_sensibly(tmp_path):
-    assert "3 games · 12:00 PM, 2:00 PM and 4:00 PM" in baseball_card(
+    assert "3 games · 12:00 PM, 2:00 PM, and 4:00 PM" in baseball_card(
         baseball_page(tmp_path, dh("2027-04-28", "12:00 PM", "2:00 PM", "4:00 PM")))
     postponed = [{**g, "status": "postponed"} for g in dh("2027-04-28", "12:00 PM", "3:30 PM")]
     card = baseball_card(baseball_page(tmp_path, postponed))

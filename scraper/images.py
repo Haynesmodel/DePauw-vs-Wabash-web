@@ -119,6 +119,49 @@ def og_image(totals: dict, holder: str | None, label: str | None = None) -> byte
     return to_png(img, colors=48)
 
 
+def alumni_og_version(values: list, even: bool = False) -> str:
+    """Query-string value for the alumni card: changes exactly when a figure or the caption drawn on it changes."""
+    key = "alumni-" + "-".join(f"{name}:{figure}" for name, figure in values) + ("-even" if even else "")
+    return hashlib.sha1(key.encode("utf-8")).hexdigest()[:8]
+
+
+def alumni_og_image(values: list, even: bool = False) -> bytes:
+    """The alumni page's link-preview card: the endowment per student for each school, as [(school, "$516,000")]
+    in the same fonts and colors as og_image(). No logos, and no overall alumni score. When the two figures are
+    about even, neither is marked higher and the caption says so."""
+    w, h = OG_SIZE
+    img = Image.new("RGB", OG_SIZE, BG)
+    d = ImageDraw.Draw(img)
+    margin = 72
+
+    d.text((margin, 150), "DePauw vs. Wabash", font=fit("DePauw vs. Wabash", BOLD, 136, w - 2 * margin),
+           fill=TEXT, anchor="ls")
+    d.text((margin, 206), "Alumni and endowment", font=font(MEDIUM, 42), fill=MUTED, anchor="ls")
+
+    accents = {"DePauw": (GOLD, GOLD), "Wabash": (SCARLET, SCARLET_TEXT)}
+    gap = 24
+    tile_w = (w - 2 * margin - gap * (len(values) - 1)) // len(values)
+    top, tile_h = 250, 210
+    for i, (name, figure) in enumerate(values):
+        accent, label_color = accents[name]
+        x = margin + i * (tile_w + gap)
+        d.rounded_rectangle((x, top, x + tile_w, top + tile_h), radius=14, outline=BORDER, width=3)
+        d.rectangle((x + 3, top, x + tile_w - 3, top + 11), fill=accent)
+        d.text((x + 28, top + 70), name, font=font(MEDIUM, 44), fill=label_color, anchor="ls")
+        d.text((x + 28, top + 182), figure, font=fit(figure, BOLD, 128, tile_w - 56), fill=TEXT, anchor="ls")
+
+    caption = ("Endowment per student, same basis · about even" if even
+               else "Endowment per student, same basis · audited FY2025 ÷ fall 2024 enrollment")
+    d.text((margin, 534), caption, font=fit(caption, MEDIUM, 46, w - 2 * margin), fill=MUTED, anchor="ls")
+
+    d.text((margin, 590), "Unofficial fan site", font=font(MEDIUM, 32), fill=MUTED, anchor="ls")
+    d.text((w - margin, 592), SITE_ADDRESS, font=font(BOLD, 42), fill=TEXT, anchor="rs")
+
+    d.rectangle((0, h - 18, w // 2, h), fill=GOLD_BAR)
+    d.rectangle((w // 2, h - 18, w, h), fill=SCARLET_BAR)
+    return to_png(img, colors=48)
+
+
 def icon_image(size: int, *, maskable: bool = False) -> Image.Image:
     """The two-bar mark from favicon.svg on a dark square, full bleed (no transparency, no rounding: iOS
     and Android round it themselves). The maskable version keeps the bars well inside the central circle

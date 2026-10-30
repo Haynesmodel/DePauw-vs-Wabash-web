@@ -46,7 +46,7 @@ def current_sports():
 def test_the_current_series_reads_like_the_example():
     assert render.series_summary(current_sports()) == (
         "Wabash leads football and baseball, including the Monon Bell era; "
-        "DePauw leads basketball, soccer, lacrosse and tennis.")
+        "DePauw leads basketball, soccer, lacrosse, and tennis.")
 
 
 def test_the_committed_data_gives_a_sentence_that_matches_its_own_records():
@@ -128,3 +128,10 @@ def test_the_sentence_sits_under_the_all_sports_totals_and_before_the_cards(tmp_
     summary = page.index('class="series-summary"')
     assert meta < summary < page.index('class="not-included"') < page.index('class="sport"')
     assert "DePauw leads football, though Wabash leads the Monon Bell era; Wabash leads basketball." in text_of(page)
+
+
+def test_lists_of_three_or_more_use_a_serial_comma():
+    assert render.join_and(["a"]) == "a"
+    assert render.join_and(["a", "b"]) == "a and b"
+    assert render.join_and(["a", "b", "c"]) == "a, b, and c"
+    assert render.join_and(["a", "b", "c", "d"]) == "a, b, c, and d"

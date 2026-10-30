@@ -283,7 +283,7 @@ def test_the_page_notes_say_dual_meets_only(site):
     assert "Not included: cross country, track and field, and golf" in t
     assert "Swimming and diving counts dual meets only; invitationals and championships are left out." in t
     assert "swimming invitationals and championships) aren’t head-to-head" in t
-    assert "DePauw leads basketball, soccer, lacrosse, tennis and swimming and diving." in t
+    assert "DePauw leads basketball, soccer, lacrosse, tennis, and swimming and diving." in t
 
 
 def test_the_csv_leaves_scores_blank_for_unscored_meets_and_keeps_halves(site):

@@ -1,0 +1,52 @@
+name: Suggest an alumni or endowment correction
+description: A graduate, a count or an endowment figure on the alumni page looks wrong or missing.
+title: "Alumni correction: "
+labels: ["alumni-correction"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for helping keep the alumni page right. **This issue will be public**, so please don't include personal details (no phone numbers, email addresses or home addresses). A link to a reliable source is all that's needed. Only named graduates with an earned degree count, and every entry needs a source.
+  - type: dropdown
+    id: school
+    attributes:
+      label: Which school?
+      options:
+        - DePauw
+        - Wabash
+        - Both
+        - Not sure
+    validations:
+      required: true
+  - type: input
+    id: category
+    attributes:
+      label: Category
+      description: For example U.S. senators, Rhodes Scholars or Endowment.
+      placeholder: U.S. senators
+    validations:
+      required: true
+  - type: input
+    id: person
+    attributes:
+      label: The person
+      description: The name of the graduate the correction is about, or write "someone missing" if a qualifying graduate isn't listed.
+      placeholder: Someone missing
+    validations:
+      required: true
+  - type: textarea
+    id: what_is_wrong
+    attributes:
+      label: What's wrong or missing?
+      description: Tell us what the page shows and what you think it should show.
+      placeholder: The page lists ... but the official record shows ...
+    validations:
+      required: true
+  - type: input
+    id: source_link
+    attributes:
+      label: Link to a source
+      description: An official record, award or office page, or a school record that shows the degree.
+      placeholder: https://
+    validations:
+      required: true
